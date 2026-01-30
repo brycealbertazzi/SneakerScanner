@@ -1,0 +1,104 @@
+.barcode-scanner {
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.scanner-error {
+  background-color: #ff4444;
+  color: white;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.camera-select {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.camera-select select {
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background-color: #1a1a1a;
+  color: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.camera-select select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scanner-region {
+  width: 100%;
+  min-height: 300px;
+  background-color: #1a1a1a;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+.scanner-region.active {
+  border: 2px solid #646cff;
+}
+
+.scanner-region video {
+  border-radius: 12px;
+}
+
+.scanner-controls {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.scan-button {
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.scan-button.start {
+  background-color: #646cff;
+  color: white;
+}
+
+.scan-button.start:hover:not(:disabled) {
+  background-color: #535bf2;
+}
+
+.scan-button.start:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scan-button.stop {
+  background-color: #ff4444;
+  color: white;
+}
+
+.scan-button.stop:hover {
+  background-color: #cc3333;
+}
+
+@media (prefers-color-scheme: light) {
+  .camera-select select {
+    background-color: #f9f9f9;
+    border-color: #ddd;
+  }
+
+  .scanner-region {
+    background-color: #f0f0f0;
+  }
+}

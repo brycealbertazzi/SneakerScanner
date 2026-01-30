@@ -1,0 +1,146 @@
+.app {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 1rem;
+  min-height: 100vh;
+}
+
+.app-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.app-header h1 {
+  font-size: 2rem;
+  margin-bottom: 0.25rem;
+}
+
+.app-header .subtitle {
+  color: #888;
+  margin: 0;
+}
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.scan-result,
+.scan-history {
+  width: 100%;
+}
+
+.scan-result h2,
+.scan-history h2 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.result-card {
+  background-color: #1a1a1a;
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.result-code {
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-family: monospace;
+  word-break: break-all;
+  margin-bottom: 0.75rem;
+  color: #646cff;
+}
+
+.result-meta {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  font-size: 0.875rem;
+  color: #888;
+  margin-bottom: 1rem;
+}
+
+.result-format {
+  background-color: #333;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.copy-button {
+  background-color: #646cff;
+  color: white;
+  border: none;
+  padding: 0.5rem 1.5rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.copy-button:hover {
+  background-color: #535bf2;
+}
+
+.history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.history-item {
+  background-color: #1a1a1a;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.history-code {
+  font-family: monospace;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-meta {
+  font-size: 0.75rem;
+  color: #888;
+  white-space: nowrap;
+}
+
+@media (prefers-color-scheme: light) {
+  .result-card,
+  .history-item {
+    background-color: #f0f0f0;
+  }
+
+  .result-format {
+    background-color: #ddd;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-header h1 {
+    font-size: 1.75rem;
+  }
+
+  .result-code {
+    font-size: 1.25rem;
+  }
+
+  .history-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+}
