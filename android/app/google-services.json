@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "773179554972",
+    "firebase_url": "https://sneaker-scanner-f77aa-default-rtdb.firebaseio.com",
+    "project_id": "sneaker-scanner-f77aa",
+    "storage_bucket": "sneaker-scanner-f77aa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:773179554972:android:c0a1af11e94628663e0159",
+        "android_client_info": {
+          "package_name": "com.brycealbertazzi.sneaker_scanner"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "773179554972-v7eh6ou3cip1fjenbcp662cvkjirav9h.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBE0yHmfuN5LvLtK1w-M0nBUnA2WaMy25U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "773179554972-v7eh6ou3cip1fjenbcp662cvkjirav9h.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "773179554972-l9jtvpf5ri7md0a2pbqtqhaj7dr2muon.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.brycealbertazzi.sneakerScanner"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
