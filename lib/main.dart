@@ -365,6 +365,12 @@ class _MainScreenState extends State<MainScreen> {
     HistoryPage(),
   ];
 
+  void switchToTab(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
+  }
+
   void _openSettings() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (context) => const SettingsPage()),
@@ -462,7 +468,6 @@ class ScannerPage extends StatefulWidget {
 class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   MobileScannerController? _controller;
   bool _isScanning = false;
-  Map<String, dynamic>? _lastScan;
 
   final DatabaseReference _database = FirebaseDatabase.instance.ref();
 
@@ -534,7 +539,12 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       if (cachedSnapshot.exists) {
         final productInfo = Map<String, dynamic>.from(cachedSnapshot.value as Map);
         if (productInfo['title'] != null && productInfo['title'] != 'Product Not Found') {
-          await scanRef.update({'productTitle': productInfo['title']});
+          final images = productInfo['images'] as List?;
+          final imageUrl = (images != null && images.isNotEmpty) ? images[0] : null;
+          await scanRef.update({
+            'productTitle': productInfo['title'],
+            'productImage': imageUrl,
+          });
         }
         return;
       }
@@ -549,6 +559,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
         if (data['items'] != null && (data['items'] as List).isNotEmpty) {
           final item = data['items'][0];
           final title = item['title'] ?? 'Unknown Product';
+          final images = item['images'] as List? ?? [];
+          final imageUrl = images.isNotEmpty ? images[0] : null;
 
           // Cache product info
           await _database.child('products').child(code).set({
@@ -556,13 +568,16 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
             'brand': item['brand'] ?? '',
             'description': item['description'] ?? '',
             'category': item['category'] ?? '',
-            'images': item['images'] ?? [],
+            'images': images,
             'upc': code,
             'lastUpdated': ServerValue.timestamp,
           });
 
-          // Update scan with product title
-          await scanRef.update({'productTitle': title});
+          // Update scan with product title and image
+          await scanRef.update({
+            'productTitle': title,
+            'productImage': imageUrl,
+          });
         }
       }
     } catch (e) {
@@ -570,24 +585,27 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     }
   }
 
-  void _onDetect(BarcodeCapture capture) {
+  void _onDetect(BarcodeCapture capture) async {
     final List<Barcode> barcodes = capture.barcodes;
     for (final barcode in barcodes) {
       if (barcode.rawValue != null) {
         final code = barcode.rawValue!;
         final format = barcode.format.name.toUpperCase();
-        final timestamp = TimeOfDay.now().format(context);
-
-        setState(() {
-          _lastScan = {
-            'code': code,
-            'format': format,
-            'timestamp': timestamp,
-          };
-        });
 
         _saveScan(code, format);
         _stopScanning();
+
+        // Navigate directly to the scan detail page
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ScanDetailPage(
+              scanId: '',
+              code: code,
+              format: format,
+              timestamp: DateTime.now().millisecondsSinceEpoch,
+            ),
+          ),
+        );
         break;
       }
     }
@@ -603,7 +621,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
@@ -673,114 +691,6 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-
-            if (_lastScan != null) ...[
-              Text(
-                'Last Scan',
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => ScanDetailPage(
-                        scanId: '',
-                        code: _lastScan!['code'],
-                        format: _lastScan!['format'],
-                        timestamp: DateTime.now().millisecondsSinceEpoch,
-                      ),
-                    ),
-                  );
-                },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFF646CFF).withValues(alpha: 0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        _lastScan!['code'],
-                        style: GoogleFonts.robotoMono(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF646CFF),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF333333),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              _lastScan!['format'],
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.grey[400],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Icon(
-                            Icons.access_time,
-                            size: 14,
-                            color: Colors.grey[500],
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _lastScan!['timestamp'],
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Tap to view details',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.arrow_forward,
-                            size: 14,
-                            color: Colors.grey[500],
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
       ),
@@ -949,22 +859,24 @@ class _HistoryPageState extends State<HistoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'Scan History',
-              style: GoogleFonts.poppins(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                'Scan History',
+                style: GoogleFonts.poppins(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
             // Search Bar
             Container(
@@ -1119,33 +1031,40 @@ class _HistoryPageState extends State<HistoryPage> {
           ],
         ),
       ),
+      ),
     );
   }
 
   Widget _buildFilterChip(String label, DateFilter filter) {
     final isSelected = _dateFilter == filter;
-    return GestureDetector(
-      onTap: () => setState(() => _dateFilter = filter),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF646CFF)
-              : const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => setState(() => _dateFilter = filter),
+        borderRadius: BorderRadius.circular(20),
+        splashColor: const Color(0xFF646CFF).withValues(alpha: 0.3),
+        highlightColor: const Color(0xFF646CFF).withValues(alpha: 0.1),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
             color: isSelected
                 ? const Color(0xFF646CFF)
-                : const Color(0xFF2A2A2A),
-            width: 1,
+                : const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF646CFF)
+                  : const Color(0xFF2A2A2A),
+              width: 1,
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: isSelected ? Colors.white : Colors.grey[400],
+          child: Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: isSelected ? Colors.white : Colors.grey[400],
+            ),
           ),
         ),
       ),
@@ -1161,40 +1080,46 @@ class _HistoryPageState extends State<HistoryPage> {
       label = '$start - $end';
     }
 
-    return GestureDetector(
-      onTap: _showDateRangePicker,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF646CFF)
-              : const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _showDateRangePicker,
+        borderRadius: BorderRadius.circular(20),
+        splashColor: const Color(0xFF646CFF).withValues(alpha: 0.3),
+        highlightColor: const Color(0xFF646CFF).withValues(alpha: 0.1),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
             color: isSelected
                 ? const Color(0xFF646CFF)
-                : const Color(0xFF2A2A2A),
-            width: 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.calendar_today,
-              size: 14,
-              color: isSelected ? Colors.white : Colors.grey[400],
+                : const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF646CFF)
+                  : const Color(0xFF2A2A2A),
+              width: 1,
             ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.calendar_today,
+                size: 14,
                 color: isSelected ? Colors.white : Colors.grey[400],
               ),
-            ),
-          ],
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: isSelected ? Colors.white : Colors.grey[400],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1305,6 +1230,7 @@ class _HistoryPageState extends State<HistoryPage> {
     final code = scanData['code'] ?? '';
     final format = scanData['format'] ?? '';
     final productTitle = scanData['productTitle'] as String?;
+    final productImage = scanData['productImage'] as String?;
     final timestamp = scanData['timestamp'] as int?;
     final timeStr = timestamp != null ? _formatTime(timestamp) : '';
 
@@ -1312,6 +1238,7 @@ class _HistoryPageState extends State<HistoryPage> {
         ? productTitle
         : 'Unknown Product';
     final hasProductInfo = productTitle != null && productTitle.isNotEmpty;
+    final hasImage = productImage != null && productImage.isNotEmpty;
 
     return Dismissible(
       key: Key(entry.key),
@@ -1332,8 +1259,11 @@ class _HistoryPageState extends State<HistoryPage> {
         ),
       ),
       child: GestureDetector(
-        onTap: () {
-          Navigator.of(context).push(
+        onTap: () async {
+          // Get state reference before async gap
+          final mainScreenState = context.findAncestorStateOfType<_MainScreenState>();
+
+          final result = await Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => ScanDetailPage(
                 scanId: entry.key,
@@ -1343,6 +1273,11 @@ class _HistoryPageState extends State<HistoryPage> {
               ),
             ),
           );
+
+          // If user wants to scan another, switch to scan tab
+          if (result == 'scanAnother') {
+            mainScreenState?.switchToTab(0);
+          }
         },
         child: Container(
           padding: const EdgeInsets.all(16),
@@ -1365,15 +1300,30 @@ class _HistoryPageState extends State<HistoryPage> {
                       : const Color(0xFF333333),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  hasProductInfo
-                      ? Icons.sports_basketball
-                      : Icons.help_outline_rounded,
-                  color: hasProductInfo
-                      ? const Color(0xFF646CFF)
-                      : Colors.grey[500],
-                  size: 26,
-                ),
+                child: hasImage
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          productImage,
+                          width: 52,
+                          height: 52,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Icon(
+                            Icons.directions_run,
+                            color: const Color(0xFF646CFF),
+                            size: 26,
+                          ),
+                        ),
+                      )
+                    : Icon(
+                        hasProductInfo
+                            ? Icons.directions_run
+                            : Icons.help_outline_rounded,
+                        color: hasProductInfo
+                            ? const Color(0xFF646CFF)
+                            : Colors.grey[500],
+                        size: 26,
+                      ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -1484,12 +1434,39 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   Map<String, dynamic>? _productInfo;
   String? _error;
 
+  // Profit calculator state
+  final TextEditingController _retailPriceController = TextEditingController();
+  final TextEditingController _marketPriceController = TextEditingController();
+  double? _manualRetailPrice;
+  double? _marketPrice;
+  bool _showRetailEntry = false;
+  bool _showManualEntry = false;
+
+  // eBay API state
+  bool _isLoadingEbayPrices = false;
+  double? _ebayLowestPrice;
+  double? _ebayAveragePrice;
+  int? _ebayListingCount;
+  String? _ebayError;
+
   final DatabaseReference _database = FirebaseDatabase.instance.ref();
+
+  // eBay API credentials - Replace with your own from developer.ebay.com
+  static const String _ebayClientId = 'YOUR_EBAY_CLIENT_ID';
+  static const String _ebayClientSecret = 'YOUR_EBAY_CLIENT_SECRET';
+  static const bool _ebayProduction = false; // Set to true for production
 
   @override
   void initState() {
     super.initState();
     _loadProductInfo();
+  }
+
+  @override
+  void dispose() {
+    _retailPriceController.dispose();
+    _marketPriceController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadProductInfo() async {
@@ -1507,12 +1484,16 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             _productInfo = Map<String, dynamic>.from(cachedSnapshot.value as Map);
             _isLoading = false;
           });
+          // Fetch eBay prices in background
+          _fetchEbayPrices();
           return;
         }
       }
 
       // If not cached, try to look up the product
       await _lookupProduct();
+      // Fetch eBay prices after product lookup
+      _fetchEbayPrices();
     } catch (e) {
       setState(() {
         _error = 'Failed to load product info';
@@ -1522,38 +1503,43 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   }
 
   Future<void> _lookupProduct() async {
+    Map<String, dynamic>? productInfo;
+    String? retailPrice;
+
     try {
-      // Try UPCitemdb API (free tier)
-      final response = await http.get(
-        Uri.parse('https://api.upcitemdb.com/prod/trial/lookup?upc=${widget.code}'),
-      ).timeout(const Duration(seconds: 10));
+      // Try UPCitemdb API first (free tier)
+      productInfo = await _tryUpcItemDb();
+      retailPrice = productInfo?['retailPrice'] as String?;
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['items'] != null && (data['items'] as List).isNotEmpty) {
-          final item = data['items'][0];
-          final productInfo = {
-            'title': item['title'] ?? 'Unknown Product',
-            'brand': item['brand'] ?? 'Unknown Brand',
-            'description': item['description'] ?? '',
-            'category': item['category'] ?? '',
-            'images': item['images'] ?? [],
-            'upc': widget.code,
-            'lastUpdated': ServerValue.timestamp,
-          };
-
-          // Cache in Firebase
-          await _database.child('products').child(widget.code).set(productInfo);
-
-          setState(() {
-            _productInfo = productInfo;
-            _isLoading = false;
-          });
-          return;
+      // If UPCitemdb didn't find price, try Open Food Facts
+      if (retailPrice == null && productInfo != null) {
+        final offPrice = await _tryOpenFoodFacts();
+        if (offPrice != null) {
+          productInfo['retailPrice'] = offPrice;
         }
       }
 
-      // If API lookup fails, set as not found
+      // If still no product info, try Go-UPC
+      if (productInfo == null || productInfo['notFound'] == true) {
+        final goUpcInfo = await _tryGoUpc();
+        if (goUpcInfo != null) {
+          productInfo = goUpcInfo;
+        }
+      }
+
+      if (productInfo != null && productInfo['notFound'] != true) {
+        // Cache in Firebase
+        productInfo['lastUpdated'] = ServerValue.timestamp;
+        await _database.child('products').child(widget.code).set(productInfo);
+
+        setState(() {
+          _productInfo = productInfo;
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // If all API lookups fail, set as not found
       setState(() {
         _productInfo = {
           'title': 'Product Not Found',
@@ -1578,41 +1564,366 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     }
   }
 
-  Future<void> _openEbaySearch() async {
-    String searchQuery = widget.code;
-    final title = _productInfo?['title'];
-    if (title != null && title != 'Product Not Found') {
-      searchQuery = title;
+  Future<Map<String, dynamic>?> _tryUpcItemDb() async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://api.upcitemdb.com/prod/trial/lookup?upc=${widget.code}'),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['items'] != null && (data['items'] as List).isNotEmpty) {
+          final item = data['items'][0];
+
+          // Extract price from offers if available
+          double? lowestPrice;
+          double? highestPrice;
+          String? retailPrice;
+
+          if (item['offers'] != null && (item['offers'] as List).isNotEmpty) {
+            final offers = item['offers'] as List;
+            for (var offer in offers) {
+              final price = offer['price'];
+              if (price != null) {
+                final priceValue = double.tryParse(price.toString());
+                if (priceValue != null && priceValue > 0) {
+                  if (lowestPrice == null || priceValue < lowestPrice) {
+                    lowestPrice = priceValue;
+                  }
+                  if (highestPrice == null || priceValue > highestPrice) {
+                    highestPrice = priceValue;
+                  }
+                }
+              }
+            }
+          }
+
+          // Also check for MSRP in the item data
+          if (item['msrp'] != null) {
+            final msrp = double.tryParse(item['msrp'].toString());
+            if (msrp != null && msrp > 0) {
+              retailPrice = msrp.toStringAsFixed(2);
+            }
+          } else if (item['lowest_recorded_price'] != null) {
+            final lrp = double.tryParse(item['lowest_recorded_price'].toString());
+            if (lrp != null && lrp > 0) {
+              retailPrice = lrp.toStringAsFixed(2);
+            }
+          } else if (lowestPrice != null) {
+            retailPrice = lowestPrice.toStringAsFixed(2);
+          }
+
+          return {
+            'title': item['title'] ?? 'Unknown Product',
+            'brand': item['brand'] ?? 'Unknown Brand',
+            'description': item['description'] ?? '',
+            'category': item['category'] ?? '',
+            'images': item['images'] ?? [],
+            'model': item['model'] ?? '',
+            'retailPrice': retailPrice,
+            'lowestPrice': lowestPrice?.toStringAsFixed(2),
+            'highestPrice': highestPrice?.toStringAsFixed(2),
+            'upc': widget.code,
+          };
+        }
+      }
+    } catch (e) {
+      debugPrint('UPCitemdb error: $e');
     }
+    return null;
+  }
+
+  Future<String?> _tryOpenFoodFacts() async {
+    try {
+      final response = await http.get(
+        Uri.parse('https://world.openfoodfacts.org/api/v0/product/${widget.code}.json'),
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['status'] == 1 && data['product'] != null) {
+          // Open Food Facts doesn't have price data for most products
+          // but we can get additional product info
+        }
+      }
+    } catch (e) {
+      debugPrint('Open Food Facts error: $e');
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> _tryGoUpc() async {
+    try {
+      // Go-UPC requires an API key, but has a demo endpoint
+      // For production, you would use: https://go-upc.com/api/v1/code/{barcode}
+      final response = await http.get(
+        Uri.parse('https://go-upc.com/api/v1/code/${widget.code}'),
+        headers: {
+          'Authorization': 'Bearer YOUR_GO_UPC_API_KEY', // Replace with your key
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['product'] != null) {
+          final product = data['product'];
+          String? retailPrice;
+
+          // Extract price if available
+          if (product['specs'] != null) {
+            final specs = product['specs'];
+            if (specs['msrp'] != null) {
+              final msrp = double.tryParse(specs['msrp'].toString().replaceAll(RegExp(r'[^\d.]'), ''));
+              if (msrp != null && msrp > 0) {
+                retailPrice = msrp.toStringAsFixed(2);
+              }
+            }
+          }
+
+          return {
+            'title': product['name'] ?? 'Unknown Product',
+            'brand': product['brand'] ?? 'Unknown Brand',
+            'description': product['description'] ?? '',
+            'category': product['category'] ?? '',
+            'images': product['imageUrl'] != null ? [product['imageUrl']] : [],
+            'model': product['model'] ?? '',
+            'retailPrice': retailPrice,
+            'upc': widget.code,
+          };
+        }
+      }
+    } catch (e) {
+      debugPrint('Go-UPC error: $e');
+    }
+    return null;
+  }
+
+  String _buildSearchQuery({bool forStockX = false}) {
+    final title = _productInfo?['title'] as String?;
+    final brand = _productInfo?['brand'] as String?;
+    final model = _productInfo?['model'] as String?;
+
+    if (title == null || title == 'Product Not Found') {
+      return widget.code;
+    }
+
+    if (forStockX) {
+      // For StockX, use a shorter query: brand + model or first few words of title
+      if (brand != null && brand.isNotEmpty && model != null && model.isNotEmpty) {
+        return '$brand $model';
+      }
+
+      // Otherwise, take first 5-6 words of title to avoid overly long queries
+      final words = title.split(' ');
+      if (words.length > 6) {
+        return words.take(6).join(' ');
+      }
+    }
+
+    return title;
+  }
+
+  Future<void> _openEbaySearch() async {
+    final searchQuery = _buildSearchQuery();
     final url = Uri.parse(
         'https://www.ebay.com/sch/i.html?_nkw=${Uri.encodeComponent(searchQuery)}');
     await launchUrl(url, mode: LaunchMode.platformDefault);
   }
 
   Future<void> _openStockXSearch() async {
-    String searchQuery = widget.code;
-    final title = _productInfo?['title'];
-    if (title != null && title != 'Product Not Found') {
-      searchQuery = title;
-    }
+    final searchQuery = _buildSearchQuery(forStockX: true);
     final url = Uri.parse(
         'https://stockx.com/search?s=${Uri.encodeComponent(searchQuery)}');
     await launchUrl(url, mode: LaunchMode.platformDefault);
   }
 
+  // eBay OAuth token cache
+  static String? _ebayAccessToken;
+  static DateTime? _ebayTokenExpiry;
+
+  Future<String?> _getEbayAccessToken() async {
+    // Check if we have a valid cached token
+    if (_ebayAccessToken != null &&
+        _ebayTokenExpiry != null &&
+        DateTime.now().isBefore(_ebayTokenExpiry!)) {
+      return _ebayAccessToken;
+    }
+
+    // Skip if credentials not configured
+    if (_ebayClientId == 'YOUR_EBAY_CLIENT_ID') {
+      return null;
+    }
+
+    try {
+      final baseUrl = _ebayProduction
+          ? 'https://api.ebay.com'
+          : 'https://api.sandbox.ebay.com';
+
+      final credentials = base64Encode(utf8.encode('$_ebayClientId:$_ebayClientSecret'));
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/identity/v1/oauth2/token'),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': 'Basic $credentials',
+        },
+        body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope',
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _ebayAccessToken = data['access_token'];
+        final expiresIn = data['expires_in'] as int;
+        _ebayTokenExpiry = DateTime.now().add(Duration(seconds: expiresIn - 60)); // Buffer
+        return _ebayAccessToken;
+      }
+    } catch (e) {
+      debugPrint('eBay OAuth error: $e');
+    }
+    return null;
+  }
+
+  Future<void> _fetchEbayPrices() async {
+    if (_productInfo == null) return;
+
+    setState(() {
+      _isLoadingEbayPrices = true;
+      _ebayError = null;
+    });
+
+    try {
+      final token = await _getEbayAccessToken();
+
+      if (token == null) {
+        // Fallback: Use eBay's public search page scraping isn't possible,
+        // so we'll just indicate eBay integration isn't configured
+        setState(() {
+          _isLoadingEbayPrices = false;
+          _ebayError = 'eBay API not configured';
+        });
+        return;
+      }
+
+      final searchQuery = _buildSearchQuery();
+      final baseUrl = _ebayProduction
+          ? 'https://api.ebay.com'
+          : 'https://api.sandbox.ebay.com';
+
+      final response = await http.get(
+        Uri.parse(
+          '$baseUrl/buy/browse/v1/item_summary/search?'
+          'q=${Uri.encodeComponent(searchQuery)}'
+          '&category_ids=93427' // Athletic shoes category
+          '&limit=50'
+          '&sort=price'
+        ),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final items = data['itemSummaries'] as List? ?? [];
+
+        if (items.isNotEmpty) {
+          double totalPrice = 0;
+          double? lowestPrice;
+          int validPrices = 0;
+
+          for (var item in items) {
+            final priceData = item['price'];
+            if (priceData != null && priceData['value'] != null) {
+              final price = double.tryParse(priceData['value'].toString());
+              if (price != null && price > 0) {
+                totalPrice += price;
+                validPrices++;
+                if (lowestPrice == null || price < lowestPrice) {
+                  lowestPrice = price;
+                }
+              }
+            }
+          }
+
+          if (validPrices > 0) {
+            setState(() {
+              _ebayLowestPrice = lowestPrice;
+              _ebayAveragePrice = totalPrice / validPrices;
+              _ebayListingCount = validPrices;
+              _isLoadingEbayPrices = false;
+              // Auto-fill market price with average eBay price
+              if (_marketPrice == null && _ebayAveragePrice != null) {
+                _marketPrice = _ebayAveragePrice;
+                _marketPriceController.text = _ebayAveragePrice!.toStringAsFixed(2);
+              }
+            });
+            return;
+          }
+        }
+      }
+
+      setState(() {
+        _isLoadingEbayPrices = false;
+        _ebayError = 'No listings found';
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingEbayPrices = false;
+        _ebayError = 'Failed to fetch prices';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: const Text('Scan Details'),
         ),
-        title: const Text('Scan Details'),
-      ),
-      body: _isLoading
+        bottomNavigationBar: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFF121212),
+            border: Border(
+              top: BorderSide(
+                color: const Color(0xFF2A2A2A),
+                width: 1,
+              ),
+            ),
+          ),
+          child: SafeArea(
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  // Pop with result to indicate we want to scan another
+                  Navigator.of(context).pop('scanAnother');
+                },
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('Scan Another'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF646CFF),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF646CFF)),
             )
@@ -1691,7 +2002,78 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                             ),
                           ),
                         ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
+
+                      // Price Section
+                      if (_productInfo?['retailPrice'] != null) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFF1E3A1E),
+                                const Color(0xFF1A2A1A),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.green.withValues(alpha: 0.3),
+                              width: 1,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.sell,
+                                    color: Colors.green[400],
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Retail Price',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.green[400],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '\$${_productInfo!['retailPrice']}',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              if (_productInfo?['lowestPrice'] != null &&
+                                  _productInfo?['highestPrice'] != null &&
+                                  _productInfo!['lowestPrice'] != _productInfo!['highestPrice']) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Market range: \$${_productInfo!['lowestPrice']} - \$${_productInfo!['highestPrice']}',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    color: Colors.grey[400],
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // eBay Market Prices Section
+                      _buildEbayPricesSection(),
 
                       // Info Cards
                       _buildInfoCard(
@@ -1745,6 +2127,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                         const SizedBox(height: 24),
                       ],
 
+                      // Profit Calculator Section
+                      _buildProfitCalculator(),
+                      const SizedBox(height: 24),
+
                       // eBay Button
                       SizedBox(
                         width: double.infinity,
@@ -1785,6 +2171,315 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                     ],
                   ),
                 ),
+      ),
+    );
+  }
+
+  Widget _buildProfitCalculator() {
+    final retailPriceStr = _productInfo?['retailPrice'] as String?;
+    final fetchedRetailPrice = retailPriceStr != null ? double.tryParse(retailPriceStr) : null;
+
+    // Use fetched price if available, otherwise use manually entered price
+    final retailPrice = fetchedRetailPrice ?? _manualRetailPrice;
+    final hasAutoRetailPrice = fetchedRetailPrice != null;
+
+    // Calculate profit if we have both prices
+    double? profit;
+    double? profitPercent;
+    if (retailPrice != null && _marketPrice != null) {
+      profit = _marketPrice! - retailPrice;
+      profitPercent = (profit / retailPrice) * 100;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF2A2A2A),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.calculate_rounded,
+                color: const Color(0xFF646CFF),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Profit Calculator',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Retail Price Row (with input if not found)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Retail Price',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: Colors.grey[400],
+                ),
+              ),
+              if (hasAutoRetailPrice)
+                Text(
+                  '\$${fetchedRetailPrice.toStringAsFixed(2)}',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                )
+              else if (_showRetailEntry || _manualRetailPrice == null)
+                SizedBox(
+                  width: 120,
+                  height: 36,
+                  child: TextField(
+                    controller: _retailPriceController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                    textAlign: TextAlign.right,
+                    decoration: InputDecoration(
+                      hintText: 'Enter price',
+                      hintStyle: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                      prefixText: '\$ ',
+                      prefixStyle: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      filled: true,
+                      fillColor: const Color(0xFF252525),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFF646CFF), width: 1),
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _manualRetailPrice = double.tryParse(value);
+                      });
+                    },
+                    onSubmitted: (value) {
+                      setState(() {
+                        _manualRetailPrice = double.tryParse(value);
+                        if (_manualRetailPrice != null) {
+                          _showRetailEntry = false;
+                        }
+                      });
+                    },
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: () => setState(() => _showRetailEntry = true),
+                  child: Text(
+                    '\$${_manualRetailPrice!.toStringAsFixed(2)}',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF646CFF),
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Market Price Row (with input)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Market Price',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: Colors.grey[400],
+                ),
+              ),
+              if (_showManualEntry || _marketPrice == null)
+                SizedBox(
+                  width: 120,
+                  height: 36,
+                  child: TextField(
+                    controller: _marketPriceController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                    textAlign: TextAlign.right,
+                    decoration: InputDecoration(
+                      hintText: 'Enter price',
+                      hintStyle: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: Colors.grey[600],
+                      ),
+                      prefixText: '\$ ',
+                      prefixStyle: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      filled: true,
+                      fillColor: const Color(0xFF252525),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFF646CFF), width: 1),
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _marketPrice = double.tryParse(value);
+                      });
+                    },
+                    onSubmitted: (value) {
+                      setState(() {
+                        _marketPrice = double.tryParse(value);
+                        if (_marketPrice != null) {
+                          _showManualEntry = false;
+                        }
+                      });
+                    },
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: () => setState(() => _showManualEntry = true),
+                  child: Text(
+                    '\$${_marketPrice!.toStringAsFixed(2)}',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF646CFF),
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+
+          // Divider
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Divider(color: Colors.grey[800], height: 1),
+          ),
+
+          // Profit Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Estimated Profit',
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+              if (profit != null)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${profit >= 0 ? '+' : ''}\$${profit.toStringAsFixed(2)}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: profit >= 0 ? Colors.green[400] : Colors.red[400],
+                      ),
+                    ),
+                    Text(
+                      '${profitPercent! >= 0 ? '+' : ''}${profitPercent.toStringAsFixed(1)}%',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: profit >= 0 ? Colors.green[400] : Colors.red[400],
+                      ),
+                    ),
+                  ],
+                )
+              else
+                Text(
+                  'Enter market price',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: Colors.grey[500],
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+            ],
+          ),
+
+          // Tip text
+          if (retailPrice == null || _marketPrice == null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF646CFF).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.lightbulb_outline,
+                    size: 16,
+                    color: const Color(0xFF646CFF),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      retailPrice == null && _marketPrice == null
+                          ? 'Enter the in-store price above, then check eBay/StockX for market prices'
+                          : retailPrice == null
+                              ? 'Enter the in-store retail price to calculate profit'
+                              : 'Check eBay or StockX below for current market prices',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: Colors.grey[400],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -1794,7 +2489,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.sports_basketball,
+            Icons.directions_run,
             size: 64,
             color: Colors.grey[700],
           ),
@@ -1809,6 +2504,226 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildEbayPricesSection() {
+    // Show loading state
+    if (_isLoadingEbayPrices) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 20),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF1E2A3A),
+              const Color(0xFF1A2230),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: const Color(0xFF0064D2).withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Color(0xFF0064D2),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Fetching eBay prices...',
+              style: GoogleFonts.inter(
+                color: Colors.grey[400],
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show eBay prices if available
+    if (_ebayLowestPrice != null || _ebayAveragePrice != null) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 20),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFF1E2A3A),
+              const Color(0xFF1A2230),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: const Color(0xFF0064D2).withValues(alpha: 0.3),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.shopping_bag,
+                  color: const Color(0xFF0064D2),
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'eBay Market Prices',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF0064D2),
+                  ),
+                ),
+                const Spacer(),
+                if (_ebayListingCount != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0064D2).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '$_ebayListingCount listings',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: const Color(0xFF0064D2),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Lowest',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _ebayLowestPrice != null
+                            ? '\$${_ebayLowestPrice!.toStringAsFixed(2)}'
+                            : '--',
+                        style: GoogleFonts.poppins(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  width: 1,
+                  height: 40,
+                  color: Colors.grey[700],
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Average',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _ebayAveragePrice != null
+                            ? '\$${_ebayAveragePrice!.toStringAsFixed(2)}'
+                            : '--',
+                        style: GoogleFonts.poppins(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.green[400],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Show setup prompt if eBay not configured
+    if (_ebayError == 'eBay API not configured') {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 20),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A1A1A),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.grey[800]!,
+            width: 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: Colors.grey[500],
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'eBay Prices Available',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[400],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Set up eBay API credentials to automatically fetch market prices.',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Don't show anything if there was another error
+    return const SizedBox.shrink();
   }
 
   Widget _buildInfoCard(String label, String value, IconData icon) {
