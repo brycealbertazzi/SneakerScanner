@@ -515,9 +515,9 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _saveScan(String code, String format) async {
+  Future<String?> _saveScan(String code, String format) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (user == null) return null;
 
     // Save initial scan data
     final scanRef = _database.child('scans').child(user.uid).push();
@@ -526,10 +526,17 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       'format': format,
       'timestamp': ServerValue.timestamp,
       'productTitle': null,
+      'productImage': null,
+      'retailPrice': null,
+      'ebayPrice': null,
+      'stockxPrice': null,
     });
 
     // Try to fetch product info and update the scan
     _fetchAndUpdateProductInfo(code, scanRef);
+
+    // Return the scan ID
+    return scanRef.key;
   }
 
   Future<void> _fetchAndUpdateProductInfo(String code, DatabaseReference scanRef) async {
@@ -541,9 +548,11 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
         if (productInfo['title'] != null && productInfo['title'] != 'Product Not Found') {
           final images = productInfo['images'] as List?;
           final imageUrl = (images != null && images.isNotEmpty) ? images[0] : null;
+          final retailPrice = productInfo['retailPrice'] as String?;
           await scanRef.update({
             'productTitle': productInfo['title'],
             'productImage': imageUrl,
+            'retailPrice': retailPrice,
           });
         }
         return;
@@ -562,6 +571,43 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
           final images = item['images'] as List? ?? [];
           final imageUrl = images.isNotEmpty ? images[0] : null;
 
+          // Extract retail price
+          double? lowestPrice;
+          double? highestPrice;
+          String? retailPrice;
+
+          if (item['offers'] != null && (item['offers'] as List).isNotEmpty) {
+            final offers = item['offers'] as List;
+            for (var offer in offers) {
+              final price = offer['price'];
+              if (price != null) {
+                final priceValue = double.tryParse(price.toString());
+                if (priceValue != null && priceValue > 0) {
+                  if (lowestPrice == null || priceValue < lowestPrice) {
+                    lowestPrice = priceValue;
+                  }
+                  if (highestPrice == null || priceValue > highestPrice) {
+                    highestPrice = priceValue;
+                  }
+                }
+              }
+            }
+          }
+
+          if (item['msrp'] != null) {
+            final msrp = double.tryParse(item['msrp'].toString());
+            if (msrp != null && msrp > 0) {
+              retailPrice = msrp.toStringAsFixed(2);
+            }
+          } else if (item['lowest_recorded_price'] != null) {
+            final lrp = double.tryParse(item['lowest_recorded_price'].toString());
+            if (lrp != null && lrp > 0) {
+              retailPrice = lrp.toStringAsFixed(2);
+            }
+          } else if (lowestPrice != null) {
+            retailPrice = lowestPrice.toStringAsFixed(2);
+          }
+
           // Cache product info
           await _database.child('products').child(code).set({
             'title': title,
@@ -569,14 +615,16 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
             'description': item['description'] ?? '',
             'category': item['category'] ?? '',
             'images': images,
+            'retailPrice': retailPrice,
             'upc': code,
             'lastUpdated': ServerValue.timestamp,
           });
 
-          // Update scan with product title and image
+          // Update scan with product title, image, and retail price
           await scanRef.update({
             'productTitle': title,
             'productImage': imageUrl,
+            'retailPrice': retailPrice,
           });
         }
       }
@@ -592,20 +640,22 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
         final code = barcode.rawValue!;
         final format = barcode.format.name.toUpperCase();
 
-        _saveScan(code, format);
+        final scanId = await _saveScan(code, format);
         _stopScanning();
 
         // Navigate directly to the scan detail page
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => ScanDetailPage(
-              scanId: '',
-              code: code,
-              format: format,
-              timestamp: DateTime.now().millisecondsSinceEpoch,
+        if (mounted) {
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => ScanDetailPage(
+                scanId: scanId ?? '',
+                code: code,
+                format: format,
+                timestamp: DateTime.now().millisecondsSinceEpoch,
+              ),
             ),
-          ),
-        );
+          );
+        }
         break;
       }
     }
@@ -1434,13 +1484,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   Map<String, dynamic>? _productInfo;
   String? _error;
 
-  // Profit calculator state
+  // Retail price manual entry
   final TextEditingController _retailPriceController = TextEditingController();
-  final TextEditingController _marketPriceController = TextEditingController();
   double? _manualRetailPrice;
-  double? _marketPrice;
   bool _showRetailEntry = false;
-  bool _showManualEntry = false;
 
   // eBay API state
   bool _isLoadingEbayPrices = false;
@@ -1465,15 +1512,34 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   @override
   void dispose() {
     _retailPriceController.dispose();
-    _marketPriceController.dispose();
     super.dispose();
   }
 
   Future<void> _loadProductInfo() async {
     try {
-      // First check if we have cached product info in Firebase
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
+        // Load saved prices from scan record
+        if (widget.scanId.isNotEmpty) {
+          final scanSnapshot = await _database
+              .child('scans')
+              .child(user.uid)
+              .child(widget.scanId)
+              .get();
+
+          if (scanSnapshot.exists) {
+            final scanData = Map<String, dynamic>.from(scanSnapshot.value as Map);
+            final savedRetailPrice = scanData['retailPrice'] as String?;
+            if (savedRetailPrice != null) {
+              _manualRetailPrice = double.tryParse(savedRetailPrice);
+              if (_manualRetailPrice != null) {
+                _retailPriceController.text = savedRetailPrice;
+              }
+            }
+          }
+        }
+
+        // Check if we have cached product info in Firebase
         final cachedSnapshot = await _database
             .child('products')
             .child(widget.code)
@@ -1853,12 +1919,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               _ebayAveragePrice = totalPrice / validPrices;
               _ebayListingCount = validPrices;
               _isLoadingEbayPrices = false;
-              // Auto-fill market price with average eBay price
-              if (_marketPrice == null && _ebayAveragePrice != null) {
-                _marketPrice = _ebayAveragePrice;
-                _marketPriceController.text = _ebayAveragePrice!.toStringAsFixed(2);
-              }
             });
+            _savePricesToDatabase();
             return;
           }
         }
@@ -1873,6 +1935,34 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         _isLoadingEbayPrices = false;
         _ebayError = 'Failed to fetch prices';
       });
+    }
+  }
+
+  Future<void> _savePricesToDatabase() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || widget.scanId.isEmpty) return;
+
+    try {
+      final updateData = <String, dynamic>{};
+
+      // Add retail price if available
+      final retailPriceStr = _productInfo?['retailPrice'] as String?;
+      final retailPrice = retailPriceStr ?? (_manualRetailPrice?.toStringAsFixed(2));
+      if (retailPrice != null) {
+        updateData['retailPrice'] = retailPrice;
+      }
+
+      // Add eBay price if available
+      if (_ebayAveragePrice != null) {
+        updateData['ebayPrice'] = _ebayAveragePrice!.toStringAsFixed(2);
+      }
+
+      // Only update if we have prices to save
+      if (updateData.isNotEmpty) {
+        await _database.child('scans').child(user.uid).child(widget.scanId).update(updateData);
+      }
+    } catch (e) {
+      debugPrint('Error saving prices: $e');
     }
   }
 
@@ -2137,7 +2227,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                         child: ElevatedButton.icon(
                           onPressed: _openEbaySearch,
                           icon: const Icon(Icons.shopping_bag),
-                          label: const Text('Find on eBay'),
+                          label: const Text('Open on eBay'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF0064D2),
                             foregroundColor: Colors.white,
@@ -2156,7 +2246,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                         child: ElevatedButton.icon(
                           onPressed: _openStockXSearch,
                           icon: const Icon(Icons.store),
-                          label: const Text('Find on StockX'),
+                          label: const Text('Open on StockX'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF006340),
                             foregroundColor: Colors.white,
@@ -2183,12 +2273,15 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     final retailPrice = fetchedRetailPrice ?? _manualRetailPrice;
     final hasAutoRetailPrice = fetchedRetailPrice != null;
 
-    // Calculate profit if we have both prices
-    double? profit;
-    double? profitPercent;
-    if (retailPrice != null && _marketPrice != null) {
-      profit = _marketPrice! - retailPrice;
-      profitPercent = (profit / retailPrice) * 100;
+    // Get eBay price (auto-fetched only)
+    final ebayPrice = _ebayAveragePrice;
+
+    // Calculate separate profits for eBay and StockX
+    double? ebayProfit;
+    double? ebayProfitPercent;
+    if (retailPrice != null && ebayPrice != null) {
+      ebayProfit = ebayPrice - retailPrice;
+      ebayProfitPercent = (ebayProfit / retailPrice) * 100;
     }
 
     return Container(
@@ -2225,171 +2318,163 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           ),
           const SizedBox(height: 16),
 
-          // Retail Price Row (with input if not found)
+          // Retail Price Row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Retail Price',
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: Colors.grey[400],
+              Icon(Icons.sell, size: 16, color: Colors.green[400]),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Retail Price',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: Colors.grey[400],
+                      ),
+                    ),
+                    if (hasAutoRetailPrice)
+                      Text(
+                        '\$${fetchedRetailPrice.toStringAsFixed(2)}',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      )
+                    else if (_showRetailEntry)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 100,
+                            height: 36,
+                            child: TextField(
+                              controller: _retailPriceController,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              textInputAction: TextInputAction.done,
+                              autofocus: true,
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                              textAlign: TextAlign.right,
+                              decoration: InputDecoration(
+                                hintText: '0.00',
+                                hintStyle: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: Colors.grey[600],
+                                ),
+                                prefixText: '\$ ',
+                                prefixStyle: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                filled: true,
+                                fillColor: const Color(0xFF252525),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide.none,
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                  borderSide: BorderSide(color: Colors.green[400]!, width: 1),
+                                ),
+                              ),
+                              onChanged: (value) {
+                                setState(() {
+                                  _manualRetailPrice = double.tryParse(value);
+                                });
+                              },
+                              onSubmitted: (value) {
+                                setState(() {
+                                  _manualRetailPrice = double.tryParse(value);
+                                  if (_manualRetailPrice != null) {
+                                    _showRetailEntry = false;
+                                    _savePricesToDatabase();
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _manualRetailPrice = double.tryParse(_retailPriceController.text);
+                                if (_manualRetailPrice != null) {
+                                  _showRetailEntry = false;
+                                  _savePricesToDatabase();
+                                }
+                              });
+                            },
+                            child: Container(
+                              width: 40,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: Colors.green[400]!.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(
+                                Icons.check,
+                                color: Colors.green[400],
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    else if (_manualRetailPrice != null)
+                      GestureDetector(
+                        onTap: () => setState(() => _showRetailEntry = true),
+                        child: Text(
+                          '\$${_manualRetailPrice!.toStringAsFixed(2)}',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green[400],
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      )
+                    else
+                      Row(
+                        children: [
+                          Text(
+                            'Not Found',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () => setState(() => _showRetailEntry = true),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                'Enter',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.green[400],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
                 ),
               ),
-              if (hasAutoRetailPrice)
-                Text(
-                  '\$${fetchedRetailPrice.toStringAsFixed(2)}',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                )
-              else if (_showRetailEntry || _manualRetailPrice == null)
-                SizedBox(
-                  width: 120,
-                  height: 36,
-                  child: TextField(
-                    controller: _retailPriceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                    textAlign: TextAlign.right,
-                    decoration: InputDecoration(
-                      hintText: 'Enter price',
-                      hintStyle: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
-                      prefixText: '\$ ',
-                      prefixStyle: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      filled: true,
-                      fillColor: const Color(0xFF252525),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Color(0xFF646CFF), width: 1),
-                      ),
-                    ),
-                    onChanged: (value) {
-                      setState(() {
-                        _manualRetailPrice = double.tryParse(value);
-                      });
-                    },
-                    onSubmitted: (value) {
-                      setState(() {
-                        _manualRetailPrice = double.tryParse(value);
-                        if (_manualRetailPrice != null) {
-                          _showRetailEntry = false;
-                        }
-                      });
-                    },
-                  ),
-                )
-              else
-                GestureDetector(
-                  onTap: () => setState(() => _showRetailEntry = true),
-                  child: Text(
-                    '\$${_manualRetailPrice!.toStringAsFixed(2)}',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF646CFF),
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Market Price Row (with input)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Market Price',
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: Colors.grey[400],
-                ),
-              ),
-              if (_showManualEntry || _marketPrice == null)
-                SizedBox(
-                  width: 120,
-                  height: 36,
-                  child: TextField(
-                    controller: _marketPriceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                    textAlign: TextAlign.right,
-                    decoration: InputDecoration(
-                      hintText: 'Enter price',
-                      hintStyle: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
-                      prefixText: '\$ ',
-                      prefixStyle: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                      filled: true,
-                      fillColor: const Color(0xFF252525),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Color(0xFF646CFF), width: 1),
-                      ),
-                    ),
-                    onChanged: (value) {
-                      setState(() {
-                        _marketPrice = double.tryParse(value);
-                      });
-                    },
-                    onSubmitted: (value) {
-                      setState(() {
-                        _marketPrice = double.tryParse(value);
-                        if (_marketPrice != null) {
-                          _showManualEntry = false;
-                        }
-                      });
-                    },
-                  ),
-                )
-              else
-                GestureDetector(
-                  onTap: () => setState(() => _showManualEntry = true),
-                  child: Text(
-                    '\$${_marketPrice!.toStringAsFixed(2)}',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF646CFF),
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
             ],
           ),
 
@@ -2399,81 +2484,174 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             child: Divider(color: Colors.grey[800], height: 1),
           ),
 
-          // Profit Row
+          // eBay Section
+          _buildMarketPriceSection(
+            label: 'eBay',
+            icon: Icons.shopping_bag,
+            iconColor: const Color(0xFF0064D2),
+            price: ebayPrice,
+            profit: ebayProfit,
+            profitPercent: ebayProfitPercent,
+            isLoading: _isLoadingEbayPrices,
+            retailPrice: retailPrice,
+            onOpenMarketplace: _openEbaySearch,
+          ),
+          const SizedBox(height: 12),
+
+          // StockX Section
+          _buildMarketPriceSection(
+            label: 'StockX',
+            icon: Icons.store,
+            iconColor: const Color(0xFF006340),
+            price: null, // StockX has no API
+            profit: null,
+            profitPercent: null,
+            isLoading: false,
+            retailPrice: retailPrice,
+            onOpenMarketplace: _openStockXSearch,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMarketPriceSection({
+    required String label,
+    required IconData icon,
+    required Color iconColor,
+    required double? price,
+    required double? profit,
+    required double? profitPercent,
+    required bool isLoading,
+    required double? retailPrice,
+    required VoidCallback onOpenMarketplace,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF252525),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          // Price Row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
+              Icon(icon, size: 18, color: iconColor),
+              const SizedBox(width: 8),
               Text(
-                'Estimated Profit',
+                '$label Price',
                 style: GoogleFonts.inter(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                   color: Colors.white,
                 ),
               ),
-              if (profit != null)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '${profit >= 0 ? '+' : ''}\$${profit.toStringAsFixed(2)}',
-                      style: GoogleFonts.poppins(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: profit >= 0 ? Colors.green[400] : Colors.red[400],
-                      ),
-                    ),
-                    Text(
-                      '${profitPercent! >= 0 ? '+' : ''}${profitPercent.toStringAsFixed(1)}%',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: profit >= 0 ? Colors.green[400] : Colors.red[400],
-                      ),
-                    ),
-                  ],
-                )
-              else
+              const Spacer(),
+              if (isLoading)
                 Text(
-                  'Enter market price',
+                  'Loading...',
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     color: Colors.grey[500],
                     fontStyle: FontStyle.italic,
                   ),
+                )
+              else if (price != null)
+                Text(
+                  '\$${price.toStringAsFixed(2)}',
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                )
+              else
+                GestureDetector(
+                  onTap: onOpenMarketplace,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: iconColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Open on $label',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: iconColor,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.open_in_new, size: 12, color: iconColor),
+                      ],
+                    ),
+                  ),
                 ),
             ],
           ),
 
-          // Tip text
-          if (retailPrice == null || _marketPrice == null) ...[
-            const SizedBox(height: 12),
+          // Profit Row (only show if we have a price)
+          if (price != null) ...[
+            const SizedBox(height: 10),
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFF646CFF).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(6),
               ),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    Icons.lightbulb_outline,
-                    size: 16,
-                    color: const Color(0xFF646CFF),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      retailPrice == null && _marketPrice == null
-                          ? 'Enter the in-store price above, then check eBay/StockX for market prices'
-                          : retailPrice == null
-                              ? 'Enter the in-store retail price to calculate profit'
-                              : 'Check eBay or StockX below for current market prices',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: Colors.grey[400],
-                      ),
+                  Text(
+                    'Profit',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: Colors.grey[400],
                     ),
                   ),
+                  if (profit != null)
+                    Row(
+                      children: [
+                        Text(
+                          '${profit >= 0 ? '+' : ''}\$${profit.toStringAsFixed(2)}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: profit >= 0 ? Colors.green[400] : Colors.red[400],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: (profit >= 0 ? Colors.green : Colors.red).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${profitPercent! >= 0 ? '+' : ''}${profitPercent.toStringAsFixed(1)}%',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: profit >= 0 ? Colors.green[400] : Colors.red[400],
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    Text(
+                      'Retail price not found',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
                 ],
               ),
             ),
