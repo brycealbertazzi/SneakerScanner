@@ -530,6 +530,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       'retailPrice': null,
       'ebayPrice': null,
       'stockxPrice': null,
+      'goatPrice': null,
     });
 
     // Try to fetch product info and update the scan
@@ -1496,7 +1497,20 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   int? _ebayListingCount;
   String? _ebayError;
 
+  // StockX price state (via KicksDB)
+  bool _isLoadingStockXPrice = false;
+  double? _stockXPrice;
+  String? _stockXSlug;
+
+  // GOAT price state (via KicksDB)
+  bool _isLoadingGoatPrice = false;
+  double? _goatPrice;
+  String? _goatSlug;
+
   final DatabaseReference _database = FirebaseDatabase.instance.ref();
+
+  // KicksDB API key from kicks.dev
+  static const String _kicksDbApiKey = 'KICKS-9C87-7171-ADAA-E89A98AF16B0';
 
   // eBay API credentials - Replace with your own from developer.ebay.com
   static const String _ebayClientId = 'YOUR_EBAY_CLIENT_ID';
@@ -1536,6 +1550,16 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 _retailPriceController.text = savedRetailPrice;
               }
             }
+            // Load cached StockX price
+            final savedStockXPrice = scanData['stockxPrice'] as String?;
+            if (savedStockXPrice != null) {
+              _stockXPrice = double.tryParse(savedStockXPrice);
+            }
+            // Load cached GOAT price
+            final savedGoatPrice = scanData['goatPrice'] as String?;
+            if (savedGoatPrice != null) {
+              _goatPrice = double.tryParse(savedGoatPrice);
+            }
           }
         }
 
@@ -1550,16 +1574,18 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             _productInfo = Map<String, dynamic>.from(cachedSnapshot.value as Map);
             _isLoading = false;
           });
-          // Fetch eBay prices in background
+          // Fetch marketplace prices in background
           _fetchEbayPrices();
+          _fetchKicksDbPrices();
           return;
         }
       }
 
       // If not cached, try to look up the product
       await _lookupProduct();
-      // Fetch eBay prices after product lookup
+      // Fetch marketplace prices after product lookup
       _fetchEbayPrices();
+      _fetchKicksDbPrices();
     } catch (e) {
       setState(() {
         _error = 'Failed to load product info';
@@ -1797,10 +1823,27 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   }
 
   Future<void> _openStockXSearch() async {
-    final searchQuery = _buildSearchQuery(forStockX: true);
-    final url = Uri.parse(
-        'https://stockx.com/search?s=${Uri.encodeComponent(searchQuery)}');
-    await launchUrl(url, mode: LaunchMode.platformDefault);
+    if (_stockXSlug != null && _stockXSlug!.isNotEmpty) {
+      final url = Uri.parse('https://stockx.com/$_stockXSlug');
+      await launchUrl(url, mode: LaunchMode.platformDefault);
+    } else {
+      final searchQuery = _buildSearchQuery(forStockX: true);
+      final url = Uri.parse(
+          'https://stockx.com/search?s=${Uri.encodeComponent(searchQuery)}');
+      await launchUrl(url, mode: LaunchMode.platformDefault);
+    }
+  }
+
+  Future<void> _openGoatSearch() async {
+    if (_goatSlug != null && _goatSlug!.isNotEmpty) {
+      final url = Uri.parse('https://www.goat.com/sneakers/$_goatSlug');
+      await launchUrl(url, mode: LaunchMode.platformDefault);
+    } else {
+      final searchQuery = _buildSearchQuery(forStockX: true);
+      final url = Uri.parse(
+          'https://www.goat.com/search?query=${Uri.encodeComponent(searchQuery)}');
+      await launchUrl(url, mode: LaunchMode.platformDefault);
+    }
   }
 
   // eBay OAuth token cache
@@ -1938,6 +1981,189 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     }
   }
 
+  // Shared price cache TTL: 24 hours (matches KicksDB data refresh rate)
+  static const int _priceCacheTtlMs = 24 * 60 * 60 * 1000;
+
+  Future<void> _fetchKicksDbPrices() async {
+    if (_productInfo == null) return;
+
+    setState(() {
+      _isLoadingStockXPrice = true;
+      _isLoadingGoatPrice = true;
+    });
+
+    // Check shared price cache first
+    try {
+      final cacheSnapshot = await _database
+          .child('priceCache')
+          .child(widget.code)
+          .get();
+
+      if (cacheSnapshot.exists) {
+        final cacheData = Map<String, dynamic>.from(cacheSnapshot.value as Map);
+        final cachedAt = cacheData['cachedAt'] as int?;
+        final now = DateTime.now().millisecondsSinceEpoch;
+
+        if (cachedAt != null && (now - cachedAt) < _priceCacheTtlMs) {
+          // Cache is fresh, use it
+          setState(() {
+            _stockXPrice = double.tryParse((cacheData['stockxPrice'] ?? '').toString());
+            _stockXSlug = cacheData['stockxSlug'] as String?;
+            _goatPrice = double.tryParse((cacheData['goatPrice'] ?? '').toString());
+            _goatSlug = cacheData['goatSlug'] as String?;
+            _isLoadingStockXPrice = false;
+            _isLoadingGoatPrice = false;
+          });
+          _savePricesToDatabase();
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('Price cache read error: $e');
+    }
+
+    // Cache miss or stale — fetch fresh prices
+    await Future.wait([
+      _fetchStockXPrice(),
+      _fetchGoatPrice(),
+    ]);
+
+    // Write to shared price cache
+    try {
+      final cacheData = <String, dynamic>{
+        'cachedAt': ServerValue.timestamp,
+      };
+      if (_stockXPrice != null) {
+        cacheData['stockxPrice'] = _stockXPrice!.toStringAsFixed(2);
+        cacheData['stockxSlug'] = _stockXSlug;
+      }
+      if (_goatPrice != null) {
+        cacheData['goatPrice'] = _goatPrice!.toStringAsFixed(2);
+        cacheData['goatSlug'] = _goatSlug;
+      }
+      await _database.child('priceCache').child(widget.code).set(cacheData);
+    } catch (e) {
+      debugPrint('Price cache write error: $e');
+    }
+
+    _savePricesToDatabase();
+  }
+
+  Future<void> _fetchStockXPrice() async {
+    try {
+      final query = _buildSearchQuery(forStockX: true);
+      final response = await http.get(
+        Uri.parse(
+          'https://api.kicks.dev/v3/stockx/products'
+          '?query=${Uri.encodeComponent(query)}&limit=1'
+          '&display[prices]=true&display[variants]=true'
+        ),
+        headers: {'Authorization': 'Bearer $_kicksDbApiKey'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final List<dynamic> products = body is List ? body : (body['data'] ?? []);
+
+        if (products.isNotEmpty) {
+          final product = products[0] as Map<String, dynamic>;
+
+          double? lowestAsk;
+          final variants = product['variants'] as List?;
+          if (variants != null) {
+            for (var variant in variants) {
+              final ask = variant['lowest_ask'];
+              if (ask != null) {
+                final askPrice = double.tryParse(ask.toString());
+                if (askPrice != null && askPrice > 0) {
+                  if (lowestAsk == null || askPrice < lowestAsk) {
+                    lowestAsk = askPrice;
+                  }
+                }
+              }
+            }
+          }
+
+          // Fallback to product-level min_price
+          lowestAsk ??= double.tryParse((product['min_price'] ?? '').toString());
+
+          setState(() {
+            _stockXPrice = lowestAsk;
+            _stockXSlug = product['slug'] as String?;
+            _isLoadingStockXPrice = false;
+
+          });
+          return;
+        }
+      }
+
+      setState(() {
+        _isLoadingStockXPrice = false;
+      });
+    } catch (e) {
+      debugPrint('StockX fetch error: $e');
+      setState(() {
+        _isLoadingStockXPrice = false;
+      });
+    }
+  }
+
+  Future<void> _fetchGoatPrice() async {
+    try {
+      final query = _buildSearchQuery(forStockX: true);
+      final response = await http.get(
+        Uri.parse(
+          'https://api.kicks.dev/v3/goat/products'
+          '?query=${Uri.encodeComponent(query)}&limit=1'
+          '&display[variants]=true'
+        ),
+        headers: {'Authorization': 'Bearer $_kicksDbApiKey'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final List<dynamic> products = body is List ? body : (body['data'] ?? []);
+
+        if (products.isNotEmpty) {
+          final product = products[0] as Map<String, dynamic>;
+
+          double? lowestAsk;
+          final variants = product['variants'] as List?;
+          if (variants != null) {
+            for (var variant in variants) {
+              final ask = variant['lowest_ask'];
+              if (ask != null) {
+                final askPrice = double.tryParse(ask.toString());
+                if (askPrice != null && askPrice > 0) {
+                  if (lowestAsk == null || askPrice < lowestAsk) {
+                    lowestAsk = askPrice;
+                  }
+                }
+              }
+            }
+          }
+
+          setState(() {
+            _goatPrice = lowestAsk;
+            _goatSlug = product['slug'] as String?;
+            _isLoadingGoatPrice = false;
+
+          });
+          return;
+        }
+      }
+
+      setState(() {
+        _isLoadingGoatPrice = false;
+      });
+    } catch (e) {
+      debugPrint('GOAT fetch error: $e');
+      setState(() {
+        _isLoadingGoatPrice = false;
+      });
+    }
+  }
+
   Future<void> _savePricesToDatabase() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || widget.scanId.isEmpty) return;
@@ -1955,6 +2181,16 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       // Add eBay price if available
       if (_ebayAveragePrice != null) {
         updateData['ebayPrice'] = _ebayAveragePrice!.toStringAsFixed(2);
+      }
+
+      // Add StockX price if available
+      if (_stockXPrice != null) {
+        updateData['stockxPrice'] = _stockXPrice!.toStringAsFixed(2);
+      }
+
+      // Add GOAT price if available
+      if (_goatPrice != null) {
+        updateData['goatPrice'] = _goatPrice!.toStringAsFixed(2);
       }
 
       // Only update if we have prices to save
@@ -2257,6 +2493,25 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 12),
+
+                      // GOAT Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _openGoatSearch,
+                          icon: const Icon(Icons.storefront),
+                          label: const Text('Open on GOAT'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF7B61FF),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 32),
                     ],
                   ),
@@ -2276,12 +2531,26 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     // Get eBay price (auto-fetched only)
     final ebayPrice = _ebayAveragePrice;
 
-    // Calculate separate profits for eBay and StockX
+    // Calculate separate profits for eBay, StockX, and GOAT
     double? ebayProfit;
     double? ebayProfitPercent;
     if (retailPrice != null && ebayPrice != null) {
       ebayProfit = ebayPrice - retailPrice;
       ebayProfitPercent = (ebayProfit / retailPrice) * 100;
+    }
+
+    double? stockXProfit;
+    double? stockXProfitPercent;
+    if (retailPrice != null && _stockXPrice != null) {
+      stockXProfit = _stockXPrice! - retailPrice;
+      stockXProfitPercent = (stockXProfit / retailPrice) * 100;
+    }
+
+    double? goatProfit;
+    double? goatProfitPercent;
+    if (retailPrice != null && _goatPrice != null) {
+      goatProfit = _goatPrice! - retailPrice;
+      goatProfitPercent = (goatProfit / retailPrice) * 100;
     }
 
     return Container(
@@ -2503,12 +2772,26 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             label: 'StockX',
             icon: Icons.store,
             iconColor: const Color(0xFF006340),
-            price: null, // StockX has no API
-            profit: null,
-            profitPercent: null,
-            isLoading: false,
+            price: _stockXPrice,
+            profit: stockXProfit,
+            profitPercent: stockXProfitPercent,
+            isLoading: _isLoadingStockXPrice,
             retailPrice: retailPrice,
             onOpenMarketplace: _openStockXSearch,
+          ),
+          const SizedBox(height: 12),
+
+          // GOAT Section
+          _buildMarketPriceSection(
+            label: 'GOAT',
+            icon: Icons.storefront,
+            iconColor: const Color(0xFF7B61FF),
+            price: _goatPrice,
+            profit: goatProfit,
+            profitPercent: goatProfitPercent,
+            isLoading: _isLoadingGoatPrice,
+            retailPrice: retailPrice,
+            onOpenMarketplace: _openGoatSearch,
           ),
         ],
       ),
