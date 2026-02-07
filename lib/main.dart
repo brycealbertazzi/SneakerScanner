@@ -8,6 +8,8 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:image_picker/image_picker.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -468,8 +470,11 @@ class ScannerPage extends StatefulWidget {
 class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   MobileScannerController? _controller;
   bool _isScanning = false;
+  bool _isLabelMode = false;
+  bool _isProcessingOcr = false;
 
   final DatabaseReference _database = FirebaseDatabase.instance.ref();
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void initState() {
@@ -515,6 +520,225 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     }
   }
 
+  /// Extract a sneaker style code from OCR text using brand-specific patterns.
+  String? _extractStyleCode(String text) {
+    // Normalize: collapse whitespace, uppercase
+    final normalized = text.replaceAll(RegExp(r'\s+'), ' ').toUpperCase();
+
+    final patterns = <RegExp>[
+      // Nike/Jordan: DD1391-100, CT8012-170
+      RegExp(r'\b[A-Z]{2,3}\d{4}-\d{3}\b'),
+      // Jordan 6-digit: 555088-134
+      RegExp(r'\b\d{6}-\d{3}\b'),
+      // Puma: 374915-01
+      RegExp(r'\b\d{6}-\d{2}\b'),
+      // Adidas: GW2871 (2 letters + 4 digits, word boundary)
+      RegExp(r'\b[A-Z]{2}\d{4}\b'),
+      // New Balance: M990GL6
+      RegExp(r'\bM[A-Z]?\d{3,4}[A-Z]{1,3}\d?\b'),
+      // Converse: 162050C
+      RegExp(r'\b\d{6}C\b'),
+    ];
+
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(normalized);
+      if (match != null) {
+        return match.group(0);
+      }
+    }
+    return null;
+  }
+
+  /// Opens camera via ImagePicker, runs OCR, extracts style code.
+  Future<void> _captureAndProcessLabel() async {
+    setState(() => _isProcessingOcr = true);
+
+    try {
+      final XFile? photo = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+
+      if (photo == null) {
+        setState(() => _isProcessingOcr = false);
+        return;
+      }
+
+      final inputImage = InputImage.fromFilePath(photo.path);
+      final textRecognizer = TextRecognizer();
+
+      try {
+        final RecognizedText recognizedText =
+            await textRecognizer.processImage(inputImage);
+
+        final fullText = recognizedText.text;
+        debugPrint('OCR text: $fullText');
+
+        final styleCode = _extractStyleCode(fullText);
+
+        if (styleCode != null) {
+          // Found a style code — save and navigate
+          final scanId = await _saveScan(styleCode, 'STYLE_CODE');
+          if (mounted) {
+            await Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => ScanDetailPage(
+                  scanId: scanId ?? '',
+                  code: styleCode,
+                  format: 'STYLE_CODE',
+                  timestamp: DateTime.now().millisecondsSinceEpoch,
+                ),
+              ),
+            );
+          }
+        } else {
+          // No style code found — show dialog with OCR text + manual entry
+          if (mounted) {
+            _showManualStyleCodeDialog(fullText);
+          }
+        }
+      } finally {
+        textRecognizer.close();
+      }
+    } catch (e) {
+      debugPrint('OCR error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to process image: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isProcessingOcr = false);
+      }
+    }
+  }
+
+  void _showManualStyleCodeDialog(String ocrText) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFF333333),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'No Style Code Found',
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'We couldn\'t automatically detect a style code. You can enter it manually.',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: Colors.grey[400],
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.characters,
+                style: GoogleFonts.robotoMono(
+                  fontSize: 16,
+                  color: Colors.white,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'e.g. DD1391-100',
+                  hintStyle: GoogleFonts.robotoMono(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFF252525),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF646CFF),
+                      width: 1,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey[400],
+                        side: BorderSide(color: Colors.grey[600]!),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final code = controller.text.trim().toUpperCase();
+                        if (code.isEmpty) return;
+                        Navigator.of(context).pop();
+                        final scanId = await _saveScan(code, 'STYLE_CODE');
+                        if (mounted) {
+                          await Navigator.of(this.context).push(
+                            MaterialPageRoute(
+                              builder: (context) => ScanDetailPage(
+                                scanId: scanId ?? '',
+                                code: code,
+                                format: 'STYLE_CODE',
+                                timestamp:
+                                    DateTime.now().millisecondsSinceEpoch,
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF646CFF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Look Up'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<String?> _saveScan(String code, String format) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
@@ -533,8 +757,10 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       'goatPrice': null,
     });
 
-    // Try to fetch product info and update the scan
-    _fetchAndUpdateProductInfo(code, scanRef);
+    // Try to fetch product info and update the scan (skip UPC lookups for style codes)
+    if (format != 'STYLE_CODE') {
+      _fetchAndUpdateProductInfo(code, scanRef);
+    }
 
     // Return the scan ID
     return scanRef.key;
@@ -686,62 +912,227 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
             ),
             const SizedBox(height: 4),
             Text(
-              'Scan barcodes from sneaker boxes',
+              _isLabelMode
+                  ? 'Take a photo of a shoe label'
+                  : 'Scan barcodes from sneaker boxes',
               style: GoogleFonts.inter(
                 fontSize: 14,
                 color: Colors.grey[500],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
 
+            // Barcode / Label mode toggle
             Container(
-              height: 300,
               decoration: BoxDecoration(
                 color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(12),
-                border: _isScanning
-                    ? Border.all(color: const Color(0xFF646CFF), width: 2)
-                    : null,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF2A2A2A)),
               ),
-              clipBehavior: Clip.hardEdge,
-              child: _isScanning && _controller != null
-                  ? MobileScanner(
-                      controller: _controller!,
-                      onDetect: _onDetect,
-                    )
-                  : Center(
-                      child: Icon(
-                        Icons.qr_code_scanner,
-                        size: 64,
-                        color: Colors.grey[600],
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (_isLabelMode) {
+                          setState(() => _isLabelMode = false);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: !_isLabelMode
+                              ? const Color(0xFF646CFF)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.qr_code_scanner,
+                              size: 18,
+                              color:
+                                  !_isLabelMode ? Colors.white : Colors.grey[500],
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Barcode',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: !_isLabelMode
+                                    ? Colors.white
+                                    : Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        if (!_isLabelMode) {
+                          if (_isScanning) _stopScanning();
+                          setState(() => _isLabelMode = true);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: _isLabelMode
+                              ? const Color(0xFF646CFF)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.label,
+                              size: 18,
+                              color:
+                                  _isLabelMode ? Colors.white : Colors.grey[500],
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Label',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: _isLabelMode
+                                    ? Colors.white
+                                    : Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
 
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isScanning ? _stopScanning : _startScanning,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isScanning
-                      ? const Color(0xFFFF4444)
-                      : const Color(0xFF646CFF),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+            if (!_isLabelMode) ...[
+              // Barcode mode: camera preview
+              Container(
+                height: 300,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(12),
+                  border: _isScanning
+                      ? Border.all(color: const Color(0xFF646CFF), width: 2)
+                      : null,
                 ),
-                child: Text(
-                  _isScanning ? 'Stop Scanning' : 'Start Scanning',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
+                clipBehavior: Clip.hardEdge,
+                child: _isScanning && _controller != null
+                    ? MobileScanner(
+                        controller: _controller!,
+                        onDetect: _onDetect,
+                      )
+                    : Center(
+                        child: Icon(
+                          Icons.qr_code_scanner,
+                          size: 64,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _isScanning ? _stopScanning : _startScanning,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isScanning
+                        ? const Color(0xFFFF4444)
+                        : const Color(0xFF646CFF),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    _isScanning ? 'Stop Scanning' : 'Start Scanning',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
-            ),
+            ] else ...[
+              // Label mode: photo capture for OCR
+              Container(
+                height: 300,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1A1A1A),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: _isProcessingOcr
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const CircularProgressIndicator(
+                              color: Color(0xFF646CFF),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Reading label...',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                color: Colors.grey[400],
+                              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.camera_alt_rounded,
+                              size: 64,
+                              color: Colors.grey[600],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Take a photo of the shoe label\nor box with the style code',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isProcessingOcr ? null : _captureAndProcessLabel,
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Scan Label'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF646CFF),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor:
+                        const Color(0xFF646CFF).withValues(alpha: 0.5),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1280,6 +1671,7 @@ class _HistoryPageState extends State<HistoryPage> {
     final scanData = Map<String, dynamic>.from(entry.value);
     final code = scanData['code'] ?? '';
     final format = scanData['format'] ?? '';
+    final isStyleCode = format == 'STYLE_CODE';
     final productTitle = scanData['productTitle'] as String?;
     final productImage = scanData['productImage'] as String?;
     final timestamp = scanData['timestamp'] as int?;
@@ -1397,7 +1789,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     Row(
                       children: [
                         Icon(
-                          Icons.qr_code,
+                          isStyleCode ? Icons.label : Icons.qr_code,
                           size: 12,
                           color: Colors.grey[600],
                         ),
@@ -1509,6 +1901,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
   final DatabaseReference _database = FirebaseDatabase.instance.ref();
 
+  bool get _isStyleCode => widget.format == 'STYLE_CODE';
+
   // KicksDB API key from kicks.dev
   static const String _kicksDbApiKey = 'KICKS-9C87-7171-ADAA-E89A98AF16B0';
 
@@ -1595,6 +1989,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   }
 
   Future<void> _lookupProduct() async {
+    if (_isStyleCode) {
+      await _lookupProductByStyleCode();
+      return;
+    }
+
     Map<String, dynamic>? productInfo;
     String? retailPrice;
 
@@ -1649,6 +2048,95 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           'brand': '',
           'description': 'We couldn\'t find information for this barcode. Try searching on eBay.',
           'upc': widget.code,
+          'notFound': true,
+        };
+        _isLoading = false;
+      });
+    }
+  }
+
+  /// Look up product info by style code using KicksDB StockX search.
+  Future<void> _lookupProductByStyleCode() async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+          'https://api.kicks.dev/v3/stockx/products'
+          '?query=${Uri.encodeComponent(widget.code)}&limit=1'
+          '&display[prices]=true&display[variants]=true'
+        ),
+        headers: {'Authorization': 'Bearer $_kicksDbApiKey'},
+      ).timeout(const Duration(seconds: 10));
+
+      debugPrint('StyleCode lookup status: ${response.statusCode}');
+      debugPrint('StyleCode lookup body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        List<dynamic> items = [];
+        if (body is Map<String, dynamic> && body.containsKey('data') && body['data'] is List) {
+          items = body['data'];
+        } else if (body is List) {
+          items = body;
+        }
+
+        if (items.isNotEmpty) {
+          final product = items[0] as Map<String, dynamic>;
+          final title = product['title'] ?? product['name'] ?? 'Unknown Product';
+          final brand = product['brand'] ?? '';
+          final image = product['image'] ?? product['thumbnail'] ?? '';
+          final retailPrice = product['retail_price']?.toString();
+
+          final productInfo = <String, dynamic>{
+            'title': title,
+            'brand': brand,
+            'description': '',
+            'category': 'Sneakers',
+            'images': image is String && image.isNotEmpty ? [image] : [],
+            'retailPrice': retailPrice,
+            'styleCode': widget.code,
+            'lastUpdated': ServerValue.timestamp,
+          };
+
+          // Cache in Firebase
+          await _database.child('products').child(widget.code).set(productInfo);
+
+          // Update scan record with product info
+          final user = FirebaseAuth.instance.currentUser;
+          if (user != null && widget.scanId.isNotEmpty) {
+            await _database.child('scans').child(user.uid).child(widget.scanId).update({
+              'productTitle': title,
+              'productImage': image is String && image.isNotEmpty ? image : null,
+              'retailPrice': retailPrice,
+            });
+          }
+
+          setState(() {
+            _productInfo = productInfo;
+            _isLoading = false;
+          });
+          return;
+        }
+      }
+
+      // Not found via KicksDB
+      setState(() {
+        _productInfo = {
+          'title': 'Product Not Found',
+          'brand': '',
+          'description': 'No product found for style code ${widget.code}. Prices may still load below.',
+          'styleCode': widget.code,
+          'notFound': true,
+        };
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Style code lookup error: $e');
+      setState(() {
+        _productInfo = {
+          'title': 'Product Not Found',
+          'brand': '',
+          'description': 'No product found for style code ${widget.code}. Prices may still load below.',
+          'styleCode': widget.code,
           'notFound': true,
         };
         _isLoading = false;
@@ -1791,6 +2279,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   }
 
   String _buildSearchQuery({bool forStockX = false}) {
+    // For style code scans, always search by the style code itself
+    if (_isStyleCode) {
+      return widget.code;
+    }
+
     final title = _productInfo?['title'] as String?;
     final brand = _productInfo?['brand'] as String?;
     final model = _productInfo?['model'] as String?;
@@ -1827,10 +2320,13 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       final url = Uri.parse('https://stockx.com/$_stockXSlug');
       await launchUrl(url, mode: LaunchMode.platformDefault);
     } else {
-      final searchQuery = _buildSearchQuery(forStockX: true);
-      final url = Uri.parse(
-          'https://stockx.com/search?s=${Uri.encodeComponent(searchQuery)}');
-      await launchUrl(url, mode: LaunchMode.platformDefault);
+      // Fallback: search by product title on StockX
+      final title = _productInfo?['title'] as String?;
+      if (title != null) {
+        final url = Uri.parse(
+            'https://stockx.com/search?s=${Uri.encodeComponent(title)}');
+        await launchUrl(url, mode: LaunchMode.platformDefault);
+      }
     }
   }
 
@@ -1839,10 +2335,13 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       final url = Uri.parse('https://www.goat.com/sneakers/$_goatSlug');
       await launchUrl(url, mode: LaunchMode.platformDefault);
     } else {
-      final searchQuery = _buildSearchQuery(forStockX: true);
-      final url = Uri.parse(
-          'https://www.goat.com/search?query=${Uri.encodeComponent(searchQuery)}');
-      await launchUrl(url, mode: LaunchMode.platformDefault);
+      // Fallback: search by product title on GOAT
+      final title = _productInfo?['title'] as String?;
+      if (title != null) {
+        final url = Uri.parse(
+            'https://www.goat.com/search?query=${Uri.encodeComponent(title)}');
+        await launchUrl(url, mode: LaunchMode.platformDefault);
+      }
     }
   }
 
@@ -1981,8 +2480,49 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     }
   }
 
+  /// Checks if an API result matches the scanned product by comparing brand
+  /// and key words from the product title. Returns false if the result is
+  /// clearly for a different product (e.g. a jacket when we scanned a shoe).
+  bool _isProductMatch(Map<String, dynamic> apiProduct) {
+    // Trust API results for style code scans since we searched by exact SKU
+    if (_isStyleCode) return true;
+
+    final scannedBrand = (_productInfo?['brand'] as String?)?.toLowerCase().trim() ?? '';
+    final scannedTitle = (_productInfo?['title'] as String?)?.toLowerCase().trim() ?? '';
+    final scannedModel = (_productInfo?['model'] as String?)?.toLowerCase().trim() ?? '';
+
+    final apiTitle = ((apiProduct['title'] ?? apiProduct['name'] ?? '') as String).toLowerCase().trim();
+    final apiBrand = ((apiProduct['brand'] ?? '') as String).toLowerCase().trim();
+
+    // If we have no scanned product info, can't validate
+    if (scannedBrand.isEmpty && scannedTitle.isEmpty) return true;
+
+    // Check brand match
+    if (scannedBrand.isNotEmpty && apiBrand.isNotEmpty) {
+      if (!apiBrand.contains(scannedBrand) && !scannedBrand.contains(apiBrand)) {
+        return false;
+      }
+    }
+
+    // Check if the API title shares key words with scanned title/model
+    if (scannedModel.isNotEmpty && apiTitle.contains(scannedModel)) return true;
+
+    // Check for overlapping significant words (3+ chars) between titles
+    final scannedWords = scannedTitle.split(RegExp(r'\s+')).where((w) => w.length >= 3).toSet();
+    final apiWords = apiTitle.split(RegExp(r'\s+')).where((w) => w.length >= 3).toSet();
+    final overlap = scannedWords.intersection(apiWords);
+
+    // Require at least 2 overlapping words to consider it a match
+    if (scannedWords.isNotEmpty && apiWords.isNotEmpty && overlap.length < 2) {
+      return false;
+    }
+
+    return true;
+  }
+
   // Shared price cache TTL: 24 hours (matches KicksDB data refresh rate)
   static const int _priceCacheTtlMs = 24 * 60 * 60 * 1000;
+  static const bool _priceCacheEnabled = false; // Toggle to true to re-enable price caching
 
   Future<void> _fetchKicksDbPrices() async {
     if (_productInfo == null) return;
@@ -1993,80 +2533,162 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     });
 
     // Check shared price cache first
-    try {
-      final cacheSnapshot = await _database
-          .child('priceCache')
-          .child(widget.code)
-          .get();
+    if (_priceCacheEnabled) {
+      try {
+        final cacheSnapshot = await _database
+            .child('priceCache')
+            .child(widget.code)
+            .get();
 
-      if (cacheSnapshot.exists) {
-        final cacheData = Map<String, dynamic>.from(cacheSnapshot.value as Map);
-        final cachedAt = cacheData['cachedAt'] as int?;
-        final now = DateTime.now().millisecondsSinceEpoch;
+        if (cacheSnapshot.exists) {
+          final cacheData = Map<String, dynamic>.from(cacheSnapshot.value as Map);
+          final cachedAt = cacheData['cachedAt'] as int?;
+          final now = DateTime.now().millisecondsSinceEpoch;
 
-        if (cachedAt != null && (now - cachedAt) < _priceCacheTtlMs) {
-          // Cache is fresh, use it
-          setState(() {
-            _stockXPrice = double.tryParse((cacheData['stockxPrice'] ?? '').toString());
-            _stockXSlug = cacheData['stockxSlug'] as String?;
-            _goatPrice = double.tryParse((cacheData['goatPrice'] ?? '').toString());
-            _goatSlug = cacheData['goatSlug'] as String?;
-            _isLoadingStockXPrice = false;
-            _isLoadingGoatPrice = false;
-          });
-          _savePricesToDatabase();
-          return;
+          if (cachedAt != null && (now - cachedAt) < _priceCacheTtlMs) {
+            // Cache is fresh, use it (filter out zero/invalid prices)
+            final cachedStockX = double.tryParse((cacheData['stockxPrice'] ?? '').toString());
+            final cachedGoat = double.tryParse((cacheData['goatPrice'] ?? '').toString());
+            setState(() {
+              _stockXPrice = (cachedStockX != null && cachedStockX > 0) ? cachedStockX : null;
+              _stockXSlug = (cachedStockX != null && cachedStockX > 0) ? cacheData['stockxSlug'] as String? : null;
+              _goatPrice = (cachedGoat != null && cachedGoat > 0) ? cachedGoat : null;
+              _goatSlug = (cachedGoat != null && cachedGoat > 0) ? cacheData['goatSlug'] as String? : null;
+              _isLoadingStockXPrice = false;
+              _isLoadingGoatPrice = false;
+            });
+            _savePricesToDatabase();
+            return;
+          }
         }
+      } catch (e) {
+        debugPrint('Price cache read error: $e');
       }
-    } catch (e) {
-      debugPrint('Price cache read error: $e');
     }
 
-    // Cache miss or stale — fetch fresh prices
+    // For style code scans, skip GTIN lookup and go straight to keyword search
+    String? stockxId;
+    String? goatId;
+    if (!_isStyleCode) {
+      // Try GTIN barcode lookup first for exact match (barcode scans only)
+      try {
+        final gtinResponse = await http.get(
+          Uri.parse('https://api.kicks.dev/v3/unified/gtin?identifier=${widget.code}'),
+          headers: {'Authorization': 'Bearer $_kicksDbApiKey'},
+        ).timeout(const Duration(seconds: 10));
+
+        debugPrint('GTIN response status: ${gtinResponse.statusCode}');
+        debugPrint('GTIN response body: ${gtinResponse.body}');
+
+        if (gtinResponse.statusCode == 200) {
+          final gtinBody = jsonDecode(gtinResponse.body);
+          final List<dynamic> gtinResults = gtinBody is List ? gtinBody : (gtinBody['data'] ?? []);
+
+          for (var item in gtinResults) {
+            final source = item['source'] as String?;
+            final productId = item['product_id']?.toString();
+            if (source == 'stockx' && productId != null) stockxId ??= productId;
+            if (source == 'goat' && productId != null) goatId ??= productId;
+          }
+          debugPrint('GTIN found StockX ID: $stockxId, GOAT ID: $goatId');
+        }
+      } catch (e) {
+        debugPrint('GTIN lookup error: $e');
+      }
+    }
+
+    // Fetch prices using exact IDs if found, otherwise fall back to keyword search
     await Future.wait([
-      _fetchStockXPrice(),
-      _fetchGoatPrice(),
+      _fetchStockXPrice(productId: stockxId),
+      _fetchGoatPrice(productId: goatId),
     ]);
 
-    // Write to shared price cache
-    try {
-      final cacheData = <String, dynamic>{
-        'cachedAt': ServerValue.timestamp,
-      };
-      if (_stockXPrice != null) {
-        cacheData['stockxPrice'] = _stockXPrice!.toStringAsFixed(2);
-        cacheData['stockxSlug'] = _stockXSlug;
+    // Write to shared price cache only if at least one price was found
+    if (_priceCacheEnabled && (_stockXPrice != null || _goatPrice != null)) {
+      try {
+        final cacheData = <String, dynamic>{
+          'cachedAt': ServerValue.timestamp,
+        };
+        if (_stockXPrice != null) {
+          cacheData['stockxPrice'] = _stockXPrice!.toStringAsFixed(2);
+          cacheData['stockxSlug'] = _stockXSlug;
+        }
+        if (_goatPrice != null) {
+          cacheData['goatPrice'] = _goatPrice!.toStringAsFixed(2);
+          cacheData['goatSlug'] = _goatSlug;
+        }
+        await _database.child('priceCache').child(widget.code).set(cacheData);
+      } catch (e) {
+        debugPrint('Price cache write error: $e');
       }
-      if (_goatPrice != null) {
-        cacheData['goatPrice'] = _goatPrice!.toStringAsFixed(2);
-        cacheData['goatSlug'] = _goatSlug;
-      }
-      await _database.child('priceCache').child(widget.code).set(cacheData);
-    } catch (e) {
-      debugPrint('Price cache write error: $e');
     }
 
     _savePricesToDatabase();
   }
 
-  Future<void> _fetchStockXPrice() async {
+  Future<void> _fetchStockXPrice({String? productId}) async {
     try {
-      final query = _buildSearchQuery(forStockX: true);
-      final response = await http.get(
-        Uri.parse(
+      // Try GTIN product ID first, then style code search, then title search
+      final attempts = <Uri>[];
+      if (productId != null) {
+        attempts.add(Uri.parse(
+          'https://api.kicks.dev/v3/stockx/products/$productId'
+          '?display[prices]=true&display[variants]=true'
+        ));
+      }
+      // For style code scans, search by style code as first priority
+      if (_isStyleCode) {
+        attempts.add(Uri.parse(
           'https://api.kicks.dev/v3/stockx/products'
-          '?query=${Uri.encodeComponent(query)}&limit=1'
+          '?query=${Uri.encodeComponent(widget.code)}&limit=3'
           '&display[prices]=true&display[variants]=true'
-        ),
-        headers: {'Authorization': 'Bearer $_kicksDbApiKey'},
-      ).timeout(const Duration(seconds: 10));
+        ));
+      }
+      final title = _productInfo?['title'] as String?;
+      if (title != null && title != 'Product Not Found') {
+        attempts.add(Uri.parse(
+          'https://api.kicks.dev/v3/stockx/products'
+          '?query=${Uri.encodeComponent(title)}&limit=3'
+          '&display[prices]=true&display[variants]=true'
+        ));
+      }
 
-      if (response.statusCode == 200) {
+      for (final uri in attempts) {
+        final response = await http.get(
+          uri,
+          headers: {'Authorization': 'Bearer $_kicksDbApiKey'},
+        ).timeout(const Duration(seconds: 10));
+
+        debugPrint('StockX request: $uri');
+        debugPrint('StockX response status: ${response.statusCode}');
+        debugPrint('StockX response body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
+
+        if (response.statusCode != 200) continue;
+
         final body = jsonDecode(response.body);
-        final List<dynamic> products = body is List ? body : (body['data'] ?? []);
 
-        if (products.isNotEmpty) {
-          final product = products[0] as Map<String, dynamic>;
+        // Collect candidate products from the response
+        final List<Map<String, dynamic>> candidates = [];
+        if (body is Map<String, dynamic>) {
+          if (body.containsKey('data') && body['data'] is List) {
+            for (var item in body['data']) {
+              candidates.add(item as Map<String, dynamic>);
+            }
+          } else if (body.containsKey('title') || body.containsKey('slug')) {
+            candidates.add(body);
+          }
+        } else if (body is List) {
+          for (var item in body) {
+            candidates.add(item as Map<String, dynamic>);
+          }
+        }
+
+        // Find the first candidate that matches the scanned product
+        for (final product in candidates) {
+          if (!_isProductMatch(product)) {
+            debugPrint('StockX skip mismatch: "${product['title']}"');
+            continue;
+          }
 
           double? lowestAsk;
           final variants = product['variants'] as List?;
@@ -2084,16 +2706,23 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             }
           }
 
-          // Fallback to product-level min_price
-          lowestAsk ??= double.tryParse((product['min_price'] ?? '').toString());
+          if (lowestAsk == null) {
+            final minPrice = double.tryParse((product['min_price'] ?? '').toString());
+            if (minPrice != null && minPrice > 0) lowestAsk = minPrice;
+          }
+          if (lowestAsk == null) {
+            final avgPrice = double.tryParse((product['avg_price'] ?? '').toString());
+            if (avgPrice != null && avgPrice > 0) lowestAsk = avgPrice;
+          }
 
-          setState(() {
-            _stockXPrice = lowestAsk;
-            _stockXSlug = product['slug'] as String?;
-            _isLoadingStockXPrice = false;
-
-          });
-          return;
+          if (lowestAsk != null && lowestAsk > 0) {
+            setState(() {
+              _stockXPrice = lowestAsk;
+              _stockXSlug = product['slug'] as String?;
+              _isLoadingStockXPrice = false;
+            });
+            return;
+          }
         }
       }
 
@@ -2108,24 +2737,69 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     }
   }
 
-  Future<void> _fetchGoatPrice() async {
+  Future<void> _fetchGoatPrice({String? productId}) async {
     try {
-      final query = _buildSearchQuery(forStockX: true);
-      final response = await http.get(
-        Uri.parse(
+      // Try GTIN product ID first, then style code search, then title search
+      final attempts = <Uri>[];
+      if (productId != null) {
+        attempts.add(Uri.parse(
+          'https://api.kicks.dev/v3/goat/products/$productId'
+          '?display[prices]=true&display[variants]=true'
+        ));
+      }
+      // For style code scans, search by style code as first priority
+      if (_isStyleCode) {
+        attempts.add(Uri.parse(
           'https://api.kicks.dev/v3/goat/products'
-          '?query=${Uri.encodeComponent(query)}&limit=1'
-          '&display[variants]=true'
-        ),
-        headers: {'Authorization': 'Bearer $_kicksDbApiKey'},
-      ).timeout(const Duration(seconds: 10));
+          '?query=${Uri.encodeComponent(widget.code)}&limit=3'
+          '&display[prices]=true&display[variants]=true'
+        ));
+      }
+      final title = _productInfo?['title'] as String?;
+      if (title != null && title != 'Product Not Found') {
+        attempts.add(Uri.parse(
+          'https://api.kicks.dev/v3/goat/products'
+          '?query=${Uri.encodeComponent(title)}&limit=3'
+          '&display[prices]=true&display[variants]=true'
+        ));
+      }
 
-      if (response.statusCode == 200) {
+      for (final uri in attempts) {
+        final response = await http.get(
+          uri,
+          headers: {'Authorization': 'Bearer $_kicksDbApiKey'},
+        ).timeout(const Duration(seconds: 10));
+
+        debugPrint('GOAT request: $uri');
+        debugPrint('GOAT response status: ${response.statusCode}');
+        debugPrint('GOAT response body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
+
+        if (response.statusCode != 200) continue;
+
         final body = jsonDecode(response.body);
-        final List<dynamic> products = body is List ? body : (body['data'] ?? []);
 
-        if (products.isNotEmpty) {
-          final product = products[0] as Map<String, dynamic>;
+        // Collect candidate products from the response
+        final List<Map<String, dynamic>> candidates = [];
+        if (body is Map<String, dynamic>) {
+          if (body.containsKey('data') && body['data'] is List) {
+            for (var item in body['data']) {
+              candidates.add(item as Map<String, dynamic>);
+            }
+          } else if (body.containsKey('name') || body.containsKey('slug')) {
+            candidates.add(body);
+          }
+        } else if (body is List) {
+          for (var item in body) {
+            candidates.add(item as Map<String, dynamic>);
+          }
+        }
+
+        // Find the first candidate that matches the scanned product
+        for (final product in candidates) {
+          if (!_isProductMatch(product)) {
+            debugPrint('GOAT skip mismatch: "${product['name'] ?? product['title']}"');
+            continue;
+          }
 
           double? lowestAsk;
           final variants = product['variants'] as List?;
@@ -2143,13 +2817,25 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             }
           }
 
-          setState(() {
-            _goatPrice = lowestAsk;
-            _goatSlug = product['slug'] as String?;
-            _isLoadingGoatPrice = false;
+          // Fallback to min_price if lowest_ask not available
+          if (lowestAsk == null) {
+            final minPrice = double.tryParse((product['min_price'] ?? '').toString());
+            if (minPrice != null && minPrice > 0) lowestAsk = minPrice;
+          }
+          // Final fallback to avg_price
+          if (lowestAsk == null) {
+            final avgPrice = double.tryParse((product['avg_price'] ?? '').toString());
+            if (avgPrice != null && avgPrice > 0) lowestAsk = avgPrice;
+          }
 
-          });
-          return;
+          if (lowestAsk != null && lowestAsk > 0) {
+            setState(() {
+              _goatPrice = lowestAsk;
+              _goatSlug = (product['slug'] ?? product['id'] ?? product['name'])?.toString();
+              _isLoadingGoatPrice = false;
+            });
+            return;
+          }
         }
       }
 
@@ -2403,14 +3089,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
                       // Info Cards
                       _buildInfoCard(
-                        'Barcode',
+                        _isStyleCode ? 'Style Code' : 'Barcode',
                         widget.code,
-                        Icons.qr_code,
+                        _isStyleCode ? Icons.label : Icons.qr_code,
                       ),
                       const SizedBox(height: 12),
                       _buildInfoCard(
                         'Format',
-                        widget.format,
+                        _isStyleCode ? 'OCR Label Scan' : widget.format,
                         Icons.category,
                       ),
                       if (_productInfo?['category'] != null &&
@@ -2457,61 +3143,68 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                       _buildProfitCalculator(),
                       const SizedBox(height: 24),
 
-                      // eBay Button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _openEbaySearch,
-                          icon: const Icon(Icons.shopping_bag),
-                          label: const Text('Open on eBay'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0064D2),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                      // eBay Button (only if price was found)
+                      if (_ebayAveragePrice != null) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _openEbaySearch,
+                            icon: const Icon(Icons.shopping_bag),
+                            label: const Text('Open on eBay'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0064D2),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
+                      ],
 
-                      // StockX Button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _openStockXSearch,
-                          icon: const Icon(Icons.store),
-                          label: const Text('Open on StockX'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF006340),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                      // StockX Button (only if exact product found)
+                      if (_stockXPrice != null) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _openStockXSearch,
+                            icon: const Icon(Icons.store),
+                            label: const Text('Open on StockX'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF006340),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
+                      ],
 
-                      // GOAT Button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _openGoatSearch,
-                          icon: const Icon(Icons.storefront),
-                          label: const Text('Open on GOAT'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF7B61FF),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                      // GOAT Button (only if exact product found)
+                      if (_goatPrice != null) ...[
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: _openGoatSearch,
+                            icon: const Icon(Icons.storefront),
+                            label: const Text('Open on GOAT'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF7B61FF),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 12),
+                      ],
                       const SizedBox(height: 32),
                     ],
                   ),
@@ -2763,7 +3456,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             profitPercent: ebayProfitPercent,
             isLoading: _isLoadingEbayPrices,
             retailPrice: retailPrice,
-            onOpenMarketplace: _openEbaySearch,
+            productFound: ebayPrice != null,
           ),
           const SizedBox(height: 12),
 
@@ -2777,7 +3470,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             profitPercent: stockXProfitPercent,
             isLoading: _isLoadingStockXPrice,
             retailPrice: retailPrice,
-            onOpenMarketplace: _openStockXSearch,
+            productFound: _stockXPrice != null,
+            onOpenMarketplace: _stockXPrice != null ? _openStockXSearch : null,
           ),
           const SizedBox(height: 12),
 
@@ -2791,7 +3485,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             profitPercent: goatProfitPercent,
             isLoading: _isLoadingGoatPrice,
             retailPrice: retailPrice,
-            onOpenMarketplace: _openGoatSearch,
+            productFound: _goatPrice != null,
+            onOpenMarketplace: _goatPrice != null ? _openGoatSearch : null,
           ),
         ],
       ),
@@ -2807,7 +3502,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     required double? profitPercent,
     required bool isLoading,
     required double? retailPrice,
-    required VoidCallback onOpenMarketplace,
+    VoidCallback? onOpenMarketplace,
+    bool productFound = true,
   }) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -2849,7 +3545,15 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                     color: Colors.white,
                   ),
                 )
-              else
+              else if (!productFound)
+                Text(
+                  'Not found on $label',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: Colors.grey[600],
+                  ),
+                )
+              else if (onOpenMarketplace != null)
                 GestureDetector(
                   onTap: onOpenMarketplace,
                   child: Container(
@@ -3224,7 +3928,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 const SizedBox(height: 2),
                 Text(
                   value,
-                  style: label == 'Barcode'
+                  style: (label == 'Barcode' || label == 'Style Code')
                       ? GoogleFonts.robotoMono(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
