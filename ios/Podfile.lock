@@ -11,6 +11,10 @@ PODS:
     - GoogleUtilities/Environment (~> 8.0)
     - GoogleUtilities/UserDefaults (~> 8.0)
     - PromisesObjC (~> 2.4)
+  - cloud_functions (5.6.2):
+    - Firebase/Functions (= 11.15.0)
+    - firebase_core
+    - Flutter
   - Firebase/Auth (11.15.0):
     - Firebase/CoreOnly
     - FirebaseAuth (~> 11.15.0)
@@ -19,6 +23,9 @@ PODS:
   - Firebase/Database (11.15.0):
     - Firebase/CoreOnly
     - FirebaseDatabase (~> 11.15.0)
+  - Firebase/Functions (11.15.0):
+    - Firebase/CoreOnly
+    - FirebaseFunctions (~> 11.15.0)
   - firebase_auth (5.7.0):
     - Firebase/Auth (= 11.15.0)
     - firebase_core
@@ -55,6 +62,15 @@ PODS:
     - FirebaseSharedSwift (~> 11.0)
     - GoogleUtilities/UserDefaults (~> 8.1)
     - leveldb-library (~> 1.22)
+  - FirebaseFunctions (11.15.0):
+    - FirebaseAppCheckInterop (~> 11.0)
+    - FirebaseAuthInterop (~> 11.0)
+    - FirebaseCore (~> 11.15.0)
+    - FirebaseCoreExtension (~> 11.15.0)
+    - FirebaseMessagingInterop (~> 11.0)
+    - FirebaseSharedSwift (~> 11.0)
+    - GTMSessionFetcher/Core (< 5.0, >= 3.4)
+  - FirebaseMessagingInterop (11.15.0)
   - FirebaseSharedSwift (11.15.0)
   - Flutter (1.0.0)
   - google_mlkit_commons (0.9.0):
@@ -159,6 +175,7 @@ PODS:
 
 DEPENDENCIES:
   - app_links (from `.symlinks/plugins/app_links/ios`)
+  - cloud_functions (from `.symlinks/plugins/cloud_functions/ios`)
   - firebase_auth (from `.symlinks/plugins/firebase_auth/ios`)
   - firebase_core (from `.symlinks/plugins/firebase_core/ios`)
   - firebase_database (from `.symlinks/plugins/firebase_database/ios`)
@@ -182,6 +199,8 @@ SPEC REPOS:
     - FirebaseCoreExtension
     - FirebaseCoreInternal
     - FirebaseDatabase
+    - FirebaseFunctions
+    - FirebaseMessagingInterop
     - FirebaseSharedSwift
     - GoogleDataTransport
     - GoogleMLKit
@@ -203,6 +222,8 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   app_links:
     :path: ".symlinks/plugins/app_links/ios"
+  cloud_functions:
+    :path: ".symlinks/plugins/cloud_functions/ios"
   firebase_auth:
     :path: ".symlinks/plugins/firebase_auth/ios"
   firebase_core:
@@ -228,6 +249,7 @@ SPEC CHECKSUMS:
   app_links: 3dbc685f76b1693c66a6d9dd1e9ab6f73d97dc0a
   AppAuth: d4f13a8fe0baf391b2108511793e4b479691fb73
   AppCheckCore: cc8fd0a3a230ddd401f326489c99990b013f0c4f
+  cloud_functions: 8565a870fbdc2b5046cba8183e972484128b6d8d
   Firebase: d99ac19b909cd2c548339c2241ecd0d1599ab02e
   firebase_auth: 50af8366c87bb88c80ebeae62eb60189c7246b9b
   firebase_core: 995454a784ff288be5689b796deb9e9fa3601818
@@ -239,6 +261,8 @@ SPEC CHECKSUMS:
   FirebaseCoreExtension: edbd30474b5ccf04e5f001470bdf6ea616af2435
   FirebaseCoreInternal: 9afa45b1159304c963da48addb78275ef701c6b4
   FirebaseDatabase: 954eb5613d01573ea50ef839e380edcb68db3707
+  FirebaseFunctions: 86062a3ba8c7420e6b6fe22c8a1e1150332286de
+  FirebaseMessagingInterop: 63e504b147a7206cfe64cbe2f40c2ddd009945bd
   FirebaseSharedSwift: e17c654ef1f1a616b0b33054e663ad1035c8fd40
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   google_mlkit_commons: 92c769cc2e0a2bfdeb3c38091a36e8a9cc8c63d4

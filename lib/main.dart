@@ -11,7 +11,55 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:app_links/app_links.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'firebase_options.dart';
+
+class ApiKeys {
+  ApiKeys._();
+  static bool _loaded = false;
+  static bool get isLoaded => _loaded;
+
+  // Populated from Firebase
+  static String kicksDbApiKey = '';
+  static String retailedApiKey = '';
+  static String sneakerDbApiKey = '';
+  static String ebayClientId = '';
+  static String ebayClientSecret = '';
+  static String stockXApiKey = '';
+  static String stockXClientId = '';
+  static String stockXClientSecret = '';
+
+  // NOT secrets — stay hardcoded
+  static const String stockXRedirectUri = 'sneakerscanner://stockx-callback';
+  static const bool ebayProduction = false;
+
+  static Future<bool> fetch() async {
+    if (_loaded) return true;
+    try {
+      final callable = FirebaseFunctions.instanceFor(region: 'us-central1')
+          .httpsCallable('getApiKeys');
+      final result = await callable.call();
+      final data = result.data as Map<String, dynamic>;
+      kicksDbApiKey = data['kicksDbApiKey'] as String? ?? '';
+      retailedApiKey = data['retailedApiKey'] as String? ?? '';
+      sneakerDbApiKey = data['sneakerDbApiKey'] as String? ?? '';
+      ebayClientId = data['ebayClientId'] as String? ?? '';
+      ebayClientSecret = data['ebayClientSecret'] as String? ?? '';
+      stockXApiKey = data['stockXApiKey'] as String? ?? '';
+      stockXClientId = data['stockXClientId'] as String? ?? '';
+      stockXClientSecret = data['stockXClientSecret'] as String? ?? '';
+      _loaded = true;
+      debugPrint('[ApiKeys] Loaded successfully via Cloud Function');
+      return true;
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('[ApiKeys] Cloud Function error: ${e.code} - ${e.message}');
+      return false;
+    } catch (e) {
+      debugPrint('[ApiKeys] Failed to load: $e');
+      return false;
+    }
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -363,6 +411,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
+    _loadApiKeys();
     _appLinks = AppLinks();
     _appLinks.uriLinkStream.listen((Uri uri) {
       debugPrint('[StockX OAuth] Deep link received: $uri');
@@ -376,6 +425,18 @@ class _MainScreenState extends State<MainScreen> {
     });
   }
 
+  Future<void> _loadApiKeys() async {
+    final success = await ApiKeys.fetch();
+    if (!success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to load API keys. Some features may not work.'),
+          duration: Duration(seconds: 4),
+        ),
+      );
+    }
+  }
+
   Future<void> _exchangeStockXCode(String code) async {
     try {
       debugPrint('[StockX OAuth] Exchanging authorization code for tokens...');
@@ -385,9 +446,9 @@ class _MainScreenState extends State<MainScreen> {
         body: {
           'grant_type': 'authorization_code',
           'code': code,
-          'client_id': _ScanDetailPageState._stockXClientId,
-          'client_secret': _ScanDetailPageState._stockXClientSecret,
-          'redirect_uri': _ScanDetailPageState._stockXRedirectUri,
+          'client_id': ApiKeys.stockXClientId,
+          'client_secret': ApiKeys.stockXClientSecret,
+          'redirect_uri': ApiKeys.stockXRedirectUri,
         },
       ).timeout(const Duration(seconds: 15));
 
@@ -923,7 +984,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                ocrText.isEmpty ? 'Enter Style Code' : 'No Style Code Found',
+                ocrText.isEmpty ? 'Enter SKU' : 'No SKU Found',
                 style: GoogleFonts.poppins(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -933,8 +994,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
               const SizedBox(height: 12),
               Text(
                 ocrText.isEmpty
-                    ? 'Type the style code from the shoe label or box.'
-                    : 'We couldn\'t automatically detect a style code. You can enter it manually.',
+                    ? 'Type the SKU from the shoe label or box.'
+                    : 'We couldn\'t automatically detect a SKU. You can enter it manually.',
                 style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[400]),
               ),
               const SizedBox(height: 16),
@@ -1416,7 +1477,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'Take a photo of the shoe label\nor box with the style code',
+                              'Take a photo of the shoe label\nor box with the SKU',
                               textAlign: TextAlign.center,
                               style: GoogleFonts.inter(
                                 fontSize: 13,
@@ -1435,7 +1496,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                       ? null
                       : () => _showManualStyleCodeDialog(''),
                   icon: const Icon(Icons.keyboard, size: 18),
-                  label: const Text('Enter Style Code'),
+                  label: const Text('Enter SKU'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF646CFF),
                     side: const BorderSide(color: Color(0xFF646CFF)),
@@ -2267,9 +2328,13 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   /// Pricing is only fetched when this is true.
   bool _identityConfirmed = false;
 
-  /// Fuzzy SneakerDB candidates shown when identity is NOT confirmed.
+  /// Fuzzy SneakerDB candidates — always shown as "Similar Results".
   List<Map<String, dynamic>> _sneakerDbCandidates = [];
   bool _isLoadingCandidates = false;
+  bool _candidatesSearchDone = false;
+
+  /// True when pricing was started but app was closed before completing.
+  bool _pricingInterrupted = false;
 
   /// Normalize a GTIN/UPC/EAN to a canonical 13-digit EAN-13 string for comparison.
   /// Strips leading/trailing whitespace, pads UPC-A (12 digits) to EAN-13,
@@ -2306,26 +2371,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       _matchConfidence = MatchConfidence.unverified;
     }
   }
-
-  // KicksDB API key from kicks.dev
-  static const String _kicksDbApiKey = 'KICKS-9C87-7171-ADAA-E89A98AF16B0';
-
-  // Retailed.io API key
-  static const String _retailedApiKey = '9f1dd4d2-44ea-406e-a702-8aae58796cba';
-
-  // SneakerDB (RapidAPI) key
-  static const String _sneakerDbApiKey = '462b41c4bcmshef496140a2f7292p1a09dcjsna243ae0d12fb';
-
-  // eBay API credentials
-  static const String _ebayClientId = 'BryceAlb-SneakerS-SBX-42fb30cc2-4d516ca4';
-  static const String _ebayClientSecret = 'SBX-2fb30cc2aa64-5bdc-4bbf-a927-88b9';
-  static const bool _ebayProduction = false; // Set to true for production
-
-  // StockX Official API credentials
-  static const String _stockXApiKey = 'u9jS7v0Ijs4fZBiOzial8hsa2cmFVmJ9SlchL1Ta';
-  static const String _stockXClientId = 'b8EmWHz5tMJ2tZ3YC9b7SqKBDmcswG9p';
-  static const String _stockXClientSecret = 'wx_nKf-U4kObQrbuovIvSbRJCA5Eq3My6iDNOuKwsDI3bBHDnUxNBmU6LzEtP7Gn';
-  static const String _stockXRedirectUri = 'sneakerscanner://stockx-callback';
 
   // StockX OAuth token management (static so shared across instances)
   static String? _stockXAccessToken;
@@ -2396,8 +2441,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
           'grant_type': 'client_credentials',
-          'client_id': _stockXClientId,
-          'client_secret': _stockXClientSecret,
+          'client_id': ApiKeys.stockXClientId,
+          'client_secret': ApiKeys.stockXClientSecret,
           'audience': 'gateway.stockx.com',
         },
       ).timeout(const Duration(seconds: 15));
@@ -2431,8 +2476,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: {
           'grant_type': 'refresh_token',
-          'client_id': _stockXClientId,
-          'client_secret': _stockXClientSecret,
+          'client_id': ApiKeys.stockXClientId,
+          'client_secret': ApiKeys.stockXClientSecret,
           'refresh_token': _stockXRefreshToken!,
         },
       ).timeout(const Duration(seconds: 15));
@@ -2478,8 +2523,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     final uri = Uri.parse(
       'https://accounts.stockx.com/authorize'
       '?response_type=code'
-      '&client_id=$_stockXClientId'
-      '&redirect_uri=${Uri.encodeComponent(_stockXRedirectUri)}'
+      '&client_id=${ApiKeys.stockXClientId}'
+      '&redirect_uri=${Uri.encodeComponent(ApiKeys.stockXRedirectUri)}'
       '&audience=gateway.stockx.com'
       '&scope=openid',
     );
@@ -2520,6 +2565,18 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             if (savedGoatPrice != null) {
               _goatPrice = double.tryParse(savedGoatPrice);
             }
+            // Load cached SneakerDB candidates
+            final savedCandidates = scanData['sneakerDbCandidates'];
+            if (savedCandidates is List && savedCandidates.isNotEmpty) {
+              _sneakerDbCandidates = savedCandidates
+                  .map((c) => Map<String, dynamic>.from(c as Map))
+                  .toList();
+              _candidatesSearchDone = true;
+            }
+            // Detect interrupted pricing (app was closed while loading)
+            if (scanData['pricingStatus'] == 'loading') {
+              _pricingInterrupted = true;
+            }
           }
         }
 
@@ -2550,16 +2607,18 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             _isLoading = false;
             _computeMatchConfidence();
           });
-          // Fetch marketplace prices in background
+          // Fetch marketplace prices and similar results in parallel
           _fetchAllPrices();
+          _fetchSneakerDbFuzzyCandidates().then((_) => _saveCandidatesToDatabase());
           return;
         }
       }
 
       // If not cached, try to look up the product
       await _lookupProduct();
-      // Fetch marketplace prices after product lookup
+      // Fetch marketplace prices and similar results in parallel
       _fetchAllPrices();
+      _fetchSneakerDbFuzzyCandidates().then((_) => _saveCandidatesToDatabase());
     } catch (e) {
       setState(() {
         _error = 'Failed to load product info';
@@ -2578,7 +2637,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               'https://app.retailed.io/api/v1/db/variants'
               '?where[or][0][and][0][id][equals]=${Uri.encodeComponent(widget.code)}',
             ),
-            headers: {'x-api-key': _retailedApiKey},
+            headers: {'x-api-key': ApiKeys.retailedApiKey},
           )
           .timeout(const Duration(seconds: 10));
 
@@ -2914,7 +2973,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             '?query=${Uri.encodeComponent(query)}&limit=5'
             '&display[prices]=true&display[variants]=false',
           ),
-          headers: {'Authorization': 'Bearer $_kicksDbApiKey'},
+          headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'},
         )
         .timeout(const Duration(seconds: 10));
 
@@ -3036,7 +3095,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               'https://app.retailed.io/api/v1/stockx/search'
               '?query=${Uri.encodeComponent(query)}',
             ),
-            headers: {'x-api-key': _retailedApiKey},
+            headers: {'x-api-key': ApiKeys.retailedApiKey},
           )
           .timeout(const Duration(seconds: 10));
 
@@ -3146,7 +3205,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             ),
             headers: {
               'x-rapidapi-host': 'the-sneaker-database.p.rapidapi.com',
-              'x-rapidapi-key': _sneakerDbApiKey,
+              'x-rapidapi-key': ApiKeys.sneakerDbApiKey,
             },
           )
           .timeout(const Duration(seconds: 10));
@@ -3330,7 +3389,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           'brand': '',
           'description': widget.labelName != null
               ? 'No exact match found. Prices may still load below.'
-              : 'No product found for style code ${widget.code}. Prices may still load below.',
+              : 'No product found for SKU ${widget.code}. Prices may still load below.',
           'styleCode': widget.code,
           'notFound': true,
         };
@@ -3339,14 +3398,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         _computeMatchConfidence();
       });
     } catch (e) {
-      debugPrint('Style code lookup error: $e');
+      debugPrint('SKU lookup error: $e');
       setState(() {
         _productInfo = {
           'title': widget.labelName ?? 'Product Not Found',
           'brand': '',
           'description': widget.labelName != null
               ? 'No exact match found. Prices may still load below.'
-              : 'No product found for style code ${widget.code}. Prices may still load below.',
+              : 'No product found for SKU ${widget.code}. Prices may still load below.',
           'styleCode': widget.code,
           'notFound': true,
         };
@@ -3595,17 +3654,17 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     }
 
     // Skip if credentials not configured
-    if (_ebayClientId == 'YOUR_EBAY_CLIENT_ID') {
+    if (ApiKeys.ebayClientId == 'YOUR_EBAY_CLIENT_ID') {
       return null;
     }
 
     try {
-      final baseUrl = _ebayProduction
+      final baseUrl = ApiKeys.ebayProduction
           ? 'https://api.ebay.com'
           : 'https://api.sandbox.ebay.com';
 
       final credentials = base64Encode(
-        utf8.encode('$_ebayClientId:$_ebayClientSecret'),
+        utf8.encode('${ApiKeys.ebayClientId}:${ApiKeys.ebayClientSecret}'),
       );
 
       final response = await http
@@ -3657,7 +3716,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       }
 
       final searchQuery = _buildSearchQuery();
-      final baseUrl = _ebayProduction
+      final baseUrl = ApiKeys.ebayProduction
           ? 'https://api.ebay.com'
           : 'https://api.sandbox.ebay.com';
 
@@ -3797,10 +3856,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   Future<void> _fetchAllPrices() async {
     if (_productInfo == null) return;
 
-    setState(() {
-      _isLoadingStockXPrice = true;
-      _isLoadingGoatPrice = true;
-    });
+    // Only set loading states if identity is confirmed (pricing will run).
+    // For unconfirmed, we skip pricing entirely — avoid brief "Loading..." flash.
+    if (_identityConfirmed) {
+      setState(() {
+        _isLoadingStockXPrice = true;
+        _isLoadingGoatPrice = true;
+      });
+    }
 
     // Check shared price cache first
     if (_priceCacheEnabled) {
@@ -3853,19 +3916,23 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     if (!_identityConfirmed) {
       debugPrint('');
       debugPrint('╔══════════════════════════════════════════════════════════════╗');
-      debugPrint('║  PRICING SKIPPED — running fuzzy SneakerDB search instead');
-      debugPrint('║  Code: ${widget.code}');
+      debugPrint('║  PRICING SKIPPED: identity not confirmed for ${widget.code}');
       debugPrint('╚══════════════════════════════════════════════════════════════╝');
       debugPrint('');
       setState(() {
         _isLoadingStockXPrice = false;
         _isLoadingGoatPrice = false;
+        _isLoadingEbayPrices = false;
       });
-      await _fetchSneakerDbFuzzyCandidates();
       return;
     }
 
     final totalStopwatch = Stopwatch()..start();
+
+    // Mark pricing as in-progress in Firebase (for app-closed detection)
+    _pricingInterrupted = false;
+    _setPricingStatus('loading');
+
     debugPrint('');
     debugPrint('╔══════════════════════════════════════════════════════════════╗');
     debugPrint('║  PRICING WATERFALL START: ${widget.code}');
@@ -3949,6 +4016,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
     _savePricesToDatabase();
 
+    // Mark pricing as complete (for app-closed detection)
+    _setPricingStatus('complete');
+
     debugPrint('');
     debugPrint('╔══════════════════════════════════════════════════════════════╗');
     debugPrint('║  PRICING WATERFALL COMPLETE (${totalStopwatch.elapsedMilliseconds}ms)');
@@ -3980,7 +4050,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         final searchResponse = await client
             .get(
               searchUri,
-              headers: {'x-api-key': _retailedApiKey},
+              headers: {'x-api-key': ApiKeys.retailedApiKey},
             )
             .timeout(const Duration(seconds: 30));
 
@@ -4022,7 +4092,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         final productResponse = await client
             .get(
               productUri,
-              headers: {'x-api-key': _retailedApiKey},
+              headers: {'x-api-key': ApiKeys.retailedApiKey},
             )
             .timeout(const Duration(seconds: 30));
 
@@ -4109,7 +4179,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
       for (final uri in attempts) {
         final response = await http
-            .get(uri, headers: {'Authorization': 'Bearer $_kicksDbApiKey'})
+            .get(uri, headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'})
             .timeout(const Duration(seconds: 10));
 
         debugPrint('[KicksDB StockX] Request: $uri');
@@ -4211,7 +4281,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         final searchResponse = await http
             .get(
               goatSearchUri,
-              headers: {'x-api-key': _retailedApiKey},
+              headers: {'x-api-key': ApiKeys.retailedApiKey},
             )
             .timeout(const Duration(seconds: 10));
 
@@ -4258,7 +4328,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             final productResponse = await http
                 .get(
                   goatProductUri,
-                  headers: {'x-api-key': _retailedApiKey},
+                  headers: {'x-api-key': ApiKeys.retailedApiKey},
                 )
                 .timeout(const Duration(seconds: 15));
 
@@ -4332,7 +4402,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
       for (final uri in attempts) {
         final response = await http
-            .get(uri, headers: {'Authorization': 'Bearer $_kicksDbApiKey'})
+            .get(uri, headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'})
             .timeout(const Duration(seconds: 10));
 
         debugPrint('[KicksDB GOAT] Request: $uri');
@@ -4432,7 +4502,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       );
       var searchResponse = await http.get(searchUri, headers: {
         'Authorization': 'Bearer $token',
-        'x-api-key': _stockXApiKey,
+        'x-api-key': ApiKeys.stockXApiKey,
       }).timeout(const Duration(seconds: 15));
 
       debugPrint('[StockX Official] Search status: ${searchResponse.statusCode}');
@@ -4448,7 +4518,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         }
         searchResponse = await http.get(searchUri, headers: {
           'Authorization': 'Bearer $newToken',
-          'x-api-key': _stockXApiKey,
+          'x-api-key': ApiKeys.stockXApiKey,
         }).timeout(const Duration(seconds: 15));
         debugPrint('[StockX Official] Retry status: ${searchResponse.statusCode}');
       }
@@ -4496,7 +4566,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       );
       final marketResponse = await http.get(marketUri, headers: {
         'Authorization': 'Bearer $currentToken',
-        'x-api-key': _stockXApiKey,
+        'x-api-key': ApiKeys.stockXApiKey,
       }).timeout(const Duration(seconds: 15));
 
       debugPrint('[StockX Official] Market status: ${marketResponse.statusCode}');
@@ -4544,7 +4614,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           '?limit=10&sku=${Uri.encodeComponent(query)}',
         ),
         headers: {
-          'x-rapidapi-key': _sneakerDbApiKey,
+          'x-rapidapi-key': ApiKeys.sneakerDbApiKey,
           'x-rapidapi-host': 'the-sneaker-database.p.rapidapi.com',
         },
       ).timeout(const Duration(seconds: 10));
@@ -4634,38 +4704,47 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   /// Fuzzy name search via SneakerDB when identity is NOT confirmed.
   /// Populates [_sneakerDbCandidates] with possible matches.
   Future<void> _fetchSneakerDbFuzzyCandidates() async {
-    final query = _productInfo?['title'] as String? ?? widget.labelName ?? widget.code;
+    // Build query: prefer product title (skip generic "Product Not Found"), then labelName, then code
+    final title = _productInfo?['title'] as String?;
+    final query = (title != null && title != 'Product Not Found' && title.isNotEmpty)
+        ? title
+        : widget.labelName ?? widget.code;
     if (query.isEmpty) return;
 
     debugPrint('[SneakerDB Fuzzy] Starting fuzzy search for: "$query"');
+    if (!mounted) return;
     setState(() => _isLoadingCandidates = true);
 
     try {
+      final fuzzyUri = Uri.parse(
+        'https://the-sneaker-database.p.rapidapi.com/sneakers'
+        '?limit=10&name=${Uri.encodeComponent(query)}',
+      );
+      debugPrint('[SneakerDB Fuzzy] Request: $fuzzyUri');
       final response = await http.get(
-        Uri.parse(
-          'https://the-sneaker-database.p.rapidapi.com/sneakers'
-          '?limit=10&name=${Uri.encodeComponent(query)}',
-        ),
+        fuzzyUri,
         headers: {
-          'x-rapidapi-key': _sneakerDbApiKey,
+          'x-rapidapi-key': ApiKeys.sneakerDbApiKey,
           'x-rapidapi-host': 'the-sneaker-database.p.rapidapi.com',
         },
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 15));
 
       debugPrint('[SneakerDB Fuzzy] Status: ${response.statusCode}');
       debugPrint(
         '[SneakerDB Fuzzy] Body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}',
       );
 
+      if (!mounted) return;
+
       if (response.statusCode != 200) {
         debugPrint('[SneakerDB Fuzzy] Failed with ${response.statusCode}');
-        setState(() => _isLoadingCandidates = false);
+        setState(() { _isLoadingCandidates = false; _candidatesSearchDone = true; });
         return;
       }
 
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic>) {
-        setState(() => _isLoadingCandidates = false);
+        setState(() { _isLoadingCandidates = false; _candidatesSearchDone = true; });
         return;
       }
 
@@ -4737,13 +4816,15 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       }
 
       debugPrint('[SneakerDB Fuzzy] ${candidates.length} footwear candidates after filtering');
+      if (!mounted) return;
       setState(() {
         _sneakerDbCandidates = candidates;
         _isLoadingCandidates = false;
+        _candidatesSearchDone = true;
       });
     } catch (e) {
       debugPrint('[SneakerDB Fuzzy] Error: $e');
-      setState(() => _isLoadingCandidates = false);
+      if (mounted) setState(() { _isLoadingCandidates = false; _candidatesSearchDone = true; });
     }
   }
 
@@ -4788,6 +4869,42 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     } catch (e) {
       debugPrint('Error saving prices: $e');
     }
+  }
+
+  Future<void> _saveCandidatesToDatabase() async {
+    if (_sneakerDbCandidates.isEmpty) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || widget.scanId.isEmpty) return;
+
+    try {
+      final candidateList = _sneakerDbCandidates.map((c) => {
+        'title': c['title'],
+        'brand': c['brand'],
+        'image': c['image'],
+        'retailPrice': c['retailPrice']?.toString(),
+        'estimatedMarketValue': c['estimatedMarketValue']?.toString(),
+        'sku': c['sku'],
+      }).toList();
+
+      await _database
+          .child('scans')
+          .child(user.uid)
+          .child(widget.scanId)
+          .update({'sneakerDbCandidates': candidateList});
+      debugPrint('[SneakerDB Fuzzy] Saved ${candidateList.length} candidates to DB');
+    } catch (e) {
+      debugPrint('[SneakerDB Fuzzy] Error saving candidates: $e');
+    }
+  }
+
+  void _setPricingStatus(String status) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || widget.scanId.isEmpty) return;
+    _database
+        .child('scans')
+        .child(user.uid)
+        .child(widget.scanId)
+        .update({'pricingStatus': status});
   }
 
   @override
@@ -5004,7 +5121,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
                     // Info Cards
                     _buildInfoCard(
-                      _isStyleCode ? 'Style Code' : 'Barcode',
+                      _isStyleCode ? 'SKU' : 'Barcode',
                       widget.code,
                       _isStyleCode ? Icons.label : Icons.qr_code,
                     ),
@@ -5083,7 +5200,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
                           child: Text(
-                            'Profit is estimated — confirm style code for exact numbers.',
+                            'Profit is estimated — confirm SKU for exact numbers.',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               color: Colors.blue[300],
@@ -5093,20 +5210,17 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                       const SizedBox(height: 24),
                     ],
 
-                    // Fuzzy SneakerDB candidates (shown when identity NOT confirmed)
-                    if (_isLoadingCandidates) ...[
-                      const Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: CircularProgressIndicator(
-                            color: Color(0xFF646CFF),
-                          ),
-                        ),
-                      ),
-                    ] else if (_sneakerDbCandidates.isNotEmpty) ...[
-                      _buildCandidatesList(),
-                      const SizedBox(height: 24),
+                    // Pricing interrupted message (app was closed while loading)
+                    if (_pricingInterrupted && _identityConfirmed &&
+                        _stockXPrice == null && _goatPrice == null &&
+                        !_isLoadingStockXPrice && !_isLoadingGoatPrice) ...[
+                      _buildPricingInterruptedMessage(),
+                      const SizedBox(height: 16),
                     ],
+
+                    // Similar Results — always shown
+                    _buildSimilarResultsSection(),
+                    const SizedBox(height: 24),
 
                     // eBay Button (only if price was found)
                     if (_ebayAveragePrice != null) ...[
@@ -5201,7 +5315,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  "We couldn't read a style code. Results below are approximate.",
+                  "We couldn't read a SKU. Results below are approximate.",
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     color: Colors.orange[200],
@@ -5226,7 +5340,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Match based on label text. Verify the style code for best accuracy.',
+                  'Match based on label text. Verify the SKU for best accuracy.',
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     color: Colors.blue[200],
@@ -5283,6 +5397,152 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     );
   }
 
+  Widget _buildSimilarResultsSection() {
+    // Loading state
+    if (_isLoadingCandidates) {
+      return _buildCandidatesLoading();
+    }
+    // Has results
+    if (_sneakerDbCandidates.isNotEmpty) {
+      return _buildCandidatesList();
+    }
+    // Search done but no results (or loaded from cache as empty)
+    if (_candidatesSearchDone) {
+      return _buildCandidatesEmpty();
+    }
+    // Search hasn't started yet — show loading
+    return _buildCandidatesLoading();
+  }
+
+  Widget _buildCandidatesEmpty() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.search_rounded,
+                color: const Color(0xFF646CFF),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Similar Results',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'No similar results found',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPricingInterruptedMessage() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFF3A3A2A), width: 1),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange[400], size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'The app was closed while prices were loading. Re-scan to fetch pricing.',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: Colors.orange[300],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCandidatesLoading() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.search_rounded,
+                color: const Color(0xFF646CFF),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Similar Results',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: CircularProgressIndicator(
+                color: Color(0xFF646CFF),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              'Searching for similar results...',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: Colors.grey[500],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCandidatesList() {
     return Container(
       width: double.infinity,
@@ -5304,7 +5564,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               ),
               const SizedBox(width: 8),
               Text(
-                'Possible Matches',
+                'Similar Results',
                 style: GoogleFonts.poppins(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -5315,7 +5575,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            'We couldn\'t confirm the exact product. These may be matches:',
+            'Products similar to your scan:',
             style: GoogleFonts.inter(
               fontSize: 12,
               color: Colors.grey[500],
@@ -6145,7 +6405,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 const SizedBox(height: 2),
                 Text(
                   value,
-                  style: (label == 'Barcode' || label == 'Style Code')
+                  style: (label == 'Barcode' || label == 'SKU')
                       ? GoogleFonts.robotoMono(
                           fontSize: 15,
                           fontWeight: FontWeight.w500,

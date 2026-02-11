@@ -45,6 +45,7 @@ dependencies:
   google_mlkit_text_recognition: ^0.14.0
   image_picker: ^1.1.0
   app_links: ^6.3.3
+  cloud_functions: ^5.2.0
 
 dev_dependencies:
   flutter_test:
