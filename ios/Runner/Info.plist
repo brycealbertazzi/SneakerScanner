@@ -57,6 +57,14 @@
 				<string>com.googleusercontent.apps.773179554972-l9jtvpf5ri7md0a2pbqtqhaj7dr2muon</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>sneakerscanner</string>
+			</array>
+		</dict>
 	</array>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
