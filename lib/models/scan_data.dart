@@ -3,17 +3,15 @@ class ScanData {
   final String? modelName;
   final String? colorway;
   final String? sku;
-  final String? gtin;
 
   const ScanData({
     this.brand,
     this.modelName,
     this.colorway,
     this.sku,
-    this.gtin,
   });
 
-  bool get hasIdentifier => sku != null || gtin != null;
+  bool get hasIdentifier => sku != null;
 
   String get displayName {
     final parts = <String>[];
@@ -30,7 +28,7 @@ class ScanData {
       }
     }
     if (colorway != null && colorway!.isNotEmpty) parts.add(colorway!);
-    if (parts.isEmpty) return sku ?? gtin ?? '';
+    if (parts.isEmpty) return sku ?? '';
     return parts.join(' ');
   }
 
@@ -40,7 +38,6 @@ class ScanData {
       if (modelName != null) 'modelName': modelName,
       if (colorway != null) 'colorway': colorway,
       if (sku != null) 'sku': sku,
-      if (gtin != null) 'gtin': gtin,
     };
   }
 
@@ -50,7 +47,7 @@ class ScanData {
     final code = data['code'] as String?;
     final labelName = data['labelName'] as String?;
 
-    if (data.containsKey('sku') || data.containsKey('gtin') ||
+    if (data.containsKey('sku') ||
         data.containsKey('modelName')) {
       // New format
       return ScanData(
@@ -58,7 +55,6 @@ class ScanData {
         modelName: data['modelName'] as String?,
         colorway: data['colorway'] as String?,
         sku: data['sku'] as String?,
-        gtin: data['gtin'] as String?,
       );
     }
 
@@ -72,9 +68,9 @@ class ScanData {
         modelName: labelName,
       );
     } else {
-      // Barcode format → gtin
+      // Legacy barcode format — treat as no SKU
       return ScanData(
-        gtin: code,
+        modelName: code,
       );
     }
   }
@@ -84,14 +80,12 @@ class ScanData {
     String? modelName,
     String? colorway,
     String? sku,
-    String? gtin,
   }) {
     return ScanData(
       brand: brand ?? this.brand,
       modelName: modelName ?? this.modelName,
       colorway: colorway ?? this.colorway,
       sku: sku ?? this.sku,
-      gtin: gtin ?? this.gtin,
     );
   }
 }

@@ -42,7 +42,7 @@ class _HistoryPageState extends State<HistoryPage> {
     return scans.where((entry) {
       final data = Map<String, dynamic>.from(entry.value);
       final scanData = ScanData.fromFirebase(data);
-      final code = (scanData.sku ?? scanData.gtin ?? '').toLowerCase();
+      final code = (scanData.sku ?? '').toLowerCase();
       final productTitle = (data['productTitle'] ?? '')
           .toString()
           .toLowerCase();
@@ -566,8 +566,7 @@ class _HistoryPageState extends State<HistoryPage> {
     final hasProductInfo = productTitle != null && productTitle.isNotEmpty;
     final hasImage = productImage != null && productImage.isNotEmpty;
 
-    // Show SKU if available, otherwise GTIN
-    final subtitle = scanData.sku ?? scanData.gtin ?? '';
+    final subtitle = scanData.sku ?? '';
     final isStyleCode = scanData.sku != null;
 
     return Dismissible(

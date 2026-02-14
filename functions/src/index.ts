@@ -2,7 +2,6 @@ import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {defineSecret} from "firebase-functions/params";
 
 const kicksDbApiKey = defineSecret("KICKS_DB_API_KEY");
-const retailedApiKey = defineSecret("RETAILED_API_KEY");
 const sneakerDbApiKey = defineSecret("SNEAKER_DB_API_KEY");
 const ebayClientId = defineSecret("EBAY_CLIENT_ID");
 const ebayClientSecret = defineSecret("EBAY_CLIENT_SECRET");
@@ -14,7 +13,6 @@ export const getApiKeys = onCall(
   {
     secrets: [
       kicksDbApiKey,
-      retailedApiKey,
       sneakerDbApiKey,
       ebayClientId,
       ebayClientSecret,
@@ -33,7 +31,6 @@ export const getApiKeys = onCall(
 
     return {
       kicksDbApiKey: kicksDbApiKey.value(),
-      retailedApiKey: retailedApiKey.value(),
       sneakerDbApiKey: sneakerDbApiKey.value(),
       ebayClientId: ebayClientId.value(),
       ebayClientSecret: ebayClientSecret.value(),

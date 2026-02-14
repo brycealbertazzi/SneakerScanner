@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
-import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/scan_data.dart';
@@ -312,40 +311,17 @@ class _ScannerPageState extends State<ScannerPage> {
 
       final inputImage = InputImage.fromFilePath(photo.path);
 
-      // Run OCR and barcode detection in parallel
+      // Run OCR on the captured image
       final textRecognizer = TextRecognizer();
-      final barcodeScanner = BarcodeScanner();
 
       try {
-        final results = await Future.wait([
-          textRecognizer.processImage(inputImage),
-          barcodeScanner.processImage(inputImage),
-        ]);
-
-        final recognizedText = results[0] as RecognizedText;
-        final barcodes = results[1] as List<Barcode>;
+        final recognizedText = await textRecognizer.processImage(inputImage);
 
         final fullText = recognizedText.text;
         debugPrint('OCR text: $fullText');
 
         // Parse OCR text into ScanData
-        ScanData scanData = _parseLabelInfo(fullText);
-
-        // Extract GTIN from barcode results (first numeric 8-14 digit code)
-        String? gtin;
-        for (final barcode in barcodes) {
-          final raw = barcode.rawValue ?? '';
-          if (RegExp(r'^\d{8,14}$').hasMatch(raw)) {
-            gtin = raw;
-            debugPrint('Barcode detected: $gtin');
-            break;
-          }
-        }
-
-        // Merge GTIN into scan data
-        if (gtin != null) {
-          scanData = scanData.copyWith(gtin: gtin);
-        }
+        final scanData = _parseLabelInfo(fullText);
 
         debugPrint('═══ SCAN RESULT ═══');
         if (scanData.sku != null) {
@@ -353,17 +329,13 @@ class _ScannerPageState extends State<ScannerPage> {
         } else {
           debugPrint('SKU: not found');
         }
-        if (scanData.gtin != null) {
-          debugPrint('GTIN found (${scanData.gtin!.length} chars): ${scanData.gtin}');
-        } else {
-          debugPrint('GTIN: not found');
-        }
         debugPrint('Brand: ${scanData.brand ?? 'n/a'}, '
             'Model: ${scanData.modelName ?? 'n/a'}, '
             'Colorway: ${scanData.colorway ?? 'n/a'}');
         debugPrint('═══════════════════');
 
-        if (scanData.hasIdentifier || scanData.modelName != null) {
+        if (scanData.sku != null) {
+          // SKU found — go directly to detail page
           final scanId = await _saveScan(scanData);
           if (mounted) {
             await Navigator.of(context).push(
@@ -377,13 +349,13 @@ class _ScannerPageState extends State<ScannerPage> {
             );
           }
         } else {
+          // No SKU — show dialog with option to enter manually or proceed without
           if (mounted) {
-            _showManualSkuDialog(fullText);
+            _showManualSkuDialog(fullText, scanData);
           }
         }
       } finally {
         textRecognizer.close();
-        barcodeScanner.close();
       }
     } catch (e) {
       debugPrint('Capture error: $e');
@@ -399,11 +371,12 @@ class _ScannerPageState extends State<ScannerPage> {
     }
   }
 
-  void _showManualSkuDialog(String ocrText) {
+  void _showManualSkuDialog(String ocrText, ScanData currentScanData) {
     final controller = TextEditingController();
+    final hasModel = currentScanData.modelName != null;
     showDialog(
       context: context,
-      builder: (context) => Dialog(
+      builder: (dialogContext) => Dialog(
         backgroundColor: Colors.transparent,
         child: Container(
           padding: const EdgeInsets.all(24),
@@ -428,7 +401,9 @@ class _ScannerPageState extends State<ScannerPage> {
               Text(
                 ocrText.isEmpty
                     ? 'Type the SKU from the shoe label or box.'
-                    : 'We couldn\'t automatically detect a SKU. You can enter it manually.',
+                    : hasModel
+                        ? 'We couldn\'t detect a SKU. Enter it manually or proceed without one.'
+                        : 'We couldn\'t automatically detect a SKU. You can enter it manually.',
                 style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[400]),
               ),
               const SizedBox(height: 16),
@@ -466,7 +441,7 @@ class _ScannerPageState extends State<ScannerPage> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.grey[400],
                         side: BorderSide(color: Colors.grey[600]!),
@@ -484,15 +459,15 @@ class _ScannerPageState extends State<ScannerPage> {
                       onPressed: () async {
                         final sku = controller.text.trim().toUpperCase();
                         if (sku.isEmpty) return;
-                        Navigator.of(context).pop();
-                        final scanData = ScanData(sku: sku);
-                        final scanId = await _saveScan(scanData);
+                        Navigator.of(dialogContext).pop();
+                        final data = currentScanData.copyWith(sku: sku);
+                        final scanId = await _saveScan(data);
                         if (mounted) {
-                          await Navigator.of(this.context).push(
+                          await Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (context) => ScanDetailPage(
                                 scanId: scanId ?? '',
-                                scanData: scanData,
+                                scanData: data,
                                 timestamp:
                                     DateTime.now().millisecondsSinceEpoch,
                               ),
@@ -513,6 +488,39 @@ class _ScannerPageState extends State<ScannerPage> {
                   ),
                 ],
               ),
+              if (hasModel) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      Navigator.of(dialogContext).pop();
+                      final scanId = await _saveScan(currentScanData);
+                      if (mounted) {
+                        await Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => ScanDetailPage(
+                              scanId: scanId ?? '',
+                              scanData: currentScanData,
+                              timestamp:
+                                  DateTime.now().millisecondsSinceEpoch,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF646CFF),
+                      side: const BorderSide(color: Color(0xFF646CFF)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text('Continue without SKU'),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -528,8 +536,8 @@ class _ScannerPageState extends State<ScannerPage> {
     await scanRef.set({
       ...scanData.toFirebase(),
       // Legacy fields for backward compatibility with history display
-      'code': scanData.sku ?? scanData.gtin ?? scanData.displayName,
-      'format': scanData.sku != null ? 'STYLE_CODE' : 'BARCODE',
+      'code': scanData.sku ?? scanData.displayName,
+      'format': 'STYLE_CODE',
       'timestamp': ServerValue.timestamp,
       'productTitle': null,
       'productImage': null,
@@ -637,7 +645,7 @@ class _ScannerPageState extends State<ScannerPage> {
               child: OutlinedButton.icon(
                 onPressed: _isProcessing
                     ? null
-                    : () => _showManualSkuDialog(''),
+                    : () => _showManualSkuDialog('', const ScanData()),
                 icon: const Icon(Icons.keyboard, size: 18),
                 label: const Text('Enter SKU Manually'),
                 style: OutlinedButton.styleFrom(

@@ -8,7 +8,6 @@ class ApiKeys {
 
   // Populated from Firebase
   static String kicksDbApiKey = '';
-  static String retailedApiKey = '';
   static String sneakerDbApiKey = '';
   static String ebayClientId = '';
   static String ebayClientSecret = '';
@@ -28,7 +27,6 @@ class ApiKeys {
       final result = await callable.call();
       final data = result.data as Map<String, dynamic>;
       kicksDbApiKey = data['kicksDbApiKey'] as String? ?? '';
-      retailedApiKey = data['retailedApiKey'] as String? ?? '';
       sneakerDbApiKey = data['sneakerDbApiKey'] as String? ?? '';
       ebayClientId = data['ebayClientId'] as String? ?? '';
       ebayClientSecret = data['ebayClientSecret'] as String? ?? '';

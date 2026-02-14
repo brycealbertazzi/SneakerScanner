@@ -43,7 +43,7 @@ class DefaultFirebaseOptions {
     messagingSenderId: '773179554972',
     projectId: 'sneaker-scanner-f77aa',
     storageBucket: 'sneaker-scanner-f77aa.firebasestorage.app',
-    iosBundleId: 'com.brycealbertazzi.sneakerScanner',
+    iosBundleId: 'com.BryceAlbertazzi.SneakerScanner',
     iosClientId: '773179554972-l9jtvpf5ri7md0a2pbqtqhaj7dr2muon.apps.googleusercontent.com',
     databaseURL: 'https://sneaker-scanner-f77aa-default-rtdb.firebaseio.com',
   );
