@@ -12,7 +12,6 @@ import '../../models/scan_data.dart';
 import '../../services/ebay_auth_service.dart';
 import 'widgets/info_card.dart';
 import 'widgets/ebay_prices_section.dart';
-import 'widgets/similar_results_section.dart';
 import 'widgets/profit_calculator.dart';
 
 class ScanDetailPage extends StatefulWidget {
@@ -59,11 +58,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   final DatabaseReference _database = FirebaseDatabase.instance.ref();
 
   bool _identityConfirmed = false;
-
-  List<Map<String, dynamic>> _similarCandidates = [];
-  bool _isLoadingCandidates = false;
-  bool _candidatesSearchDone = false;
-  bool _fuzzySearchInitiated = false;
 
   bool _pricingInterrupted = false;
 
@@ -122,14 +116,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             if (savedGoatPrice != null) {
               _goatPrice = double.tryParse(savedGoatPrice);
             }
-            final savedCandidates = scanData['sneakerDbCandidates'];
-            if (savedCandidates is List && savedCandidates.isNotEmpty) {
-              _similarCandidates = savedCandidates
-                  .map((c) => Map<String, dynamic>.from(c as Map))
-                  .toList();
-              _candidatesSearchDone = true;
-              _fuzzySearchInitiated = true;
-            }
             if (scanData['pricingStatus'] == 'loading') {
               _pricingInterrupted = true;
             }
@@ -154,11 +140,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               _isLoading = false;
             });
             _fetchAllPrices();
-            if (!confirmed && !_candidatesSearchDone) {
-              _fetchKicksDbFuzzyCandidates().then(
-                (_) => _saveCandidatesToDatabase(),
-              );
-            }
             return;
           }
         }
@@ -176,7 +157,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
   /// Unified product lookup flow:
   /// 1. SKU → KicksDB exact search (identity confirmed)
-  /// 2. Brand/model/colorway → KicksDB fuzzy search (identity NOT confirmed)
+  /// 2. GTIN → KicksDB unified/gtin lookup (identity confirmed)
+  /// 3. Not found fallback
   Future<void> _lookupProduct() async {
     try {
       Map<String, dynamic>? productInfo;
@@ -191,11 +173,85 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         if (productInfo != null) confirmed = true;
       }
 
-      // Step 2: Brand/model/colorway → KicksDB fuzzy (identity NOT confirmed)
-      if (productInfo == null) {
+      // Step 2: GTIN → KicksDB unified lookup (identity confirmed)
+      if (productInfo == null && widget.scanData.gtin != null) {
+        final gtin = widget.scanData.gtin!;
         debugPrint('═══ LOOKUP STEP 2 ═══');
-        debugPrint('KicksDB fuzzy search — identity not confirmed');
-        _fetchKicksDbFuzzyCandidates().then((_) => _saveCandidatesToDatabase());
+        debugPrint('KicksDB GTIN lookup for "$gtin"');
+
+        final gtinUrl =
+            'https://api.kicks.dev/v3/unified/gtin'
+            '?identifier=${Uri.encodeComponent(gtin)}';
+        debugPrint('[KicksDB GTIN] Request: $gtinUrl');
+
+        final response = await http.get(
+          Uri.parse(gtinUrl),
+          headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'},
+        );
+
+        debugPrint('[KicksDB GTIN] Status: ${response.statusCode}');
+
+        if (response.statusCode == 200) {
+          final body = json.decode(response.body);
+          final data = body is Map && body.containsKey('data')
+              ? body['data']
+              : body;
+
+          if (data is Map<String, dynamic> && data.isNotEmpty) {
+            final title = data['title'] ?? data['name'];
+            if (title != null) {
+              productInfo = {
+                'title': title,
+                'brand': data['brand'] ?? '',
+                'sku': data['style_id'] ?? data['styleId'] ?? '',
+                'styleCode': data['style_id'] ?? data['styleId'] ?? '',
+                'retailPrice': data['retailPrice']?.toString(),
+                'images': data['images'] is List
+                    ? data['images']
+                    : data['image'] != null
+                        ? [data['image']]
+                        : [],
+                'model': data['model'] ?? '',
+                'slug': data['slug'] ?? '',
+                'category': data['category'] ?? '',
+              };
+              confirmed = true;
+              debugPrint('[KicksDB GTIN] Match found: $title');
+            }
+          } else if (data is List && data.isNotEmpty) {
+            final first = data[0] as Map<String, dynamic>;
+            final title = first['title'] ?? first['name'];
+            if (title != null) {
+              productInfo = {
+                'title': title,
+                'brand': first['brand'] ?? '',
+                'sku': first['style_id'] ?? first['styleId'] ?? '',
+                'styleCode': first['style_id'] ?? first['styleId'] ?? '',
+                'retailPrice': first['retailPrice']?.toString(),
+                'images': first['images'] is List
+                    ? first['images']
+                    : first['image'] != null
+                        ? [first['image']]
+                        : [],
+                'model': first['model'] ?? '',
+                'slug': first['slug'] ?? '',
+                'category': first['category'] ?? '',
+              };
+              confirmed = true;
+              debugPrint('[KicksDB GTIN] Match found: $title');
+            }
+          }
+        }
+
+        if (productInfo == null) {
+          debugPrint('[KicksDB GTIN] No match found');
+        }
+      }
+
+      // Step 3: No match — mark as not found
+      if (productInfo == null) {
+        debugPrint('═══ LOOKUP STEP 3 ═══');
+        debugPrint('No product found — identity not confirmed');
 
         setState(() {
           _productInfo = {
@@ -203,8 +259,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 ? widget.scanData.displayName
                 : 'Product Not Found',
             'brand': widget.scanData.brand ?? '',
-            'description':
-                'No product found. Similar results may appear below.',
+            'description': 'No product found.',
             'notFound': true,
           };
           _identityConfirmed = false;
@@ -213,7 +268,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         return;
       }
 
-      // Steps 1 or 2 succeeded — save and update state
+      // Steps 1, 2 succeeded — save and update state
       final title = productInfo['title'];
       final image = (productInfo['images'] as List?)?.isNotEmpty == true
           ? productInfo['images'][0]
@@ -258,7 +313,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         _identityConfirmed = false;
         _isLoading = false;
       });
-      _fetchKicksDbFuzzyCandidates().then((_) => _saveCandidatesToDatabase());
     }
   }
 
@@ -371,8 +425,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       return null;
     }
 
-    final kicksDbUrl = 'https://api.kicks.dev/v3/stockx/products'
-        '?query=${Uri.encodeComponent(query)}&limit=5'
+    final kicksDbUrl =
+        'https://api.kicks.dev/v3/stockx/products'
+        '?query=${Uri.encodeComponent(query)}&limit=1'
         '&display[prices]=true&display[variants]=false';
     debugPrint('[KicksDB Lookup] Request: $kicksDbUrl');
     final response = await http
@@ -765,17 +820,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       'goat=\$${_goatPrice?.toStringAsFixed(2) ?? "N/A"}',
     );
 
-    if (_stockXPrice != null || _goatPrice != null) {
-      debugPrint('Step 1 found resell prices — stopping waterfall');
-      _finalizePricing(totalStopwatch);
-      return;
-    }
-
-    // Step 2: KicksDB fuzzy by name (no confirmed matches from step 1)
-    debugPrint('');
-    debugPrint('═══ STEP 2: KicksDB fuzzy (no confirmed matches) ═══');
-    _fetchKicksDbFuzzyCandidates().then((_) => _saveCandidatesToDatabase());
-
     _finalizePricing(totalStopwatch);
   }
 
@@ -838,7 +882,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     try {
       final uri = Uri.parse(
         'https://api.kicks.dev/v3/stockx/products'
-        '?query=${Uri.encodeComponent(query)}&limit=5'
+        '?query=${Uri.encodeComponent(query)}&limit=1'
         '&display[prices]=true&display[variants]=true',
       );
       debugPrint('[KicksDB StockX] Request: $uri');
@@ -940,7 +984,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     try {
       final uri = Uri.parse(
         'https://api.kicks.dev/v3/goat/products'
-        '?query=${Uri.encodeComponent(query)}&limit=5'
+        '?query=${Uri.encodeComponent(query)}&limit=1'
         '&display[prices]=true&display[variants]=true',
       );
       debugPrint('[KicksDB GOAT] Request: $uri');
@@ -1032,123 +1076,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Similar results & data persistence
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Future<void> _fetchKicksDbFuzzyCandidates() async {
-    final title = _productInfo?['title'] as String?;
-    final query =
-        (title != null && title != 'Product Not Found' && title.isNotEmpty)
-        ? title
-        : widget.scanData.displayName;
-    if (query.isEmpty) return;
-
-    debugPrint('[KicksDB Fuzzy] Starting fuzzy search for: "$query"');
-    if (!mounted) return;
-    setState(() {
-      _fuzzySearchInitiated = true;
-      _isLoadingCandidates = true;
-    });
-
-    try {
-      final fuzzyUri = Uri.parse(
-        'https://api.kicks.dev/v3/stockx/products'
-        '?query=${Uri.encodeComponent(query)}&limit=10'
-        '&display[prices]=true&display[variants]=false',
-      );
-      debugPrint('[KicksDB Fuzzy] Request: $fuzzyUri');
-      final response = await http
-          .get(
-            fuzzyUri,
-            headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'},
-          )
-          .timeout(const Duration(seconds: 15));
-
-      debugPrint('[KicksDB Fuzzy] Status: ${response.statusCode}');
-      debugPrint(
-        '[KicksDB Fuzzy] Body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}',
-      );
-
-      if (!mounted) return;
-
-      if (response.statusCode != 200) {
-        debugPrint('[KicksDB Fuzzy] Failed with ${response.statusCode}');
-        setState(() {
-          _isLoadingCandidates = false;
-          _candidatesSearchDone = true;
-        });
-        return;
-      }
-
-      final body = jsonDecode(response.body);
-      List<dynamic> items = [];
-      if (body is Map<String, dynamic> &&
-          body.containsKey('data') &&
-          body['data'] is List) {
-        items = body['data'];
-      } else if (body is List) {
-        items = body;
-      }
-
-      debugPrint('[KicksDB Fuzzy] Got ${items.length} raw results');
-
-      final candidates = <Map<String, dynamic>>[];
-      for (final item in items) {
-        final product = item as Map<String, dynamic>;
-        final name = (product['title'] ?? product['name'] ?? '').toString();
-        final brand = (product['brand'] ?? '').toString();
-
-        if (_isRetailerLabel(brand)) continue;
-        if (!_looksLikeFootwear(product)) {
-          debugPrint('[KicksDB Fuzzy] Skip non-footwear: "$name"');
-          continue;
-        }
-
-        final image = (product['image'] ?? product['thumbnail'] ?? '')
-            .toString();
-        final retailPrice = product['retail_price'];
-        final retailPriceNum = retailPrice != null
-            ? double.tryParse(retailPrice.toString())
-            : null;
-
-        final sku = (product['style_id'] ?? '').toString();
-        final slug = (product['slug'] ?? '').toString();
-
-        candidates.add({
-          'title': name,
-          'brand': brand,
-          'image': image,
-          'retailPrice': retailPriceNum,
-          'estimatedMarketValue': null,
-          'sku': sku,
-          'stockXSlug': slug.isNotEmpty ? slug : null,
-          'goatSlug': null,
-        });
-        debugPrint(
-          '[KicksDB Fuzzy] Candidate: "$name" sku="$sku" retail=\$${retailPriceNum ?? "N/A"}',
-        );
-      }
-
-      debugPrint(
-        '[KicksDB Fuzzy] ${candidates.length} footwear candidates after filtering',
-      );
-      if (!mounted) return;
-      setState(() {
-        _similarCandidates = candidates;
-        _isLoadingCandidates = false;
-        _candidatesSearchDone = true;
-      });
-    } catch (e) {
-      debugPrint('[KicksDB Fuzzy] Error: $e');
-      if (mounted)
-        setState(() {
-          _isLoadingCandidates = false;
-          _candidatesSearchDone = true;
-        });
-    }
-  }
-
   Future<void> _savePricesToDatabase() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || widget.scanId.isEmpty) return;
@@ -1184,40 +1111,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       }
     } catch (e) {
       debugPrint('Error saving prices: $e');
-    }
-  }
-
-  Future<void> _saveCandidatesToDatabase() async {
-    if (_similarCandidates.isEmpty) return;
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null || widget.scanId.isEmpty) return;
-
-    try {
-      final candidateList = _similarCandidates
-          .map(
-            (c) => {
-              'title': c['title'],
-              'brand': c['brand'],
-              'image': c['image'],
-              'retailPrice': c['retailPrice']?.toString(),
-              'estimatedMarketValue': c['estimatedMarketValue']?.toString(),
-              'sku': c['sku'],
-              'stockXSlug': c['stockXSlug'],
-              'goatSlug': c['goatSlug'],
-            },
-          )
-          .toList();
-
-      await _database
-          .child('scans')
-          .child(user.uid)
-          .child(widget.scanId)
-          .update({'sneakerDbCandidates': candidateList});
-      debugPrint(
-        '[KicksDB Fuzzy] Saved ${candidateList.length} candidates to DB',
-      );
-    } catch (e) {
-      debugPrint('[KicksDB Fuzzy] Error saving candidates: $e');
     }
   }
 
@@ -1505,13 +1398,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                         _goatPrice != null)
                       const SizedBox(height: 12),
 
-                    // 10. Similar Results — only shown when fuzzy search initiated
-                    if (_fuzzySearchInitiated)
-                      SimilarResultsSection(
-                        candidates: _similarCandidates,
-                        isLoading: _isLoadingCandidates,
-                        searchDone: _candidatesSearchDone,
-                      ),
                     const SizedBox(height: 32),
                   ],
                 ),

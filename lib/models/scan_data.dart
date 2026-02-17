@@ -3,15 +3,17 @@ class ScanData {
   final String? modelName;
   final String? colorway;
   final String? sku;
+  final String? gtin;
 
   const ScanData({
     this.brand,
     this.modelName,
     this.colorway,
     this.sku,
+    this.gtin,
   });
 
-  bool get hasIdentifier => sku != null;
+  bool get hasIdentifier => sku != null || gtin != null;
 
   String get displayName {
     final parts = <String>[];
@@ -38,6 +40,7 @@ class ScanData {
       if (modelName != null) 'modelName': modelName,
       if (colorway != null) 'colorway': colorway,
       if (sku != null) 'sku': sku,
+      if (gtin != null) 'gtin': gtin,
     };
   }
 
@@ -55,6 +58,7 @@ class ScanData {
         modelName: data['modelName'] as String?,
         colorway: data['colorway'] as String?,
         sku: data['sku'] as String?,
+        gtin: data['gtin'] as String?,
       );
     }
 
@@ -80,12 +84,14 @@ class ScanData {
     String? modelName,
     String? colorway,
     String? sku,
+    String? gtin,
   }) {
     return ScanData(
       brand: brand ?? this.brand,
       modelName: modelName ?? this.modelName,
       colorway: colorway ?? this.colorway,
       sku: sku ?? this.sku,
+      gtin: gtin ?? this.gtin,
     );
   }
 }

@@ -4,8 +4,10 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../models/scan_data.dart';
+import '../services/gtin_utils.dart';
 import 'scan_detail/scan_detail_page.dart';
 
 class ScannerPage extends StatefulWidget {
@@ -371,6 +373,39 @@ class _ScannerPageState extends State<ScannerPage> {
     }
   }
 
+  Future<void> _scanBarcode(String ocrText, ScanData currentScanData) async {
+    final gtin = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (context) => const _BarcodeScannerPage(),
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (gtin != null) {
+      debugPrint('═══ BARCODE SCAN ═══');
+      debugPrint('GTIN found: $gtin');
+      debugPrint('═══════════════════');
+
+      final data = currentScanData.copyWith(gtin: gtin);
+      final scanId = await _saveScan(data);
+      if (mounted) {
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ScanDetailPage(
+              scanId: scanId ?? '',
+              scanData: data,
+              timestamp: DateTime.now().millisecondsSinceEpoch,
+            ),
+          ),
+        );
+      }
+    } else {
+      // User cancelled or no barcode found — return to modal
+      _showManualSkuDialog(ocrText, currentScanData);
+    }
+  }
+
   void _showManualSkuDialog(String ocrText, ScanData currentScanData) {
     final controller = TextEditingController();
     final hasModel = currentScanData.modelName != null;
@@ -487,6 +522,26 @@ class _ScannerPageState extends State<ScannerPage> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    _scanBarcode(ocrText, currentScanData);
+                  },
+                  icon: const Icon(Icons.qr_code_scanner, size: 18),
+                  label: const Text('Scan Barcode'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: BorderSide(color: Colors.grey[600]!),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
               ),
               if (hasModel) ...[
                 const SizedBox(height: 12),
@@ -660,6 +715,109 @@ class _ScannerPageState extends State<ScannerPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Full-screen live barcode scanner that auto-detects barcodes.
+/// Returns the normalized GTIN string via Navigator.pop, or null if cancelled.
+class _BarcodeScannerPage extends StatefulWidget {
+  const _BarcodeScannerPage();
+
+  @override
+  State<_BarcodeScannerPage> createState() => _BarcodeScannerPageState();
+}
+
+class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
+  final MobileScannerController _controller = MobileScannerController(
+    detectionSpeed: DetectionSpeed.normal,
+    facing: CameraFacing.back,
+    torchEnabled: false,
+  );
+  bool _hasPopped = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_hasPopped) return;
+
+    for (final barcode in capture.barcodes) {
+      final raw = barcode.rawValue;
+      if (raw != null && raw.isNotEmpty) {
+        final normalized = normalizeGtin(raw);
+        if (normalized.length >= 8) {
+          _hasPopped = true;
+          Navigator.of(context).pop(normalized);
+          return;
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(
+          'Scan Barcode',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        actions: [
+          IconButton(
+            icon: ValueListenableBuilder(
+              valueListenable: _controller,
+              builder: (context, state, child) {
+                return Icon(
+                  state.torchState == TorchState.on
+                      ? Icons.flash_on
+                      : Icons.flash_off,
+                );
+              },
+            ),
+            onPressed: () => _controller.toggleTorch(),
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          MobileScanner(
+            controller: _controller,
+            onDetect: _onDetect,
+          ),
+          // Scan overlay
+          Center(
+            child: Container(
+              width: 280,
+              height: 160,
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFF646CFF), width: 2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          // Instruction text
+          Positioned(
+            bottom: 80,
+            left: 0,
+            right: 0,
+            child: Text(
+              'Point camera at the barcode',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 15,
+                color: Colors.white70,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
