@@ -120,6 +120,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             if (savedGoatPrice != null) {
               _goatPrice = double.tryParse(savedGoatPrice);
             }
+            final savedStockXColorways = scanData['stockxColorways'];
+            if (savedStockXColorways is List && savedStockXColorways.isNotEmpty) {
+              _stockXColorways = _parseColorwaysFromDb(savedStockXColorways);
+            }
+            final savedGoatColorways = scanData['goatColorways'];
+            if (savedGoatColorways is List && savedGoatColorways.isNotEmpty) {
+              _goatColorways = _parseColorwaysFromDb(savedGoatColorways);
+            }
             if (scanData['pricingStatus'] == 'loading') {
               _pricingInterrupted = true;
             }
@@ -893,6 +901,22 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   }
 
 
+  List<ColorwayVariant> _parseColorwaysFromDb(List<dynamic> list) {
+    return list.map((item) {
+      final map = Map<String, dynamic>.from(item as Map);
+      final colorCode = map['colorCode']?.toString() ?? '';
+      final (family, color) = nikeColorFamily(colorCode);
+      return ColorwayVariant(
+        sku: map['sku']?.toString() ?? '',
+        colorCode: colorCode,
+        colorFamily: map['colorFamily']?.toString() ?? family,
+        displayColor: color,
+        price: double.tryParse(map['price']?.toString() ?? '') ?? 0,
+        slug: map['slug']?.toString(),
+      );
+    }).toList();
+  }
+
   /// Fetch colorway variants from a platform-specific KicksDB endpoint.
   Future<List<ColorwayVariant>> _fetchColorwayVariants(
     String platform,
@@ -1029,6 +1053,30 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
       if (_goatPrice != null) {
         updateData['goatPrice'] = _goatPrice!.toStringAsFixed(2);
+      }
+
+      if (_stockXColorways != null && _stockXColorways!.isNotEmpty) {
+        updateData['stockxColorways'] = _stockXColorways!
+            .map((v) => {
+                  'sku': v.sku,
+                  'colorCode': v.colorCode,
+                  'colorFamily': v.colorFamily,
+                  'price': v.price,
+                  'slug': v.slug,
+                })
+            .toList();
+      }
+
+      if (_goatColorways != null && _goatColorways!.isNotEmpty) {
+        updateData['goatColorways'] = _goatColorways!
+            .map((v) => {
+                  'sku': v.sku,
+                  'colorCode': v.colorCode,
+                  'colorFamily': v.colorFamily,
+                  'price': v.price,
+                  'slug': v.slug,
+                })
+            .toList();
       }
 
       if (updateData.isNotEmpty) {
