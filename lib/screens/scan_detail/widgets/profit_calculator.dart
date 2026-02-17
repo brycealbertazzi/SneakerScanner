@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../services/nike_colorway_utils.dart';
 import 'market_price_section.dart';
 
 class ProfitCalculator extends StatefulWidget {
@@ -12,6 +13,9 @@ class ProfitCalculator extends StatefulWidget {
   final bool isLoadingEbayPrices;
   final bool isLoadingStockXPrice;
   final bool isLoadingGoatPrice;
+  final List<ColorwayVariant>? stockXColorways;
+  final List<ColorwayVariant>? goatColorways;
+  final VoidCallback? onOpenEbay;
   final VoidCallback? onOpenStockX;
   final VoidCallback? onOpenGoat;
   final ValueChanged<double?> onRetailPriceChanged;
@@ -27,6 +31,9 @@ class ProfitCalculator extends StatefulWidget {
     required this.isLoadingEbayPrices,
     required this.isLoadingStockXPrice,
     required this.isLoadingGoatPrice,
+    this.stockXColorways,
+    this.goatColorways,
+    this.onOpenEbay,
     this.onOpenStockX,
     this.onOpenGoat,
     required this.onRetailPriceChanged,
@@ -329,6 +336,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             isLoading: widget.isLoadingEbayPrices,
             retailPrice: retailPrice,
             productFound: ebayPrice != null,
+            onOpenMarketplace: ebayPrice != null ? widget.onOpenEbay : null,
           ),
           const SizedBox(height: 12),
 
@@ -343,6 +351,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             isLoading: widget.isLoadingStockXPrice,
             retailPrice: retailPrice,
             productFound: widget.stockXPrice != null,
+            colorways: widget.stockXColorways,
             onOpenMarketplace: widget.stockXPrice != null ? widget.onOpenStockX : null,
           ),
           const SizedBox(height: 12),
@@ -358,6 +367,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             isLoading: widget.isLoadingGoatPrice,
             retailPrice: retailPrice,
             productFound: widget.goatPrice != null,
+            colorways: widget.goatColorways,
             onOpenMarketplace: widget.goatPrice != null ? widget.onOpenGoat : null,
           ),
         ],

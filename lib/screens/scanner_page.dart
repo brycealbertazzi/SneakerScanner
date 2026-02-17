@@ -17,11 +17,38 @@ class ScannerPage extends StatefulWidget {
   State<ScannerPage> createState() => _ScannerPageState();
 }
 
-class _ScannerPageState extends State<ScannerPage> {
+class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   bool _isProcessing = false;
 
   final DatabaseReference _database = FirebaseDatabase.instance.ref();
   final ImagePicker _imagePicker = ImagePicker();
+  final MobileScannerController _previewController = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    facing: CameraFacing.back,
+    torchEnabled: false,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _previewController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _previewController.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      _previewController.start();
+    }
+  }
 
   ScanData _parseLabelInfo(String text) {
     // Normalize: collapse whitespace, uppercase
@@ -259,6 +286,19 @@ class _ScannerPageState extends State<ScannerPage> {
       code = null;
     }
 
+    // --- Size extraction ---
+    String? size;
+    final sizeMatch = RegExp(
+      r'(?:SIZE|US|UK|EU)[:\s]*(\d{1,2}(?:\.\d)?)',
+      caseSensitive: false,
+    ).firstMatch(normalized);
+    if (sizeMatch != null) {
+      final parsed = double.tryParse(sizeMatch.group(1)!);
+      if (parsed != null && parsed >= 1 && parsed <= 20) {
+        size = sizeMatch.group(1)!;
+      }
+    }
+
     // Title-case the brand for storage
     String? brandForStorage;
     if (foundBrand != null) {
@@ -270,6 +310,7 @@ class _ScannerPageState extends State<ScannerPage> {
       modelName: modelName,
       colorway: colorway,
       sku: code,
+      size: size,
     );
   }
 
@@ -298,18 +339,15 @@ class _ScannerPageState extends State<ScannerPage> {
   }
 
   Future<void> _captureAndProcess() async {
-    setState(() => _isProcessing = true);
-
     try {
       final XFile? photo = await _imagePicker.pickImage(
         source: ImageSource.camera,
         preferredCameraDevice: CameraDevice.rear,
       );
 
-      if (photo == null) {
-        setState(() => _isProcessing = false);
-        return;
-      }
+      if (photo == null) return;
+
+      setState(() => _isProcessing = true);
 
       final inputImage = InputImage.fromFilePath(photo.path);
 
@@ -333,7 +371,8 @@ class _ScannerPageState extends State<ScannerPage> {
         }
         debugPrint('Brand: ${scanData.brand ?? 'n/a'}, '
             'Model: ${scanData.modelName ?? 'n/a'}, '
-            'Colorway: ${scanData.colorway ?? 'n/a'}');
+            'Colorway: ${scanData.colorway ?? 'n/a'}, '
+            'Size: ${scanData.size ?? 'n/a'}');
         debugPrint('═══════════════════');
 
         if (scanData.sku != null) {
@@ -628,49 +667,41 @@ class _ScannerPageState extends State<ScannerPage> {
             ),
             const SizedBox(height: 24),
 
-            Container(
-              height: 300,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: _isProcessing
-                    ? Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const CircularProgressIndicator(
-                            color: Color(0xFF646CFF),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                height: 300,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    MobileScanner(
+                      controller: _previewController,
+                      onDetect: (_) {},
+                    ),
+                    if (_isProcessing)
+                      Container(
+                        color: Colors.black54,
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const CircularProgressIndicator(
+                                color: Color(0xFF646CFF),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Reading label...',
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Reading label...',
-                            style: GoogleFonts.inter(
-                              fontSize: 14,
-                              color: Colors.grey[400],
-                            ),
-                          ),
-                        ],
-                      )
-                    : Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.camera_alt_rounded,
-                            size: 64,
-                            color: Colors.grey[600],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Take a photo of the shoe label\nor box with the SKU',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              color: Colors.grey[500],
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 16),

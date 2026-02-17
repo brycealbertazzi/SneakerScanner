@@ -4,6 +4,7 @@ class ScanData {
   final String? colorway;
   final String? sku;
   final String? gtin;
+  final String? size;
 
   const ScanData({
     this.brand,
@@ -11,6 +12,7 @@ class ScanData {
     this.colorway,
     this.sku,
     this.gtin,
+    this.size,
   });
 
   bool get hasIdentifier => sku != null || gtin != null;
@@ -41,6 +43,7 @@ class ScanData {
       if (colorway != null) 'colorway': colorway,
       if (sku != null) 'sku': sku,
       if (gtin != null) 'gtin': gtin,
+      if (size != null) 'size': size,
     };
   }
 
@@ -59,6 +62,7 @@ class ScanData {
         colorway: data['colorway'] as String?,
         sku: data['sku'] as String?,
         gtin: data['gtin'] as String?,
+        size: data['size'] as String?,
       );
     }
 
@@ -85,6 +89,7 @@ class ScanData {
     String? colorway,
     String? sku,
     String? gtin,
+    String? size,
   }) {
     return ScanData(
       brand: brand ?? this.brand,
@@ -92,6 +97,7 @@ class ScanData {
       colorway: colorway ?? this.colorway,
       sku: sku ?? this.sku,
       gtin: gtin ?? this.gtin,
+      size: size ?? this.size,
     );
   }
 }

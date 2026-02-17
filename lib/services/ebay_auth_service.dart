@@ -20,7 +20,8 @@ class EbayAuthService {
     }
 
     // Skip if credentials not configured
-    if (ApiKeys.ebayClientId == 'YOUR_EBAY_CLIENT_ID') {
+    if (ApiKeys.ebayClientId.isEmpty || ApiKeys.ebayClientSecret.isEmpty) {
+      debugPrint('eBay OAuth: credentials empty, skipping');
       return null;
     }
 

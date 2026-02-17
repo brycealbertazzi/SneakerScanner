@@ -10,8 +10,8 @@ import '../../api_keys.dart';
 import '../../constants.dart';
 import '../../models/scan_data.dart';
 import '../../services/ebay_auth_service.dart';
+import '../../services/nike_colorway_utils.dart';
 import 'widgets/info_card.dart';
-import 'widgets/ebay_prices_section.dart';
 import 'widgets/profit_calculator.dart';
 
 class ScanDetailPage extends StatefulWidget {
@@ -54,6 +54,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   bool _isLoadingGoatPrice = false;
   double? _goatPrice;
   String? _goatSlug;
+
+  // Colorway variants (Nike/Jordan fallback)
+  List<ColorwayVariant>? _stockXColorways;
+  List<ColorwayVariant>? _goatColorways;
 
   final DatabaseReference _database = FirebaseDatabase.instance.ref();
 
@@ -139,8 +143,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               _identityConfirmed = confirmed;
               _isLoading = false;
             });
-            _fetchAllPrices();
-            return;
+            // Don't return — still need to run _lookupProduct for
+            // StockX/GOAT pricing + colorway fallback
           }
         }
       }
@@ -155,103 +159,180 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     }
   }
 
-  /// Unified product lookup flow:
-  /// 1. SKU → KicksDB exact search (identity confirmed)
-  /// 2. GTIN → KicksDB unified/gtin lookup (identity confirmed)
+  /// Unified product lookup + pricing flow:
+  /// 1. Call /unified/products/<sku> or /unified/gtin — identifies shoe + extracts StockX/GOAT prices
+  /// 2. If StockX/GOAT missing & Nike/Jordan — colorway fallback via platform-specific endpoints
   /// 3. Not found fallback
   Future<void> _lookupProduct() async {
-    try {
-      Map<String, dynamic>? productInfo;
-      bool confirmed = false;
-      final sku = widget.scanData.sku;
+    final stopwatch = Stopwatch()..start();
 
-      // Step 1: SKU → KicksDB exact (identity confirmed)
+    try {
+      // Preserve any cached identity so we don't overwrite with worse data
+      Map<String, dynamic>? productInfo = _productInfo;
+      bool confirmed = _identityConfirmed;
+      final sku = widget.scanData.sku;
+      final gtin = widget.scanData.gtin;
+
+      // ── Step 1: Call unified endpoint ──────────────────────────────
+      Uri? unifiedUri;
       if (sku != null && sku.isNotEmpty) {
-        debugPrint('═══ LOOKUP STEP 1 ═══');
-        debugPrint('KicksDB exact search for SKU "$sku"');
-        productInfo = await _searchKicksDb(sku, isStyleCodeSearch: true);
-        if (productInfo != null) confirmed = true;
+        unifiedUri = Uri.parse(
+          'https://api.kicks.dev/v3/unified/products'
+          '/${Uri.encodeComponent(sku)}?similarity=0.85',
+        );
+      } else if (gtin != null && gtin.isNotEmpty) {
+        unifiedUri = Uri.parse(
+          'https://api.kicks.dev/v3/unified/gtin'
+          '?identifier=${Uri.encodeComponent(gtin)}',
+        );
       }
 
-      // Step 2: GTIN → KicksDB unified lookup (identity confirmed)
-      if (productInfo == null && widget.scanData.gtin != null) {
-        final gtin = widget.scanData.gtin!;
-        debugPrint('═══ LOOKUP STEP 2 ═══');
-        debugPrint('KicksDB GTIN lookup for "$gtin"');
+      List<Map<String, dynamic>> unifiedItems = [];
 
-        final gtinUrl =
-            'https://api.kicks.dev/v3/unified/gtin'
-            '?identifier=${Uri.encodeComponent(gtin)}';
-        debugPrint('[KicksDB GTIN] Request: $gtinUrl');
+      if (unifiedUri != null) {
+        debugPrint('═══ STEP 1: KicksDB Unified ═══');
+        debugPrint('[Unified] Request: $unifiedUri');
 
-        final response = await http.get(
-          Uri.parse(gtinUrl),
-          headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'},
+        final response = await http
+            .get(
+              unifiedUri,
+              headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'},
+            )
+            .timeout(const Duration(seconds: 15));
+
+        debugPrint('[Unified] Status: ${response.statusCode}');
+        debugPrint(
+          '[Unified] Body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}',
         );
 
-        debugPrint('[KicksDB GTIN] Status: ${response.statusCode}');
-
         if (response.statusCode == 200) {
-          final body = json.decode(response.body);
-          final data = body is Map && body.containsKey('data')
-              ? body['data']
-              : body;
-
-          if (data is Map<String, dynamic> && data.isNotEmpty) {
-            final title = data['title'] ?? data['name'];
-            if (title != null) {
-              productInfo = {
-                'title': title,
-                'brand': data['brand'] ?? '',
-                'sku': data['style_id'] ?? data['styleId'] ?? '',
-                'styleCode': data['style_id'] ?? data['styleId'] ?? '',
-                'retailPrice': data['retailPrice']?.toString(),
-                'images': data['images'] is List
-                    ? data['images']
-                    : data['image'] != null
-                        ? [data['image']]
-                        : [],
-                'model': data['model'] ?? '',
-                'slug': data['slug'] ?? '',
-                'category': data['category'] ?? '',
-              };
-              confirmed = true;
-              debugPrint('[KicksDB GTIN] Match found: $title');
+          final body = jsonDecode(response.body);
+          if (body is Map<String, dynamic>) {
+            if (body.containsKey('data') && body['data'] is List) {
+              for (var item in body['data']) {
+                unifiedItems.add(item as Map<String, dynamic>);
+              }
+            } else if (body.containsKey('shop_name') || body.containsKey('title')) {
+              unifiedItems.add(body);
             }
-          } else if (data is List && data.isNotEmpty) {
-            final first = data[0] as Map<String, dynamic>;
-            final title = first['title'] ?? first['name'];
-            if (title != null) {
-              productInfo = {
-                'title': title,
-                'brand': first['brand'] ?? '',
-                'sku': first['style_id'] ?? first['styleId'] ?? '',
-                'styleCode': first['style_id'] ?? first['styleId'] ?? '',
-                'retailPrice': first['retailPrice']?.toString(),
-                'images': first['images'] is List
-                    ? first['images']
-                    : first['image'] != null
-                        ? [first['image']]
-                        : [],
-                'model': first['model'] ?? '',
-                'slug': first['slug'] ?? '',
-                'category': first['category'] ?? '',
-              };
-              confirmed = true;
-              debugPrint('[KicksDB GTIN] Match found: $title');
+          } else if (body is List) {
+            for (var item in body) {
+              unifiedItems.add(item as Map<String, dynamic>);
             }
           }
         }
+      }
 
+      // The SKU to match against
+      final matchSku = sku ?? '';
+      final size = widget.scanData.size;
+
+      // Extract identity from first matching result + StockX/GOAT prices
+      for (final item in unifiedItems) {
+        final shopName = (item['shop_name'] ?? '').toString().toLowerCase();
+        final apiSku = (item['sku'] ?? '').toString();
+
+        // Identity: use the first result that has a title
         if (productInfo == null) {
-          debugPrint('[KicksDB GTIN] No match found');
+          final title = item['title'] ?? item['name'];
+          if (title != null) {
+            productInfo = {
+              'title': title,
+              'brand': item['brand'] ?? '',
+              'sku': apiSku,
+              'styleCode': apiSku,
+              'retailPrice': item['retailPrice']?.toString() ??
+                  item['retail_price']?.toString(),
+              'images': item['images'] is List
+                  ? item['images']
+                  : item['image'] != null
+                      ? [item['image']]
+                      : [],
+              'model': item['model'] ?? '',
+              'slug': item['slug'] ?? '',
+              'category': item['category'] ?? '',
+            };
+            confirmed = true;
+            debugPrint('[Unified] Identity found: "$title" (${stopwatch.elapsedMilliseconds}ms)');
+          }
+        }
+
+        // Prices: only from stockx/goat with SKU match
+        if (shopName != 'stockx' && shopName != 'goat') continue;
+        if (matchSku.isNotEmpty && !_skuSubsequenceMatch(matchSku, apiSku)) {
+          debugPrint('[Unified] Skip $shopName — SKU mismatch: "$apiSku" vs "$matchSku"');
+          continue;
+        }
+
+        final pricesRaw = item['prices'];
+        if (pricesRaw is! Map<String, dynamic>) continue;
+        final price = _extractPriceFromMap(pricesRaw, size);
+        if (price == null || price <= 0) continue;
+
+        final slug = (item['slug'] ?? item['id'] ?? item['name'])?.toString();
+
+        if (shopName == 'stockx' && _stockXPrice == null) {
+          debugPrint('[Unified] StockX price: \$${price.toStringAsFixed(2)} (${stopwatch.elapsedMilliseconds}ms)');
+          _stockXPrice = price;
+          _stockXSlug = slug;
+        } else if (shopName == 'goat' && _goatPrice == null) {
+          debugPrint('[Unified] GOAT price: \$${price.toStringAsFixed(2)} (${stopwatch.elapsedMilliseconds}ms)');
+          _goatPrice = price;
+          _goatSlug = slug;
         }
       }
 
-      // Step 3: No match — mark as not found
+      // ── Step 2: Colorway fallback (Nike/Jordan only) ───────────────
+      final brand = productInfo?['brand'] as String? ?? widget.scanData.brand ?? '';
+      if (isNikeOrJordan(brand) && sku != null && sku.isNotEmpty) {
+        final parsed = parseNikeSku(sku);
+        if (parsed != null) {
+          final (modelBlock, _) = parsed;
+
+          if (_stockXPrice == null) {
+            debugPrint('═══ STEP 2: StockX colorway fallback ═══');
+            final variants = await _fetchColorwayVariants(
+              'stockx', sku, modelBlock, stopwatch,
+            );
+            if (variants.isNotEmpty) {
+              _stockXColorways = variants;
+              _stockXPrice = variants.first.price;
+              _stockXSlug = variants.first.slug;
+            }
+          }
+
+          if (_goatPrice == null) {
+            debugPrint('═══ STEP 2: GOAT colorway fallback ═══');
+            final variants = await _fetchColorwayVariants(
+              'goat', sku, modelBlock, stopwatch,
+            );
+            if (variants.isNotEmpty) {
+              _goatColorways = variants;
+              _goatPrice = variants.first.price;
+              _goatSlug = variants.first.slug;
+            }
+          }
+        }
+      }
+
+      // If unified didn't find identity but colorway fallback did find results,
+      // use the scan data for identity
+      if (productInfo == null && (_stockXPrice != null || _goatPrice != null)) {
+        productInfo = {
+          'title': widget.scanData.displayName.isNotEmpty
+              ? widget.scanData.displayName
+              : 'Unknown Product',
+          'brand': widget.scanData.brand ?? '',
+          'sku': sku ?? '',
+          'styleCode': sku ?? '',
+        };
+        confirmed = true;
+      }
+
+      // ── Step 3: Not found ──────────────────────────────────────────
       if (productInfo == null) {
-        debugPrint('═══ LOOKUP STEP 3 ═══');
-        debugPrint('No product found — identity not confirmed');
+        debugPrint('═══ NOT FOUND ═══');
+        debugPrint('No product found (${stopwatch.elapsedMilliseconds}ms)');
 
         setState(() {
           _productInfo = {
@@ -268,7 +349,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         return;
       }
 
-      // Steps 1, 2 succeeded — save and update state
+      // ── Save and update state ──────────────────────────────────────
       final title = productInfo['title'];
       final image = (productInfo['images'] as List?)?.isNotEmpty == true
           ? productInfo['images'][0]
@@ -294,10 +375,23 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             });
       }
 
+      debugPrint('');
+      debugPrint('╔══════════════════════════════════════════════════════════════╗');
+      debugPrint('║  LOOKUP COMPLETE (${stopwatch.elapsedMilliseconds}ms)');
+      debugPrint('║  Product: $title');
+      debugPrint('║  StockX: \$${_stockXPrice?.toStringAsFixed(2) ?? "N/A"}');
+      debugPrint('║  GOAT: \$${_goatPrice?.toStringAsFixed(2) ?? "N/A"}');
+      debugPrint('╚══════════════════════════════════════════════════════════════╝');
+      debugPrint('');
+
       setState(() {
         _productInfo = productInfo;
         _identityConfirmed = confirmed;
+        _isLoadingStockXPrice = false;
+        _isLoadingGoatPrice = false;
         _isLoading = false;
+        // Colorway variants set during step 2 fallback
+        // (already assigned above, but setState triggers rebuild)
       });
     } catch (e) {
       debugPrint('Lookup error: $e');
@@ -307,7 +401,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               ? widget.scanData.displayName
               : 'Product Not Found',
           'brand': widget.scanData.brand ?? '',
-          'description': 'No product found. Similar results may appear below.',
+          'description': 'No product found.',
           'notFound': true,
         };
         _identityConfirmed = false;
@@ -462,10 +556,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       final brand = product['brand'] ?? '';
       final image = product['image'] ?? product['thumbnail'] ?? '';
       final retailPrice = product['retail_price']?.toString();
-      final styleId = (product['style_id'] ?? '')
+      final styleId = (product['style_id'] ?? product['sku'] ?? '')
           .toString()
           .replaceAll(' ', '-')
           .toUpperCase();
+      debugPrint('[KicksDB Lookup] Candidate: "$title" styleId="$styleId" brand="$brand"');
 
       if (_isRetailerLabel(brand.toString())) {
         debugPrint('KicksDB skip (retailer label): "$title" brand="$brand"');
@@ -482,18 +577,50 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         if (styleId.isNotEmpty && styleId == queryNorm) {
           // exact match
         } else {
-          final titleUpper = title.toString().toUpperCase();
-          final slugUpper = (product['slug'] ?? '')
-              .toString()
-              .replaceAll('-', ' ')
-              .toUpperCase();
-          if (!titleUpper.contains(queryNorm) &&
-              !titleUpper.contains(queryNorm.replaceAll('-', ' ')) &&
-              !slugUpper.contains(queryNorm.replaceAll('-', ' '))) {
-            debugPrint(
-              'KicksDB skip (style code "$queryNorm" not found in product): "$title" style_id="$styleId"',
-            );
-            continue;
+          // Nike/Jordan: accept same model block, different colorway
+          final brandStr = brand.toString();
+          if (isNikeOrJordan(brandStr) && styleId.isNotEmpty) {
+            final scannedParsed = parseNikeSku(queryNorm);
+            final apiParsed = parseNikeSku(styleId);
+            if (scannedParsed != null &&
+                apiParsed != null &&
+                scannedParsed.$1 == apiParsed.$1) {
+              debugPrint(
+                'KicksDB accept (same model, different colorway): "$title" '
+                'scanned=${scannedParsed.$1}-${scannedParsed.$2} '
+                'api=${apiParsed.$1}-${apiParsed.$2}',
+              );
+              // fall through — accepted as identity match
+            } else {
+              // Not a model-block match, try title/slug fallback
+              final titleUpper = title.toString().toUpperCase();
+              final slugUpper = (product['slug'] ?? '')
+                  .toString()
+                  .replaceAll('-', ' ')
+                  .toUpperCase();
+              if (!titleUpper.contains(queryNorm) &&
+                  !titleUpper.contains(queryNorm.replaceAll('-', ' ')) &&
+                  !slugUpper.contains(queryNorm.replaceAll('-', ' '))) {
+                debugPrint(
+                  'KicksDB skip (style code "$queryNorm" not found in product): "$title" style_id="$styleId"',
+                );
+                continue;
+              }
+            }
+          } else {
+            final titleUpper = title.toString().toUpperCase();
+            final slugUpper = (product['slug'] ?? '')
+                .toString()
+                .replaceAll('-', ' ')
+                .toUpperCase();
+            if (!titleUpper.contains(queryNorm) &&
+                !titleUpper.contains(queryNorm.replaceAll('-', ' ')) &&
+                !slugUpper.contains(queryNorm.replaceAll('-', ' '))) {
+              debugPrint(
+                'KicksDB skip (style code "$queryNorm" not found in product): "$title" style_id="$styleId"',
+              );
+              continue;
+            }
           }
         }
       }
@@ -635,17 +762,32 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         return;
       }
 
-      final searchQuery = _buildSearchQuery();
       final baseUrl = ApiKeys.ebayProduction
           ? 'https://api.ebay.com'
           : 'https://api.sandbox.ebay.com';
 
-      final requestUrl =
-          '$baseUrl/buy/browse/v1/item_summary/search?'
-          'q=${Uri.encodeComponent(searchQuery)}'
-          '&category_ids=93427'
-          '&limit=50'
-          '&sort=price';
+      final sku = widget.scanData.sku;
+      final gtin = widget.scanData.gtin;
+
+      String requestUrl;
+      if (sku != null && sku.isNotEmpty) {
+        requestUrl =
+            '$baseUrl/buy/browse/v1/item_summary/search?'
+            'q=${Uri.encodeComponent(sku)}'
+            '&limit=1';
+      } else if (gtin != null && gtin.isNotEmpty) {
+        requestUrl =
+            '$baseUrl/buy/browse/v1/item_summary/search?'
+            'gtin=$gtin'
+            '&limit=1';
+      } else {
+        debugPrint('[eBay] No SKU or GTIN available, skipping');
+        setState(() {
+          _isLoadingEbayPrices = false;
+          _ebayError = 'No identifier for eBay lookup';
+        });
+        return;
+      }
       debugPrint('[eBay] Request: $requestUrl');
 
       final response = await http
@@ -669,37 +811,23 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         final items = data['itemSummaries'] as List? ?? [];
 
         if (items.isNotEmpty) {
-          double totalPrice = 0;
-          double? lowestPrice;
-          int validPrices = 0;
-
-          for (var item in items) {
-            final priceData = item['price'];
-            if (priceData != null && priceData['value'] != null) {
-              final price = double.tryParse(priceData['value'].toString());
-              if (price != null && price > 0) {
-                totalPrice += price;
-                validPrices++;
-                if (lowestPrice == null || price < lowestPrice) {
-                  lowestPrice = price;
-                }
-              }
+          final item = items[0];
+          final priceData = item['price'];
+          if (priceData != null && priceData['value'] != null) {
+            final price = double.tryParse(priceData['value'].toString());
+            if (price != null && price > 0) {
+              debugPrint(
+                '[eBay] price=\$${price.toStringAsFixed(2)} '
+                '(${stopwatch.elapsedMilliseconds}ms)',
+              );
+              setState(() {
+                _ebayLowestPrice = price;
+                _ebayAveragePrice = price;
+                _ebayListingCount = 1;
+                _isLoadingEbayPrices = false;
+              });
+              return;
             }
-          }
-
-          if (validPrices > 0) {
-            debugPrint(
-              '[eBay] avg=\$${(totalPrice / validPrices).toStringAsFixed(2)} '
-              'lowest=\$${lowestPrice?.toStringAsFixed(2)} '
-              'listings=$validPrices (${stopwatch.elapsedMilliseconds}ms)',
-            );
-            setState(() {
-              _ebayLowestPrice = lowestPrice;
-              _ebayAveragePrice = totalPrice / validPrices;
-              _ebayListingCount = validPrices;
-              _isLoadingEbayPrices = false;
-            });
-            return;
           }
         }
       }
@@ -723,170 +851,63 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   Future<void> _fetchAllPrices() async {
     if (_productInfo == null) return;
 
-    // eBay always runs immediately, separate from StockX/GOAT flow
+    // eBay runs separately — StockX/GOAT prices already set by _lookupProduct
     _fetchEbayPrices();
-
-    if (!_identityConfirmed) {
-      debugPrint('');
-      debugPrint(
-        '╔══════════════════════════════════════════════════════════════╗',
-      );
-      debugPrint(
-        '║  PRICING SKIPPED: identity not confirmed for $_primaryCode',
-      );
-      debugPrint(
-        '╚══════════════════════════════════════════════════════════════╝',
-      );
-      debugPrint('');
-      setState(() {
-        _isLoadingStockXPrice = false;
-        _isLoadingGoatPrice = false;
-      });
-      return;
-    }
-
-    setState(() {
-      _isLoadingStockXPrice = true;
-      _isLoadingGoatPrice = true;
-    });
-
-    if (_priceCacheEnabled && _primaryCode.isNotEmpty) {
-      try {
-        final cacheSnapshot = await _database
-            .child('priceCache')
-            .child(_primaryCode)
-            .get();
-
-        if (cacheSnapshot.exists) {
-          final cacheData = Map<String, dynamic>.from(
-            cacheSnapshot.value as Map,
-          );
-          final cachedAt = cacheData['cachedAt'] as int?;
-          final now = DateTime.now().millisecondsSinceEpoch;
-
-          if (cachedAt != null && (now - cachedAt) < _priceCacheTtlMs) {
-            final cachedStockX = double.tryParse(
-              (cacheData['stockxPrice'] ?? '').toString(),
-            );
-            final cachedGoat = double.tryParse(
-              (cacheData['goatPrice'] ?? '').toString(),
-            );
-            setState(() {
-              _stockXPrice = (cachedStockX != null && cachedStockX > 0)
-                  ? cachedStockX
-                  : null;
-              _stockXSlug = (cachedStockX != null && cachedStockX > 0)
-                  ? cacheData['stockxSlug'] as String?
-                  : null;
-              _goatPrice = (cachedGoat != null && cachedGoat > 0)
-                  ? cachedGoat
-                  : null;
-              _goatSlug = (cachedGoat != null && cachedGoat > 0)
-                  ? cacheData['goatSlug'] as String?
-                  : null;
-              _isLoadingStockXPrice = false;
-              _isLoadingGoatPrice = false;
-            });
-            _savePricesToDatabase();
-            return;
-          }
-        }
-      } catch (e) {
-        debugPrint('Price cache read error: $e');
-      }
-    }
-
-    final totalStopwatch = Stopwatch()..start();
-
-    _pricingInterrupted = false;
-    _setPricingStatus('loading');
-
-    debugPrint('');
-    debugPrint(
-      '╔══════════════════════════════════════════════════════════════╗',
-    );
-    debugPrint('║  PRICING WATERFALL START: $_primaryCode');
-    debugPrint(
-      '╚══════════════════════════════════════════════════════════════╝',
-    );
-
-    // Step 1: KicksDB by SKU — if StockX or GOAT found, stop
-    debugPrint('');
-    debugPrint('═══ STEP 1: KicksDB by SKU ═══');
-    await _fetchKicksDbStockXPrice();
-    await _fetchKicksDbGoatPrice();
-    debugPrint(
-      '[KicksDB] Result: stockx=\$${_stockXPrice?.toStringAsFixed(2) ?? "N/A"} '
-      'goat=\$${_goatPrice?.toStringAsFixed(2) ?? "N/A"}',
-    );
-
-    _finalizePricing(totalStopwatch);
-  }
-
-  void _finalizePricing(Stopwatch totalStopwatch) {
-    setState(() {
-      _isLoadingStockXPrice = false;
-      _isLoadingGoatPrice = false;
-    });
-
-    if (_priceCacheEnabled &&
-        _primaryCode.isNotEmpty &&
-        (_stockXPrice != null || _goatPrice != null)) {
-      try {
-        final cacheData = <String, dynamic>{'cachedAt': ServerValue.timestamp};
-        if (_stockXPrice != null) {
-          cacheData['stockxPrice'] = _stockXPrice!.toStringAsFixed(2);
-          cacheData['stockxSlug'] = _stockXSlug;
-        }
-        if (_goatPrice != null) {
-          cacheData['goatPrice'] = _goatPrice!.toStringAsFixed(2);
-          cacheData['goatSlug'] = _goatSlug;
-        }
-        _database.child('priceCache').child(_primaryCode).set(cacheData);
-      } catch (e) {
-        debugPrint('Price cache write error: $e');
-      }
-    }
-
     _savePricesToDatabase();
     _setPricingStatus('complete');
-
-    debugPrint('');
-    debugPrint(
-      '╔══════════════════════════════════════════════════════════════╗',
-    );
-    debugPrint(
-      '║  PRICING WATERFALL COMPLETE (${totalStopwatch.elapsedMilliseconds}ms)',
-    );
-    debugPrint(
-      '║  eBay: avg=\$${_ebayAveragePrice?.toStringAsFixed(2) ?? "N/A"} lowest=\$${_ebayLowestPrice?.toStringAsFixed(2) ?? "N/A"}',
-    );
-    debugPrint('║  StockX: \$${_stockXPrice?.toStringAsFixed(2) ?? "N/A"}');
-    debugPrint('║  GOAT: \$${_goatPrice?.toStringAsFixed(2) ?? "N/A"}');
-    debugPrint(
-      '╚══════════════════════════════════════════════════════════════╝',
-    );
-    debugPrint('');
   }
 
-  Future<void> _fetchKicksDbStockXPrice() async {
-    if (_stockXPrice != null) return;
-    // KicksDB pricing only queries by SKU — never by title
-    final query = _skuQuery;
-    if (query == null) {
-      debugPrint('[KicksDB StockX] Skipped — no SKU available');
-      return;
+  /// Check if [scannedSku]'s alphanumeric characters (in order) are a
+  /// subsequence of [apiSku]'s alphanumeric characters.
+  bool _skuSubsequenceMatch(String scannedSku, String apiSku) {
+    final scanned = scannedSku.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+    final api = apiSku.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+    if (scanned.isEmpty) return false;
+    int j = 0;
+    for (int i = 0; i < api.length && j < scanned.length; i++) {
+      if (api[i] == scanned[j]) j++;
     }
-    final stopwatch = Stopwatch()..start();
-    debugPrint('[KicksDB StockX] Starting lookup for SKU "$query"');
-    try {
-      final uri = Uri.parse(
-        'https://api.kicks.dev/v3/stockx/products'
-        '?query=${Uri.encodeComponent(query)}&limit=1'
-        '&display[prices]=true&display[variants]=true',
-      );
-      debugPrint('[KicksDB StockX] Request: $uri');
+    return j == scanned.length;
+  }
 
+  /// Extract a price from the `prices` size-map.
+  /// If [size] matches a key, use that; otherwise pick the highest price.
+  double? _extractPriceFromMap(Map<String, dynamic> prices, String? size) {
+    if (prices.isEmpty) return null;
+
+    // Try exact size match
+    if (size != null && prices.containsKey(size)) {
+      final p = double.tryParse(prices[size].toString());
+      if (p != null && p > 0) return p;
+    }
+
+    // Fallback: highest price
+    double? highest;
+    for (final entry in prices.entries) {
+      final p = double.tryParse(entry.value.toString());
+      if (p != null && p > 0 && (highest == null || p > highest)) {
+        highest = p;
+      }
+    }
+    return highest;
+  }
+
+
+  /// Fetch colorway variants from a platform-specific KicksDB endpoint.
+  Future<List<ColorwayVariant>> _fetchColorwayVariants(
+    String platform,
+    String sku,
+    String modelBlock,
+    Stopwatch stopwatch,
+  ) async {
+    final uri = Uri.parse(
+      'https://api.kicks.dev/v3/$platform/products'
+      '?query=${Uri.encodeComponent(sku)}&limit=5'
+      '&display[prices]=true&display[variants]=true',
+    );
+    debugPrint('[KicksDB $platform colorway] Request: $uri');
+
+    try {
       final response = await http
           .get(
             uri,
@@ -894,9 +915,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           )
           .timeout(const Duration(seconds: 10));
 
-      debugPrint('[KicksDB StockX] Status: ${response.statusCode}');
-
-      if (response.statusCode != 200) return;
+      debugPrint('[KicksDB $platform colorway] Status: ${response.statusCode}');
+      if (response.statusCode != 200) return [];
 
       final body = jsonDecode(response.body);
       final List<Map<String, dynamic>> candidates = [];
@@ -905,7 +925,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           for (var item in body['data']) {
             candidates.add(item as Map<String, dynamic>);
           }
-        } else if (body.containsKey('title') || body.containsKey('slug')) {
+        } else if (body.containsKey('title') || body.containsKey('name') || body.containsKey('slug')) {
           candidates.add(body);
         }
       } else if (body is List) {
@@ -914,166 +934,75 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         }
       }
 
+      final variants = <ColorwayVariant>[];
+      final seenFamilies = <String>{};
       for (final product in candidates) {
-        if (!_isProductMatch(product)) {
-          debugPrint('[KicksDB StockX] Skip mismatch: "${product['title']}"');
-          continue;
-        }
+        final apiSku = (product['style_id'] ?? product['sku'] ?? '').toString();
+        final parsed = parseNikeSku(apiSku);
+        if (parsed == null) continue;
 
-        double? lowestAsk;
-        final minPrice = double.tryParse(
-          (product['min_price'] ?? '').toString(),
-        );
-        if (minPrice != null && minPrice > 0) lowestAsk = minPrice;
+        final (apiModel, apiColor) = parsed;
+        // Model block must match; colorway can differ
+        if (apiModel.toUpperCase() != modelBlock.toUpperCase()) continue;
 
-        if (lowestAsk == null) {
-          final avgPrice = double.tryParse(
-            (product['avg_price'] ?? '').toString(),
-          );
-          if (avgPrice != null && avgPrice > 0) lowestAsk = avgPrice;
-        }
+        // Extract price (old format: min_price → avg_price → variants lowest_ask)
+        final price = _extractOldFormatPrice(product);
+        if (price == null || price <= 0) continue;
 
-        if (lowestAsk == null) {
-          final variants = product['variants'] as List?;
-          if (variants != null) {
-            for (var variant in variants) {
-              final ask = variant['lowest_ask'];
-              if (ask != null) {
-                final askPrice = double.tryParse(ask.toString());
-                if (askPrice != null && askPrice > 0) {
-                  if (lowestAsk == null || askPrice < lowestAsk)
-                    lowestAsk = askPrice;
-                }
-              }
-            }
-          }
-        }
+        final (family, color) = nikeColorFamily(apiColor);
 
-        if (lowestAsk != null && lowestAsk > 0) {
-          debugPrint(
-            '[KicksDB StockX] Price: \$$lowestAsk (${stopwatch.elapsedMilliseconds}ms)',
-          );
-          setState(() {
-            _stockXPrice = lowestAsk;
-            _stockXSlug = product['slug'] as String?;
-            _isLoadingStockXPrice = false;
-          });
-          return;
-        }
+        // Skip duplicate color families (e.g. 001 and 003 are both Black)
+        if (seenFamilies.contains(family)) continue;
+        seenFamilies.add(family);
+
+        final slug = (product['slug'] ?? product['id'] ?? product['name'])?.toString();
+
+        variants.add(ColorwayVariant(
+          sku: apiSku,
+          colorCode: apiColor,
+          colorFamily: family,
+          displayColor: color,
+          price: price,
+          slug: slug,
+        ));
       }
+
       debugPrint(
-        '[KicksDB StockX] No price found (${stopwatch.elapsedMilliseconds}ms)',
+        '[KicksDB $platform colorway] Found ${variants.length} variants '
+        '(${stopwatch.elapsedMilliseconds}ms)',
       );
+      return variants;
     } catch (e) {
-      debugPrint(
-        '[KicksDB StockX] Error: $e (${stopwatch.elapsedMilliseconds}ms)',
-      );
+      debugPrint('[KicksDB $platform colorway] Error: $e');
+      return [];
     }
   }
 
-  Future<void> _fetchKicksDbGoatPrice() async {
-    if (_goatPrice != null) return;
-    // KicksDB pricing only queries by SKU — never by title
-    final query = _skuQuery;
-    if (query == null) {
-      debugPrint('[KicksDB GOAT] Skipped — no SKU available');
-      return;
-    }
-    final stopwatch = Stopwatch()..start();
-    debugPrint('[KicksDB GOAT] Starting lookup for SKU "$query"');
-    try {
-      final uri = Uri.parse(
-        'https://api.kicks.dev/v3/goat/products'
-        '?query=${Uri.encodeComponent(query)}&limit=1'
-        '&display[prices]=true&display[variants]=true',
-      );
-      debugPrint('[KicksDB GOAT] Request: $uri');
+  /// Extract price from old KicksDB format (min_price → avg_price → variants lowest_ask).
+  double? _extractOldFormatPrice(Map<String, dynamic> product) {
+    final minPrice = double.tryParse((product['min_price'] ?? '').toString());
+    if (minPrice != null && minPrice > 0) return minPrice;
 
-      final response = await http
-          .get(
-            uri,
-            headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'},
-          )
-          .timeout(const Duration(seconds: 10));
+    final avgPrice = double.tryParse((product['avg_price'] ?? '').toString());
+    if (avgPrice != null && avgPrice > 0) return avgPrice;
 
-      debugPrint('[KicksDB GOAT] Status: ${response.statusCode}');
-
-      if (response.statusCode != 200) return;
-
-      final body = jsonDecode(response.body);
-      final List<Map<String, dynamic>> candidates = [];
-      if (body is Map<String, dynamic>) {
-        if (body.containsKey('data') && body['data'] is List) {
-          for (var item in body['data']) {
-            candidates.add(item as Map<String, dynamic>);
-          }
-        } else if (body.containsKey('name') || body.containsKey('slug')) {
-          candidates.add(body);
-        }
-      } else if (body is List) {
-        for (var item in body) {
-          candidates.add(item as Map<String, dynamic>);
-        }
-      }
-
-      for (final product in candidates) {
-        if (!_isProductMatch(product)) {
-          debugPrint(
-            '[KicksDB GOAT] Skip mismatch: "${product['name'] ?? product['title']}"',
-          );
-          continue;
-        }
-
-        double? lowestAsk;
-        final minPrice = double.tryParse(
-          (product['min_price'] ?? '').toString(),
-        );
-        if (minPrice != null && minPrice > 0) lowestAsk = minPrice;
-
-        if (lowestAsk == null) {
-          final avgPrice = double.tryParse(
-            (product['avg_price'] ?? '').toString(),
-          );
-          if (avgPrice != null && avgPrice > 0) lowestAsk = avgPrice;
-        }
-
-        if (lowestAsk == null) {
-          final variants = product['variants'] as List?;
-          if (variants != null) {
-            for (var variant in variants) {
-              final ask = variant['lowest_ask'];
-              if (ask != null) {
-                final askPrice = double.tryParse(ask.toString());
-                if (askPrice != null && askPrice > 0) {
-                  if (lowestAsk == null || askPrice < lowestAsk)
-                    lowestAsk = askPrice;
-                }
-              }
+    final variants = product['variants'] as List?;
+    if (variants != null) {
+      double? lowest;
+      for (var variant in variants) {
+        final ask = variant['lowest_ask'];
+        if (ask != null) {
+          final askPrice = double.tryParse(ask.toString());
+          if (askPrice != null && askPrice > 0) {
+            if (lowest == null || askPrice < lowest) {
+              lowest = askPrice;
             }
           }
         }
-
-        if (lowestAsk != null && lowestAsk > 0) {
-          debugPrint(
-            '[KicksDB GOAT] Price: \$$lowestAsk (${stopwatch.elapsedMilliseconds}ms)',
-          );
-          setState(() {
-            _goatPrice = lowestAsk;
-            _goatSlug = (product['slug'] ?? product['id'] ?? product['name'])
-                ?.toString();
-            _isLoadingGoatPrice = false;
-          });
-          return;
-        }
       }
-      debugPrint(
-        '[KicksDB GOAT] No price found (${stopwatch.elapsedMilliseconds}ms)',
-      );
-    } catch (e) {
-      debugPrint(
-        '[KicksDB GOAT] Error: $e (${stopwatch.elapsedMilliseconds}ms)',
-      );
+      return lowest;
     }
+    return null;
   }
 
   Future<void> _savePricesToDatabase() async {
@@ -1267,16 +1196,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                       ),
                     const SizedBox(height: 20),
 
-                    // 4. eBay Prices Section
-                    EbayPricesSection(
-                      isLoading: _isLoadingEbayPrices,
-                      lowestPrice: _ebayLowestPrice,
-                      averagePrice: _ebayAveragePrice,
-                      listingCount: _ebayListingCount,
-                      error: _ebayError,
-                    ),
-
-                    // 5. Info Cards
+                    // 4. Info Cards
                     ..._buildInfoCards(),
                     const SizedBox(height: 24),
 
@@ -1314,6 +1234,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                         isLoadingEbayPrices: _isLoadingEbayPrices,
                         isLoadingStockXPrice: _isLoadingStockXPrice,
                         isLoadingGoatPrice: _isLoadingGoatPrice,
+                        stockXColorways: _stockXColorways,
+                        goatColorways: _goatColorways,
+                        onOpenEbay: _openEbaySearch,
                         onOpenStockX: _openStockXSearch,
                         onOpenGoat: _openGoatSearch,
                         onRetailPriceChanged: (value) {
@@ -1335,68 +1258,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                       const SizedBox(height: 16),
                     ],
 
-                    // 9. Marketplace buttons — MOVED UP
-                    if (_ebayAveragePrice != null) ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _openEbaySearch,
-                          icon: const Icon(Icons.shopping_bag),
-                          label: const Text('Open on eBay'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0064D2),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    if (_stockXPrice != null) ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _openStockXSearch,
-                          icon: const Icon(Icons.store),
-                          label: const Text('Open on StockX'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF006340),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    if (_goatPrice != null) ...[
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _openGoatSearch,
-                          icon: const Icon(Icons.storefront),
-                          label: const Text('Open on GOAT'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF7B61FF),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    if (_ebayAveragePrice != null ||
-                        _stockXPrice != null ||
-                        _goatPrice != null)
-                      const SizedBox(height: 12),
 
                     const SizedBox(height: 32),
                   ],

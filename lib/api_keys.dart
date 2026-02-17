@@ -16,7 +16,7 @@ class ApiKeys {
 
   // NOT secrets — stay hardcoded
   static const String stockXRedirectUri = 'sneakerscanner://stockx-callback';
-  static const bool ebayProduction = false;
+  static const bool ebayProduction = true;
 
   static Future<bool> fetch() async {
     if (_loaded) return true;
