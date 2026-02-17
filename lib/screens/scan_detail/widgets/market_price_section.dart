@@ -205,7 +205,16 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
 
           // Colorway dropdown
           if (_hasColorways && widget.colorways!.length > 1) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
+            Text(
+              'Exact color not found — available in other colors',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: Colors.grey[500],
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
