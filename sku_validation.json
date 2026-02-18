@@ -1,0 +1,77 @@
+{
+    "strong_disqualifiers": [
+      {
+        "rule": "Pure numeric 12-14 digits",
+        "regex": "^[0-9]{12,14}$",
+        "reason": "GTIN / UPC / EAN"
+      },
+      {
+        "rule": "Preceded by UPC label",
+        "keywords": ["UPC", "U.P.C.", "BARCODE"],
+        "reason": "Barcode number, not SKU"
+      },
+      {
+        "rule": "Preceded by PO label",
+        "keywords": ["PO", "PO#", "P.O.", "PURCHASE ORDER"],
+        "reason": "Purchase order number, not SKU"
+      },
+      {
+        "rule": "Size pattern",
+        "regex": "^(US|UK|EU|CM|MM)?\\s?[0-9]{1,2}(\\.[0-9])?$",
+        "reason": "Size value, not SKU"
+      },
+      {
+        "rule": "Season code",
+        "regex": "^[A-Z]{2}[0-9]{2}$",
+        "reason": "Season code like FW23, SP24"
+      },
+      {
+        "rule": "4-digit year",
+        "regex": "^(19|20)[0-9]{2}$",
+        "reason": "Year, not SKU"
+      },
+      {
+        "rule": "All letters only",
+        "regex": "^[A-Z]{6,11}$",
+        "reason": "Nike/Adidas style codes always contain digits"
+      },
+      {
+        "rule": "Too short",
+        "condition": "length < 6",
+        "reason": "No valid sneaker style codes under 6 characters"
+      }
+    ],
+
+    "medium_strength_disqualifiers": [
+      {
+        "rule": "All digits but 6-11 length",
+        "regex": "^[0-9]{6,11}$",
+        "reason": "Unlikely to be a sneaker style code"
+      },
+      {
+        "rule": "Appears near pricing",
+        "keywords": ["MSRP", "$", "PRICE"],
+        "reason": "Likely price data"
+      },
+      {
+        "rule": "Appears near size grid",
+        "keywords": ["US", "UK", "EU", "CM"],
+        "reason": "Likely size information"
+      }
+    ],
+
+    "final_acceptance_logic": {
+      "description": "A candidate string is accepted as SKU only if:",
+      "conditions": [
+        "Length between 6 and 11",
+        "Matches a regex in sku_brand_awareness.json, matches regex for it's brand in sku_brand_awareness.json if applicable",
+        "Contains at least one digit",
+        "Does NOT match strong disqualifiers"
+      ]
+    },
+
+    "gtin_detection": {
+      "regex": "^[0-9]{12,14}$",
+      "description": "If matched, classify as GTIN (UPC/EAN), not SKU"
+    }
+}

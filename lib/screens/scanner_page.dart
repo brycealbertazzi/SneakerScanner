@@ -57,92 +57,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     // sep = flexible separator: dash, space, slash, dot, or nothing
     const sep = r'[-\s/.]*';
 
-    // --- Code extraction ---
-    String? code;
-
-    // --- Pass 1: Look for labeled codes ---
-    final styleLabeled = RegExp(
-      'STYLE[#:\\s]+([A-Z0-9][A-Z0-9\\-\\s/.]+[A-Z0-9])',
-    ).firstMatch(normalized);
-    if (styleLabeled != null) {
-      final raw = styleLabeled.group(1)!.trim();
-      code = raw.replaceAll(RegExp(r'[\s/.]+'), '-');
-    }
-    if (code == null) {
-      final skuLabeled = RegExp(
-        'SKU[#:\\s]+([A-Z0-9][A-Z0-9\\-\\s/.]+[A-Z0-9])',
-      ).firstMatch(normalized);
-      if (skuLabeled != null) {
-        final raw = skuLabeled.group(1)!.trim();
-        code = raw.replaceAll(RegExp(r'[\s/.]+'), '-');
-      }
-    }
-    if (code == null) {
-      final itemLabeled = RegExp(
-        'ITEM[#:\\s]+([A-Z0-9][A-Z0-9\\-\\s/.]+[A-Z0-9])',
-      ).firstMatch(normalized);
-      if (itemLabeled != null) {
-        final raw = itemLabeled.group(1)!.trim();
-        code = raw.replaceAll(RegExp(r'[\s/.]+'), '-');
-      }
-    }
-    if (code == null) {
-      final dpciLabeled = RegExp(
-        'DPCI[:\\s]+(\\d{3})$sep(\\d{2})$sep(\\d{4})',
-      ).firstMatch(normalized);
-      if (dpciLabeled != null) {
-        code =
-            '${dpciLabeled.group(1)}-${dpciLabeled.group(2)}-${dpciLabeled.group(3)}';
-      }
-    }
-
-    // --- Pass 2: Pattern-match common style code formats ---
-    if (code == null) {
-      final patterns = <(RegExp, String Function(String))>[
-        // Nike/Jordan: DD1391-100, CT8012 170, FB8896/100, CW1590.100, DH9765002
-        (
-          RegExp('\\b([A-Z]{2,3}\\d{4})$sep(\\d{3})\\b'),
-          (m) {
-            final match = RegExp(
-              '\\b([A-Z]{2,3}\\d{4})$sep(\\d{3})\\b',
-            ).firstMatch(m)!;
-            return '${match.group(1)}-${match.group(2)}';
-          },
-        ),
-        // Jordan/UA 6-digit: 555088-134, 555088 134, 3026175-001
-        (
-          RegExp('\\b(\\d{6,7})$sep(\\d{3})\\b'),
-          (m) {
-            final match = RegExp('\\b(\\d{6,7})$sep(\\d{3})\\b').firstMatch(m)!;
-            return '${match.group(1)}-${match.group(2)}';
-          },
-        ),
-        // Puma: 374915-01, 374915 01
-        (
-          RegExp('\\b(\\d{6})$sep(\\d{2})\\b'),
-          (m) {
-            final match = RegExp('\\b(\\d{6})$sep(\\d{2})\\b').firstMatch(m)!;
-            return '${match.group(1)}-${match.group(2)}';
-          },
-        ),
-        // Adidas: GW2871, HP5582, IF1477 (2 letters + 4 digits)
-        (RegExp(r'\b[A-Z]{2}\d{4}\b'), (m) => m),
-        // New Balance: M990GL6, ML574EVG, M1080B12
-        (RegExp(r'\bM[A-Z]?\d{3,4}[A-Z]{1,3}\d{0,2}\b'), (m) => m),
-        // Converse: 162050C
-        (RegExp(r'\b\d{6}C\b'), (m) => m),
-      ];
-
-      for (final (pattern, normalize) in patterns) {
-        final match = pattern.firstMatch(normalized);
-        if (match != null) {
-          code = normalize(match.group(0)!);
-          break;
-        }
-      }
-    }
-
-    // --- Brand extraction ---
+    // --- Brand extraction (first, so we can validate SKU candidates) ---
     const knownBrands = [
       'GOODFELLOW',
       'CAT & JACK',
@@ -196,8 +111,71 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       }
     }
 
-    // --- Product name extraction ---
+    // Split original text into lines (preserves line boundaries for context checks)
     final lines = text.split(RegExp(r'[\n\r]+'));
+
+    // --- Code extraction (with brand-aware validation) ---
+    String? code;
+
+    // --- Pass 1: Collect ALL labeled code candidates (raw OCR form) ---
+    final labeledCandidates = <String>[];
+    for (final label in ['STYLE', 'SKU', 'ITEM']) {
+      final match = RegExp(
+        '$label[#:\\s]+([A-Z0-9][A-Z0-9\\-\\s/.]+[A-Z0-9])',
+      ).firstMatch(normalized);
+      if (match != null) {
+        labeledCandidates.add(match.group(1)!.trim());
+      }
+    }
+    // DPCI labeled (lower priority — preserve raw OCR separator)
+    final dpciLabeled = RegExp(
+      'DPCI[:\\s]+(\\d{3}$sep\\d{2}$sep\\d{4})',
+    ).firstMatch(normalized);
+    if (dpciLabeled != null) {
+      labeledCandidates.add(dpciLabeled.group(1)!.trim());
+    }
+
+    // --- Pass 2: Collect ALL pattern-match candidates (raw OCR form) ---
+    final patternCandidates = <String>[];
+    final codePatterns = <RegExp>[
+      // Nike/Jordan: DD1391-100, CT8012 170, FB8896/100, CW1590.100, DH9765002
+      RegExp('\\b[A-Z]{2,3}\\d{4}$sep\\d{3}\\b'),
+      // Jordan/UA 6-digit: 555088-134, 555088 134, 3026175-001
+      RegExp('\\b\\d{6,7}$sep\\d{3}\\b'),
+      // Puma: 374915-01, 374915 01
+      RegExp('\\b\\d{6}$sep\\d{2}\\b'),
+      // Adidas: GW2871, HP5582, IF1477 (2 letters + 4 digits)
+      RegExp(r'\b[A-Z]{2}\d{4}\b'),
+      // New Balance: M990GL6, ML574EVG, M1080B12
+      RegExp(r'\bM[A-Z]?\d{3,4}[A-Z]{1,3}\d{0,2}\b'),
+      // Converse: 162050C
+      RegExp(r'\b\d{6}C\b'),
+    ];
+
+    for (final pattern in codePatterns) {
+      final match = pattern.firstMatch(normalized);
+      if (match != null) {
+        patternCandidates.add(match.group(0)!);
+      }
+    }
+
+    // --- Pick the first candidate that passes all validation ---
+    final allCandidates = [...labeledCandidates, ...patternCandidates];
+    for (final candidate in allCandidates) {
+      if (_isDisqualifiedByContext(candidate, lines)) {
+        debugPrint('SKU candidate disqualified by label context: "$candidate"');
+        continue;
+      }
+      if (_isValidSku(candidate, foundBrand)) {
+        code = _formatSkuForBrand(candidate, foundBrand);
+        break;
+      }
+    }
+    if (code == null && allCandidates.isNotEmpty) {
+      debugPrint('All SKU candidates rejected for brand "${foundBrand ?? 'unknown'}": $allCandidates');
+    }
+
+    // --- Product name extraction ---
     String? productName;
     final labelFieldPattern = RegExp(
       r'^(DPCI|STYLE|SKU|ITEM|BRAND|COLOR|SIZE|UPC|TCIN|BARCODE)[#:\s]',
@@ -280,12 +258,6 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       }
     }
 
-    // Validate extracted code against known SKU patterns
-    if (code != null && !_isValidSku(code)) {
-      debugPrint('SKU rejected (no pattern match): "$code"');
-      code = null;
-    }
-
     // --- Size extraction ---
     String? size;
     final sizeMatch = RegExp(
@@ -323,19 +295,173 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       )
       .join(' ');
 
-  static final _skuPatterns = [
-    RegExp(r'^\d{6}-\d{3}$'),           // Nike (e.g. 555088-134)
-    RegExp(r'^\d{9}$'),                  // Nike OCR variant (e.g. 555088134)
-    RegExp(r'^[A-Z]{1,2}\d{4,5}$'),     // Adidas (e.g. GW2871, HP5582)
-    RegExp(r'^\d{4}[A-Z]\d{3}-\d{3}$'), // ASICS
-    RegExp(r'^[A-Z]\d{3,4}[A-Z0-9]{1,3}$'), // New Balance (e.g. M990GL6)
-    RegExp(r'^\d{6}-\d{2}$'),           // Puma (e.g. 374915-01)
-    RegExp(r'^[A-Z]{2,3}\d{4}-\d{3}$'), // Nike/Jordan alpha prefix (e.g. DD1391-100)
+  // Brand SKU patterns derived from sku_brand_awareness.json
+  static final Map<String, List<RegExp>> _brandSkuPatterns = {
+    'all': [
+      RegExp(r'^([A-Z0-9]{6})-([0-9]{3})$'),
+      RegExp(r'^([A-Z0-9]{6})([0-9]{3})$'),
+      RegExp(r'^([A-Z0-9]{6})[\s./\-–_]+([0-9]{3})$'),
+      RegExp(r'^([A-Z0-9]{6})-([0-9]{4})$'),
+      RegExp(r'^([A-Z0-9]{6})([0-9]{4})$'),
+      RegExp(r'^([A-Z0-9]{7})-([0-9]{3})$'),
+      RegExp(r'^([A-Z0-9]{7})([0-9]{3})$'),
+      RegExp(r'^([0-9]{4}[A-Z][0-9]{3})-([0-9]{3})$'),
+      RegExp(r'^([A-Z0-9]{8})-([0-9]{2,3})$'),
+      RegExp(r'^([A-Z0-9]{8})[\s./\-–_]+([0-9]{2,3})$'),
+      RegExp(r'^([A-Z0-9]{8})([0-9]{3})$'),
+      RegExp(r'^([0-9]{6})-([0-9]{2})$'),
+      RegExp(r'^([0-9]{6})-([0-9]{2,3})$'),
+      RegExp(r'^([0-9]{6})[\s./\-–_]+([0-9]{2,3})$'),
+      RegExp(r'^(?:[MWU])([0-9]{4}[A-Z]?)([A-Z]{2,6})$'),
+      RegExp(r'^([A-Z]{2}[0-9]{3})([A-Z0-9]{2,6})$'),
+      RegExp(r'^([A-Z]{2})([0-9]{4})$'),
+      RegExp(r'^([A-Z0-9]{6})$'),
+      RegExp(r'^([A-Z][0-9]{5}[A-Z])$'),
+    ],
+    'nike': [
+      RegExp(r'^([A-Z0-9]{6})-([0-9]{3})$'),
+      RegExp(r'^([A-Z0-9]{6})([0-9]{3})$'),
+      RegExp(r'^([A-Z0-9]{6})[\s./\-–_]+([0-9]{3})$'),
+      RegExp(r'^([A-Z0-9]{6})-([0-9]{4})$'),
+      RegExp(r'^([A-Z0-9]{6})([0-9]{4})$'),
+      RegExp(r'^([A-Z0-9]{7})-([0-9]{3})$'),
+      RegExp(r'^([A-Z0-9]{7})([0-9]{3})$'),
+    ],
+    'asics': [
+      RegExp(r'^([0-9]{4}[A-Z][0-9]{3})-([0-9]{3})$'),
+      RegExp(r'^([A-Z0-9]{8})-([0-9]{2,3})$'),
+      RegExp(r'^([A-Z0-9]{8})[\s./\-–_]+([0-9]{2,3})$'),
+      RegExp(r'^([A-Z0-9]{8})([0-9]{3})$'),
+    ],
+    'puma': [
+      RegExp(r'^([0-9]{6})-([0-9]{2})$'),
+      RegExp(r'^([0-9]{6})-([0-9]{2,3})$'),
+      RegExp(r'^([0-9]{6})[\s./\-–_]+([0-9]{2,3})$'),
+    ],
+    'new_balance': [
+      RegExp(r'^(?:[MWU])([0-9]{4}[A-Z]?)([A-Z]{2,6})$'),
+      RegExp(r'^([A-Z]{2}[0-9]{3})([A-Z0-9]{2,6})$'),
+    ],
+    'adidas': [
+      RegExp(r'^([A-Z0-9]{6})$'),
+      RegExp(r'^([A-Z]{2})([0-9]{4})$'),
+    ],
+    'reebok': [
+      RegExp(r'^([A-Z]{2}[0-9]{4})$'),
+      RegExp(r'^([A-Z0-9]{6})$'),
+    ],
+    'converse': [
+      RegExp(r'^([A-Z][0-9]{5}[A-Z])$'),
+    ],
+  };
+
+  static String? _brandKeyFromName(String? brand) {
+    if (brand == null) return null;
+    switch (brand.toUpperCase()) {
+      case 'NIKE':
+      case 'JORDAN':
+        return 'nike';
+      case 'NEW BALANCE':
+        return 'new_balance';
+      case 'ADIDAS':
+        return 'adidas';
+      case 'PUMA':
+        return 'puma';
+      case 'ASICS':
+        return 'asics';
+      case 'REEBOK':
+        return 'reebok';
+      case 'CONVERSE':
+        return 'converse';
+      default:
+        return null;
+    }
+  }
+
+  // Strong disqualifiers from sku_validation.json
+  static final _strongDisqualifiers = [
+    RegExp(r'^[0-9]{12,14}$'),                          // GTIN / UPC / EAN
+    RegExp(r'^(US|UK|EU|CM|MM)?\s?[0-9]{1,2}(\.[0-9])?$'), // Size value
+    RegExp(r'^[A-Z]{2}[0-9]{2}$'),                      // Season code (FW23, SP24)
+    RegExp(r'^(19|20)[0-9]{2}$'),                        // 4-digit year
+    RegExp(r'^[A-Z]{6,11}$'),                            // All letters, no digits
   ];
 
-  bool _isValidSku(String code) {
-    final normalized = code.replaceAll(' ', '-').toUpperCase();
-    return _skuPatterns.any((p) => p.hasMatch(normalized));
+  bool _isValidSku(String code, String? brand) {
+    final upper = code.toUpperCase();
+    final alphanumOnly = upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    if (alphanumOnly.length < 6 || alphanumOnly.length > 11) return false;
+
+    // Must contain at least one digit
+    if (!alphanumOnly.contains(RegExp(r'[0-9]'))) return false;
+
+    // Check strong disqualifiers against both raw and alphanumeric forms
+    if (_strongDisqualifiers.any((p) => p.hasMatch(alphanumOnly))) return false;
+    if (_strongDisqualifiers.any((p) => p.hasMatch(upper))) return false;
+
+    // Validate raw form against brand patterns (patterns already handle
+    // various separators: hyphens, spaces, dots, slashes)
+    final brandKey = _brandKeyFromName(brand);
+    final patterns = (brandKey != null && _brandSkuPatterns.containsKey(brandKey))
+        ? _brandSkuPatterns[brandKey]!
+        : _brandSkuPatterns['all']!;
+    return patterns.any((p) => p.hasMatch(upper));
+  }
+
+  // Brands whose SKUs use a hyphen between base and suffix
+  static const _hyphenatedBrands = {'nike', 'puma', 'asics'};
+
+  static const _disqualifyingKeywords = [
+    'UPC', 'U.P.C.', 'BARCODE', 'PO#', 'PO ', 'P.O.', 'PURCHASE ORDER',
+  ];
+
+  /// Check if a candidate appears on an OCR line preceded (within 12 chars)
+  /// by a disqualifying keyword like UPC, PO#, BARCODE, etc.
+  bool _isDisqualifiedByContext(String candidate, List<String> ocrLines) {
+    for (final line in ocrLines) {
+      final upperLine = line.trim().toUpperCase();
+      final idx = upperLine.indexOf(candidate);
+      if (idx < 0) continue;
+      final prefixStart = (idx - 12).clamp(0, idx);
+      final prefix = upperLine.substring(prefixStart, idx);
+      if (_disqualifyingKeywords.any((kw) => prefix.contains(kw))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Format the chosen SKU for storage using brand-specific conventions.
+  /// Called only AFTER validation passes — raw OCR form goes in, formatted comes out.
+  String _formatSkuForBrand(String rawCode, String? brand) {
+    final upper = rawCode.toUpperCase();
+    final brandKey = _brandKeyFromName(brand);
+
+    if (brandKey != null && _hyphenatedBrands.contains(brandKey)) {
+      // For hyphenated brands: match against brand patterns to find groups
+      final patterns = _brandSkuPatterns[brandKey]!;
+      for (final pattern in patterns) {
+        final match = pattern.firstMatch(upper);
+        if (match != null && match.groupCount >= 2) {
+          final parts = <String>[];
+          for (int i = 1; i <= match.groupCount; i++) {
+            if (match.group(i) != null) parts.add(match.group(i)!);
+          }
+          return parts.join('-');
+        } else if (match != null) {
+          return match.groupCount >= 1 ? match.group(1)! : match.group(0)!;
+        }
+      }
+    } else if (brandKey != null) {
+      // Non-hyphenated brands (adidas, NB, reebok, converse): strip separators
+      return upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    }
+
+    // Unknown brand: replace OCR separators (space/dot/slash) with hyphen
+    // where they exist, but don't add hyphens where there were none
+    final cleaned = upper.replaceAll(RegExp(r'[\s./]+'), '-');
+    // Collapse multiple hyphens and trim trailing/leading hyphens
+    return cleaned.replaceAll(RegExp(r'-{2,}'), '-').replaceAll(RegExp(r'^-|-$'), '');
   }
 
   Future<void> _captureAndProcess() async {

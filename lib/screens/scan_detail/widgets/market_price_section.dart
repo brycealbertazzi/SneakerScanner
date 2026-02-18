@@ -110,12 +110,12 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
               ),
               const Spacer(),
               if (widget.isLoading)
-                Text(
-                  'Loading...',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: Colors.grey[500],
-                    fontStyle: FontStyle.italic,
+                Container(
+                  width: 72,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[700],
+                    borderRadius: BorderRadius.circular(4),
                   ),
                 )
               else if (price != null)
@@ -306,6 +306,39 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                     ],
                   ),
                 ),
+              ),
+            ),
+          ],
+
+          // Skeleton profit row while loading
+          if (widget.isLoading) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[700],
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  Container(
+                    width: 80,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[700],
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],

@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../api_keys.dart';
-import '../../constants.dart';
 import '../../models/scan_data.dart';
 import '../../services/ebay_auth_service.dart';
 import '../../services/nike_colorway_utils.dart';
@@ -31,7 +30,6 @@ class ScanDetailPage extends StatefulWidget {
 }
 
 class _ScanDetailPageState extends State<ScanDetailPage> {
-  bool _isLoading = true;
   Map<String, dynamic>? _productInfo;
   String? _error;
 
@@ -39,19 +37,16 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   double? _manualRetailPrice;
 
   // eBay API state
-  bool _isLoadingEbayPrices = false;
-  double? _ebayLowestPrice;
+  bool _isLoadingEbayPrices = true;
   double? _ebayAveragePrice;
-  int? _ebayListingCount;
-  String? _ebayError;
 
   // StockX price state (via KicksDB)
-  bool _isLoadingStockXPrice = false;
+  bool _isLoadingStockXPrice = true;
   double? _stockXPrice;
   String? _stockXSlug;
 
   // GOAT price state (via KicksDB)
-  bool _isLoadingGoatPrice = false;
+  bool _isLoadingGoatPrice = true;
   double? _goatPrice;
   String? _goatSlug;
 
@@ -65,23 +60,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
   bool _pricingInterrupted = false;
 
-  // Shared price cache TTL: 24 hours
-  static const int _priceCacheTtlMs = 24 * 60 * 60 * 1000;
-  static const bool _priceCacheEnabled = false;
-
   /// The primary identifier used for DB keys and cache lookups.
   String get _primaryCode => widget.scanData.sku ?? '';
-
-  /// SKU-only query for KicksDB pricing — returns null if no SKU available.
-  String? get _skuQuery {
-    final sku = widget.scanData.sku;
-    if (sku != null && sku.isNotEmpty) return sku;
-    final productSku = _productInfo?['sku'] as String?;
-    if (productSku != null && productSku.isNotEmpty) return productSku;
-    final styleCode = _productInfo?['styleCode'] as String?;
-    if (styleCode != null && styleCode.isNotEmpty) return styleCode;
-    return null;
-  }
 
   @override
   void initState() {
@@ -105,32 +85,40 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               .get();
 
           if (scanSnapshot.exists) {
-            final scanData = Map<String, dynamic>.from(
+            final scanDataMap = Map<String, dynamic>.from(
               scanSnapshot.value as Map,
             );
-            final savedRetailPrice = scanData['retailPrice'] as String?;
-            if (savedRetailPrice != null) {
-              _manualRetailPrice = double.tryParse(savedRetailPrice);
-            }
-            final savedStockXPrice = scanData['stockxPrice'] as String?;
-            if (savedStockXPrice != null) {
-              _stockXPrice = double.tryParse(savedStockXPrice);
-            }
-            final savedGoatPrice = scanData['goatPrice'] as String?;
-            if (savedGoatPrice != null) {
-              _goatPrice = double.tryParse(savedGoatPrice);
-            }
-            final savedStockXColorways = scanData['stockxColorways'];
-            if (savedStockXColorways is List && savedStockXColorways.isNotEmpty) {
-              _stockXColorways = _parseColorwaysFromDb(savedStockXColorways);
-            }
-            final savedGoatColorways = scanData['goatColorways'];
-            if (savedGoatColorways is List && savedGoatColorways.isNotEmpty) {
-              _goatColorways = _parseColorwaysFromDb(savedGoatColorways);
-            }
-            if (scanData['pricingStatus'] == 'loading') {
-              _pricingInterrupted = true;
-            }
+            final savedRetailPrice = double.tryParse(
+              (scanDataMap['retailPrice'] as String?) ?? '',
+            );
+            final savedStockXPrice = double.tryParse(
+              (scanDataMap['stockxPrice'] as String?) ?? '',
+            );
+            final savedGoatPrice = double.tryParse(
+              (scanDataMap['goatPrice'] as String?) ?? '',
+            );
+            final savedStockXColorways = scanDataMap['stockxColorways'];
+            final savedGoatColorways = scanDataMap['goatColorways'];
+            final pricingStatus = scanDataMap['pricingStatus'] as String?;
+
+            setState(() {
+              if (savedRetailPrice != null) _manualRetailPrice = savedRetailPrice;
+              if (savedStockXPrice != null) {
+                _stockXPrice = savedStockXPrice;
+                _isLoadingStockXPrice = false;
+              }
+              if (savedGoatPrice != null) {
+                _goatPrice = savedGoatPrice;
+                _isLoadingGoatPrice = false;
+              }
+              if (savedStockXColorways is List && savedStockXColorways.isNotEmpty) {
+                _stockXColorways = _parseColorwaysFromDb(savedStockXColorways);
+              }
+              if (savedGoatColorways is List && savedGoatColorways.isNotEmpty) {
+                _goatColorways = _parseColorwaysFromDb(savedGoatColorways);
+              }
+              if (pricingStatus == 'loading') _pricingInterrupted = true;
+            });
           }
         }
 
@@ -144,12 +132,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             final cached = Map<String, dynamic>.from(
               cachedSnapshot.value as Map,
             );
-            final confirmed = cached['notFound'] != true;
-
             setState(() {
               _productInfo = cached;
-              _identityConfirmed = confirmed;
-              _isLoading = false;
+              _identityConfirmed = cached['notFound'] != true;
             });
             // Don't return — still need to run _lookupProduct for
             // StockX/GOAT pricing + colorway fallback
@@ -157,18 +142,25 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         }
       }
 
+      _setPricingStatus('loading');
+
+      // Run eBay in parallel with the identity/pricing waterfall.
+      // eBay only needs widget.scanData.sku/gtin, not _productInfo.
+      final ebayFuture = _fetchEbayPrices();
       await _lookupProduct();
-      _fetchAllPrices();
+      await ebayFuture;
+
+      _savePricesToDatabase();
+      _setPricingStatus('complete');
     } catch (e) {
       setState(() {
         _error = 'Failed to load product info';
-        _isLoading = false;
       });
     }
   }
 
   /// Unified product lookup + pricing flow:
-  /// 1. Call /unified/products/<sku> or /unified/gtin — identifies shoe + extracts StockX/GOAT prices
+  /// 1. Call /unified/products/`<sku>` or /unified/gtin — identifies shoe + extracts StockX/GOAT prices
   /// 2. If StockX/GOAT missing & Nike/Jordan — colorway fallback via platform-specific endpoints
   /// 3. Not found fallback
   Future<void> _lookupProduct() async {
@@ -352,7 +344,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             'notFound': true,
           };
           _identityConfirmed = false;
-          _isLoading = false;
+          _isLoadingStockXPrice = false;
+          _isLoadingGoatPrice = false;
         });
         return;
       }
@@ -397,7 +390,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         _identityConfirmed = confirmed;
         _isLoadingStockXPrice = false;
         _isLoadingGoatPrice = false;
-        _isLoading = false;
         // Colorway variants set during step 2 fallback
         // (already assigned above, but setState triggers rebuild)
       });
@@ -413,250 +405,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           'notFound': true,
         };
         _identityConfirmed = false;
-        _isLoading = false;
+        _isLoadingStockXPrice = false;
+        _isLoadingGoatPrice = false;
       });
     }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Validation helpers
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  bool _looksLikeFootwear(Map<String, dynamic> product) {
-    final brand = (product['brand'] ?? '').toString().toLowerCase().trim();
-
-    if (brand.length >= 2 &&
-        knownFootwearBrands.any(
-          (b) => brand.contains(b) || b.contains(brand),
-        )) {
-      return true;
-    }
-
-    final category = (product['category'] ?? '').toString().toLowerCase();
-    final title = (product['title'] ?? product['name'] ?? '')
-        .toString()
-        .toLowerCase();
-    final slug = (product['slug'] ?? '').toString().toLowerCase();
-    final combined = '$category $title $slug';
-    return footwearKeywords.any((kw) => combined.contains(kw));
-  }
-
-  static bool _isRetailerLabel(String text) {
-    final lower = text.toLowerCase();
-    return retailerLabels.any((label) => lower.contains(label));
-  }
-
-  bool _resultMatchesLabel(Map<String, dynamic> product, String query) {
-    final apiTitle = (product['title'] ?? product['name'] ?? '')
-        .toString()
-        .toLowerCase();
-    final apiBrand = (product['brand'] ?? '').toString().toLowerCase();
-    final queryLower = query.toLowerCase();
-
-    final queryWords = queryLower
-        .split(RegExp(r'\s+'))
-        .where((w) => w.length >= 3)
-        .toSet();
-    final apiWords = '$apiBrand $apiTitle'
-        .split(RegExp(r'\s+'))
-        .where((w) => w.length >= 3)
-        .toSet();
-
-    if (queryWords.isEmpty) return false;
-
-    final overlap = queryWords.intersection(apiWords);
-    return overlap.length >= 2 || overlap.length > queryWords.length * 0.5;
-  }
-
-  bool _isProductMatch(Map<String, dynamic> apiProduct) {
-    if (!_looksLikeFootwear(apiProduct)) return false;
-
-    final scannedBrand =
-        (_productInfo?['brand'] as String?)?.toLowerCase().trim() ?? '';
-    final scannedTitle =
-        (_productInfo?['title'] as String?)?.toLowerCase().trim() ?? '';
-    final scannedModel =
-        (_productInfo?['model'] as String?)?.toLowerCase().trim() ?? '';
-
-    final apiTitle =
-        ((apiProduct['title'] ?? apiProduct['name'] ?? '') as String)
-            .toLowerCase()
-            .trim();
-    final apiBrand = ((apiProduct['brand'] ?? '') as String)
-        .toLowerCase()
-        .trim();
-
-    if (scannedBrand.isEmpty && scannedTitle.isEmpty) return true;
-
-    if (scannedBrand.isNotEmpty && apiBrand.isNotEmpty) {
-      if (!apiBrand.contains(scannedBrand) &&
-          !scannedBrand.contains(apiBrand)) {
-        return false;
-      }
-    }
-
-    if (scannedModel.isNotEmpty && apiTitle.contains(scannedModel)) return true;
-
-    final scannedWords = scannedTitle
-        .split(RegExp(r'\s+'))
-        .where((w) => w.length >= 3)
-        .toSet();
-    final apiWords = apiTitle
-        .split(RegExp(r'\s+'))
-        .where((w) => w.length >= 3)
-        .toSet();
-    final overlap = scannedWords.intersection(apiWords);
-
-    if (scannedWords.isNotEmpty && apiWords.isNotEmpty && overlap.length < 2) {
-      return false;
-    }
-
-    return true;
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // API search methods (KicksDB)
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Future<Map<String, dynamic>?> _searchKicksDb(
-    String query, {
-    bool isStyleCodeSearch = false,
-  }) async {
-    if (!isStyleCodeSearch && _isRetailerLabel(query)) {
-      debugPrint('KicksDB skip: query "$query" is a retailer/private label');
-      return null;
-    }
-
-    final kicksDbUrl =
-        'https://api.kicks.dev/v3/stockx/products'
-        '?query=${Uri.encodeComponent(query)}&limit=1'
-        '&display[prices]=true&display[variants]=false';
-    debugPrint('[KicksDB Lookup] Request: $kicksDbUrl');
-    final response = await http
-        .get(
-          Uri.parse(kicksDbUrl),
-          headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'},
-        )
-        .timeout(const Duration(seconds: 10));
-
-    debugPrint('[KicksDB Lookup] Status ($query): ${response.statusCode}');
-    debugPrint(
-      'KicksDB lookup body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}',
-    );
-
-    if (response.statusCode != 200) return null;
-
-    final body = jsonDecode(response.body);
-    List<dynamic> items = [];
-    if (body is Map<String, dynamic> &&
-        body.containsKey('data') &&
-        body['data'] is List) {
-      items = body['data'];
-    } else if (body is List) {
-      items = body;
-    }
-
-    if (items.isEmpty) return null;
-
-    for (final item in items) {
-      final product = item as Map<String, dynamic>;
-      final title = product['title'] ?? product['name'] ?? 'Unknown Product';
-      final brand = product['brand'] ?? '';
-      final image = product['image'] ?? product['thumbnail'] ?? '';
-      final retailPrice = product['retail_price']?.toString();
-      final styleId = (product['style_id'] ?? product['sku'] ?? '')
-          .toString()
-          .replaceAll(' ', '-')
-          .toUpperCase();
-      debugPrint('[KicksDB Lookup] Candidate: "$title" styleId="$styleId" brand="$brand"');
-
-      if (_isRetailerLabel(brand.toString())) {
-        debugPrint('KicksDB skip (retailer label): "$title" brand="$brand"');
-        continue;
-      }
-
-      if (!_looksLikeFootwear(product)) {
-        debugPrint('KicksDB skip (not footwear): "$title"');
-        continue;
-      }
-
-      if (isStyleCodeSearch) {
-        final queryNorm = query.replaceAll(' ', '-').toUpperCase();
-        if (styleId.isNotEmpty && styleId == queryNorm) {
-          // exact match
-        } else {
-          // Nike/Jordan: accept same model block, different colorway
-          final brandStr = brand.toString();
-          if (isNikeOrJordan(brandStr) && styleId.isNotEmpty) {
-            final scannedParsed = parseNikeSku(queryNorm);
-            final apiParsed = parseNikeSku(styleId);
-            if (scannedParsed != null &&
-                apiParsed != null &&
-                scannedParsed.$1 == apiParsed.$1) {
-              debugPrint(
-                'KicksDB accept (same model, different colorway): "$title" '
-                'scanned=${scannedParsed.$1}-${scannedParsed.$2} '
-                'api=${apiParsed.$1}-${apiParsed.$2}',
-              );
-              // fall through — accepted as identity match
-            } else {
-              // Not a model-block match, try title/slug fallback
-              final titleUpper = title.toString().toUpperCase();
-              final slugUpper = (product['slug'] ?? '')
-                  .toString()
-                  .replaceAll('-', ' ')
-                  .toUpperCase();
-              if (!titleUpper.contains(queryNorm) &&
-                  !titleUpper.contains(queryNorm.replaceAll('-', ' ')) &&
-                  !slugUpper.contains(queryNorm.replaceAll('-', ' '))) {
-                debugPrint(
-                  'KicksDB skip (style code "$queryNorm" not found in product): "$title" style_id="$styleId"',
-                );
-                continue;
-              }
-            }
-          } else {
-            final titleUpper = title.toString().toUpperCase();
-            final slugUpper = (product['slug'] ?? '')
-                .toString()
-                .replaceAll('-', ' ')
-                .toUpperCase();
-            if (!titleUpper.contains(queryNorm) &&
-                !titleUpper.contains(queryNorm.replaceAll('-', ' ')) &&
-                !slugUpper.contains(queryNorm.replaceAll('-', ' '))) {
-              debugPrint(
-                'KicksDB skip (style code "$queryNorm" not found in product): "$title" style_id="$styleId"',
-              );
-              continue;
-            }
-          }
-        }
-      }
-
-      if (!isStyleCodeSearch && !_resultMatchesLabel(product, query)) {
-        debugPrint(
-          'KicksDB skip (label mismatch): "$title" for query "$query"',
-        );
-        continue;
-      }
-
-      return <String, dynamic>{
-        'title': title,
-        'brand': brand,
-        'description': '',
-        'category': (product['category'] ?? 'Sneakers').toString(),
-        'images': image is String && image.isNotEmpty ? [image] : [],
-        'retailPrice': retailPrice,
-        'styleCode': _primaryCode,
-        'gtinVerified': isStyleCodeSearch,
-        'lastUpdated': ServerValue.timestamp,
-      };
-    }
-
-    debugPrint(
-      'KicksDB: no valid match for "$query" out of ${items.length} candidates',
-    );
-    return null;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -750,23 +502,16 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   // ═══════════════════════════════════════════════════════════════════════════
 
   Future<void> _fetchEbayPrices() async {
-    if (_productInfo == null) return;
     final stopwatch = Stopwatch()..start();
 
-    setState(() {
-      _isLoadingEbayPrices = true;
-      _ebayError = null;
-    });
+    setState(() => _isLoadingEbayPrices = true);
 
     try {
       final token = await EbayAuthService.getAccessToken();
 
       if (token == null) {
         debugPrint('[eBay] API not configured, skipping');
-        setState(() {
-          _isLoadingEbayPrices = false;
-          _ebayError = 'eBay API not configured';
-        });
+        setState(() => _isLoadingEbayPrices = false);
         return;
       }
 
@@ -790,10 +535,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             '&limit=1';
       } else {
         debugPrint('[eBay] No SKU or GTIN available, skipping');
-        setState(() {
-          _isLoadingEbayPrices = false;
-          _ebayError = 'No identifier for eBay lookup';
-        });
+        setState(() => _isLoadingEbayPrices = false);
         return;
       }
       debugPrint('[eBay] Request: $requestUrl');
@@ -829,9 +571,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 '(${stopwatch.elapsedMilliseconds}ms)',
               );
               setState(() {
-                _ebayLowestPrice = price;
                 _ebayAveragePrice = price;
-                _ebayListingCount = 1;
                 _isLoadingEbayPrices = false;
               });
               return;
@@ -843,26 +583,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       debugPrint(
         '[eBay] No listings found (${stopwatch.elapsedMilliseconds}ms)',
       );
-      setState(() {
-        _isLoadingEbayPrices = false;
-        _ebayError = 'No listings found';
-      });
+      setState(() => _isLoadingEbayPrices = false);
     } catch (e) {
       debugPrint('[eBay] Error: $e (${stopwatch.elapsedMilliseconds}ms)');
-      setState(() {
-        _isLoadingEbayPrices = false;
-        _ebayError = 'Failed to fetch prices';
-      });
+      setState(() => _isLoadingEbayPrices = false);
     }
-  }
-
-  Future<void> _fetchAllPrices() async {
-    if (_productInfo == null) return;
-
-    // eBay runs separately — StockX/GOAT prices already set by _lookupProduct
-    _fetchEbayPrices();
-    _savePricesToDatabase();
-    _setPricingStatus('complete');
   }
 
   /// Check if [scannedSku]'s alphanumeric characters (in order) are a
@@ -1154,11 +879,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             ),
           ),
         ),
-        body: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: Color(0xFF646CFF)),
-              )
-            : _error != null
+        body: _error != null
             ? Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -1223,9 +944,13 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                     const SizedBox(height: 8),
 
                     // 3. Brand Badge
-                    if (_productInfo?['brand'] != null &&
-                        _productInfo!['brand'].toString().isNotEmpty)
-                      Container(
+                    Builder(builder: (context) {
+                      final badgeBrand = widget.scanData.brand ??
+                          _productInfo?['brand']?.toString();
+                      if (badgeBrand == null || badgeBrand.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 6,
@@ -1235,13 +960,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          _productInfo!['brand'],
+                          badgeBrand,
                           style: GoogleFonts.inter(
                             color: const Color(0xFF646CFF),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ),
+                      );
+                    }),
                     const SizedBox(height: 20),
 
                     // 4. Info Cards
@@ -1350,6 +1076,17 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           label: 'SKU',
           value: widget.scanData.sku!,
           icon: Icons.qr_code,
+        ),
+      );
+      cards.add(const SizedBox(height: 12));
+    }
+
+    if (widget.scanData.size != null && widget.scanData.size!.isNotEmpty) {
+      cards.add(
+        InfoCard(
+          label: 'Size',
+          value: widget.scanData.size!,
+          icon: Icons.straighten,
         ),
       );
       cards.add(const SizedBox(height: 12));
