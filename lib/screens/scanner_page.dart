@@ -539,6 +539,11 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   }
 
   Future<void> _scanBarcode(String ocrText, ScanData currentScanData) async {
+    // Release the camera before pushing the barcode scanner — iOS only allows
+    // one active capture session at a time.
+    await _previewController.stop();
+    if (!mounted) return;
+
     final gtin = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (context) => const _BarcodeScannerPage(),
@@ -564,16 +569,20 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
             ),
           ),
         );
+        // User returned from ScanDetailPage — safe to restart camera now
+        // (barcode scanner controller is long disposed by this point).
+        if (mounted) await _previewController.start();
       }
     } else {
-      // User cancelled or no barcode found — return to modal
-      _showManualSkuDialog(ocrText, currentScanData);
+      // User cancelled — barcode scanner is disposed, restart camera before
+      // showing the dialog again.
+      await _previewController.start();
+      if (mounted) _showManualSkuDialog(ocrText, currentScanData);
     }
   }
 
   void _showManualSkuDialog(String ocrText, ScanData currentScanData) {
     final controller = TextEditingController();
-    final hasModel = currentScanData.modelName != null;
     showDialog(
       context: context,
       builder: (dialogContext) => Dialog(
@@ -601,9 +610,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
               Text(
                 ocrText.isEmpty
                     ? 'Type the SKU from the shoe label or box.'
-                    : hasModel
-                        ? 'We couldn\'t detect a SKU. Enter it manually or proceed without one.'
-                        : 'We couldn\'t automatically detect a SKU. You can enter it manually.',
+                    : 'We couldn\'t detect a SKU. Enter it manually or scan the barcode.',
                 style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[400]),
               ),
               const SizedBox(height: 16),
@@ -708,39 +715,6 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-              if (hasModel) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () async {
-                      Navigator.of(dialogContext).pop();
-                      final scanId = await _saveScan(currentScanData);
-                      if (mounted) {
-                        await Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) => ScanDetailPage(
-                              scanId: scanId ?? '',
-                              scanData: currentScanData,
-                              timestamp:
-                                  DateTime.now().millisecondsSinceEpoch,
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF646CFF),
-                      side: const BorderSide(color: Color(0xFF646CFF)),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
-                    child: const Text('Continue without SKU'),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -887,10 +861,14 @@ class _BarcodeScannerPage extends StatefulWidget {
 }
 
 class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
+  static const double _boxWidth = 280;
+  static const double _boxHeight = 160;
+
   final MobileScannerController _controller = MobileScannerController(
     detectionSpeed: DetectionSpeed.normal,
     facing: CameraFacing.back,
     torchEnabled: false,
+    formats: [BarcodeFormat.ean13, BarcodeFormat.upcA],
   );
   bool _hasPopped = false;
 
@@ -907,7 +885,7 @@ class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
       final raw = barcode.rawValue;
       if (raw != null && raw.isNotEmpty) {
         final normalized = normalizeGtin(raw);
-        if (normalized.length >= 8) {
+        if (normalized.length >= 12) {
           _hasPopped = true;
           Navigator.of(context).pop(normalized);
           return;
@@ -918,6 +896,16 @@ class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final topPadding = MediaQuery.of(context).padding.top;
+    final bodyHeight = size.height - topPadding - kToolbarHeight;
+    final scanWindow = Rect.fromLTWH(
+      (size.width - _boxWidth) / 2,
+      (bodyHeight - _boxHeight) / 2,
+      _boxWidth,
+      _boxHeight,
+    );
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -947,13 +935,14 @@ class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
         children: [
           MobileScanner(
             controller: _controller,
+            scanWindow: scanWindow,
             onDetect: _onDetect,
           ),
-          // Scan overlay
+          // Scan overlay — dimensions must match scanWindow above
           Center(
             child: Container(
-              width: 280,
-              height: 160,
+              width: _boxWidth,
+              height: _boxHeight,
               decoration: BoxDecoration(
                 border: Border.all(color: const Color(0xFF646CFF), width: 2),
                 borderRadius: BorderRadius.circular(12),

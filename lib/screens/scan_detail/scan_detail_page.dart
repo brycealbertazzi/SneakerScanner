@@ -39,6 +39,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   // eBay API state
   bool _isLoadingEbayPrices = true;
   double? _ebayAveragePrice;
+  String? _ebayItemUrl;
+  String? _ebayImageUrl;
 
   // StockX price state (via KicksDB)
   bool _isLoadingStockXPrice = true;
@@ -150,6 +152,18 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       await _lookupProduct();
       await ebayFuture;
 
+      // If KicksDB returned no image but eBay did, use eBay's image as fallback.
+      if (_ebayImageUrl != null &&
+          _ebayImageUrl!.isNotEmpty &&
+          (_productInfo?['images'] as List? ?? []).isEmpty) {
+        setState(() {
+          _productInfo = {
+            ..._productInfo!,
+            'images': [_ebayImageUrl!],
+          };
+        });
+      }
+
       _savePricesToDatabase();
       _setPricingStatus('complete');
     } catch (e) {
@@ -174,22 +188,13 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       final gtin = widget.scanData.gtin;
 
       // ── Step 1: Call unified endpoint ──────────────────────────────
-      Uri? unifiedUri;
+      List<Map<String, dynamic>> unifiedItems = [];
+
       if (sku != null && sku.isNotEmpty) {
-        unifiedUri = Uri.parse(
+        final unifiedUri = Uri.parse(
           'https://api.kicks.dev/v3/unified/products'
           '/${Uri.encodeComponent(sku)}?similarity=0.85',
         );
-      } else if (gtin != null && gtin.isNotEmpty) {
-        unifiedUri = Uri.parse(
-          'https://api.kicks.dev/v3/unified/gtin'
-          '?identifier=${Uri.encodeComponent(gtin)}',
-        );
-      }
-
-      List<Map<String, dynamic>> unifiedItems = [];
-
-      if (unifiedUri != null) {
         debugPrint('═══ STEP 1: KicksDB Unified ═══');
         debugPrint('[Unified] Request: $unifiedUri');
 
@@ -221,15 +226,41 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             }
           }
         }
+      } else if (gtin != null && gtin.isNotEmpty) {
+        debugPrint('═══ STEP 1: KicksDB Unified (GTIN) ═══');
+        // GTINs from a UPC-A barcode arrive as 13 digits with a leading 0
+        // (normalizeGtin pads 12-digit UPC-A). Try the stripped 12-digit form
+        // first; fall back to the original 13-digit form on any failure.
+        final hasLeadingZero = gtin.length == 13 && gtin.startsWith('0');
+        final primaryGtin = hasLeadingZero ? gtin.substring(1) : gtin;
+
+        unifiedItems = await _fetchUnifiedGtinItems(primaryGtin);
+
+        if (unifiedItems.isEmpty && hasLeadingZero) {
+          debugPrint(
+            '[Unified] 12-digit GTIN yielded no results, retrying with 13-digit: $gtin',
+          );
+          unifiedItems = await _fetchUnifiedGtinItems(gtin);
+        }
       }
 
       // The SKU to match against
       final matchSku = sku ?? '';
       final size = widget.scanData.size;
 
+      // For GTIN lookups, pre-compute the best image (prefer StockX source).
+      // GTIN items use `source` instead of `shop_name`, so we do this before
+      // the loop rather than relying on iteration order.
+      final String? gtinBestImage =
+          (sku == null || sku.isEmpty) && unifiedItems.isNotEmpty
+              ? _pickBestGtinImage(unifiedItems)
+              : null;
+
       // Extract identity from first matching result + StockX/GOAT prices
       for (final item in unifiedItems) {
-        final shopName = (item['shop_name'] ?? '').toString().toLowerCase();
+        // SKU unified items use `shop_name`; GTIN items use `source`.
+        final shopName =
+            (item['shop_name'] ?? item['source'] ?? '').toString().toLowerCase();
         final apiSku = (item['sku'] ?? '').toString();
 
         // Identity: use the first result that has a title
@@ -241,13 +272,20 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               'brand': item['brand'] ?? '',
               'sku': apiSku,
               'styleCode': apiSku,
-              'retailPrice': item['retailPrice']?.toString() ??
-                  item['retail_price']?.toString(),
-              'images': item['images'] is List
-                  ? item['images']
-                  : item['image'] != null
-                      ? [item['image']]
-                      : [],
+              'retailPrice': () {
+                final raw = item['retailPrice']?.toString() ??
+                    item['retail_price']?.toString();
+                if (raw == null) return null;
+                final parsed = double.tryParse(raw);
+                return (parsed != null && parsed > 0) ? raw : null;
+              }(),
+              'images': gtinBestImage != null
+                  ? [gtinBestImage]
+                  : item['images'] is List
+                      ? item['images']
+                      : item['image'] != null
+                          ? [item['image']]
+                          : [],
               'model': item['model'] ?? '',
               'slug': item['slug'] ?? '',
               'category': item['category'] ?? '',
@@ -264,9 +302,15 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           continue;
         }
 
+        // SKU unified items have `prices` as a size→price map.
+        // GTIN items have `price` as a direct number.
         final pricesRaw = item['prices'];
-        if (pricesRaw is! Map<String, dynamic>) continue;
-        final price = _extractPriceFromMap(pricesRaw, size);
+        final double? price;
+        if (pricesRaw is Map<String, dynamic>) {
+          price = _extractPriceFromMap(pricesRaw, size);
+        } else {
+          price = double.tryParse((item['price'] ?? '').toString());
+        }
         if (price == null || price <= 0) continue;
 
         final slug = (item['slug'] ?? item['id'] ?? item['name'])?.toString();
@@ -412,6 +456,68 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // GTIN helpers
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Pick the best image URL from KicksDB GTIN items.
+  /// Prefers the StockX source; falls back to the first item that has any image.
+  String? _pickBestGtinImage(List<Map<String, dynamic>> items) {
+    for (final item in items) {
+      final source = (item['source'] ?? '').toString().toLowerCase();
+      if (source == 'stockx') {
+        final img = item['image']?.toString();
+        if (img != null && img.isNotEmpty) return img;
+      }
+    }
+    for (final item in items) {
+      final img = item['image']?.toString();
+      if (img != null && img.isNotEmpty) return img;
+    }
+    return null;
+  }
+
+  /// Fetch KicksDB unified items for a single GTIN value.
+  /// Returns an empty list on non-200 status or an empty/unparseable response.
+  Future<List<Map<String, dynamic>>> _fetchUnifiedGtinItems(
+    String gtinValue,
+  ) async {
+    final uri = Uri.parse(
+      'https://api.kicks.dev/v3/unified/gtin'
+      '?identifier=${Uri.encodeComponent(gtinValue)}',
+    );
+    debugPrint('[Unified] GTIN request: $uri');
+    try {
+      final response = await http
+          .get(uri, headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'})
+          .timeout(const Duration(seconds: 15));
+      debugPrint('[Unified] GTIN status: ${response.statusCode}');
+      if (response.statusCode != 200) return [];
+      debugPrint(
+        '[Unified] GTIN body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}',
+      );
+      final body = jsonDecode(response.body);
+      final items = <Map<String, dynamic>>[];
+      if (body is Map<String, dynamic>) {
+        if (body.containsKey('data') && body['data'] is List) {
+          for (var item in body['data']) {
+            items.add(item as Map<String, dynamic>);
+          }
+        } else if (body.containsKey('shop_name') || body.containsKey('title')) {
+          items.add(body);
+        }
+      } else if (body is List) {
+        for (var item in body) {
+          items.add(item as Map<String, dynamic>);
+        }
+      }
+      return items;
+    } catch (e) {
+      debugPrint('[Unified] GTIN error: $e');
+      return [];
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // Search query helpers
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -460,6 +566,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   // ═══════════════════════════════════════════════════════════════════════════
 
   Future<void> _openEbaySearch() async {
+    if (_ebayItemUrl != null && _ebayItemUrl!.isNotEmpty) {
+      await launchUrl(Uri.parse(_ebayItemUrl!), mode: LaunchMode.platformDefault);
+      return;
+    }
     final searchQuery = _buildSearchQuery();
     final url = Uri.parse(
       'https://www.ebay.com/sch/i.html?_nkw=${Uri.encodeComponent(searchQuery)}',
@@ -522,24 +632,104 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       final sku = widget.scanData.sku;
       final gtin = widget.scanData.gtin;
 
-      String requestUrl;
+      double? price;
+
       if (sku != null && sku.isNotEmpty) {
-        requestUrl =
+        final requestUrl =
             '$baseUrl/buy/browse/v1/item_summary/search?'
-            'q=${Uri.encodeComponent(sku)}'
-            '&limit=1';
+            'q=${Uri.encodeComponent(sku)}&limit=1';
+        debugPrint('[eBay] Request: $requestUrl');
+
+        final response = await http
+            .get(
+              Uri.parse(requestUrl),
+              headers: {
+                'Authorization': 'Bearer $token',
+                'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+                'Content-Type': 'application/json',
+              },
+            )
+            .timeout(const Duration(seconds: 15));
+
+        debugPrint('[eBay] Status: ${response.statusCode}');
+        debugPrint(
+          '[eBay] Body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}',
+        );
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final items = data['itemSummaries'] as List? ?? [];
+          if (items.isNotEmpty) {
+            final item = items[0] as Map<String, dynamic>;
+            final priceData = item['price'];
+            if (priceData != null && priceData['value'] != null) {
+              price = double.tryParse(priceData['value'].toString());
+            }
+            final webUrl = item['itemWebUrl'] as String?;
+            if (webUrl != null && webUrl.isNotEmpty) _ebayItemUrl = webUrl;
+            final imageObj = item['image'] as Map<String, dynamic>?;
+            final imageUrl = imageObj?['imageUrl'] as String?;
+            if (imageUrl != null && imageUrl.isNotEmpty) _ebayImageUrl = imageUrl;
+          }
+        }
       } else if (gtin != null && gtin.isNotEmpty) {
-        requestUrl =
-            '$baseUrl/buy/browse/v1/item_summary/search?'
-            'gtin=$gtin'
-            '&limit=1';
+        // GTINs from UPC-A barcodes arrive as 13 digits with a leading 0.
+        // Try the stripped 12-digit form first; retry with the original on failure.
+        final hasLeadingZero = gtin.length == 13 && gtin.startsWith('0');
+        final primaryGtin = hasLeadingZero ? gtin.substring(1) : gtin;
+
+        final (p1, url1, img1) = await _ebayGtinLookup(primaryGtin, baseUrl, token);
+        price = p1;
+        if (url1 != null) _ebayItemUrl = url1;
+        if (img1 != null) _ebayImageUrl = img1;
+
+        if (price == null && hasLeadingZero) {
+          debugPrint(
+            '[eBay] 12-digit GTIN got no results, retrying with 13-digit: $gtin',
+          );
+          final (p2, url2, img2) = await _ebayGtinLookup(gtin, baseUrl, token);
+          price = p2;
+          if (url2 != null) _ebayItemUrl = url2;
+          if (img2 != null) _ebayImageUrl = img2;
+        }
       } else {
         debugPrint('[eBay] No SKU or GTIN available, skipping');
         setState(() => _isLoadingEbayPrices = false);
         return;
       }
-      debugPrint('[eBay] Request: $requestUrl');
 
+      if (price != null && price > 0) {
+        debugPrint(
+          '[eBay] price=\$${price.toStringAsFixed(2)} '
+          '(${stopwatch.elapsedMilliseconds}ms)',
+        );
+        setState(() {
+          _ebayAveragePrice = price;
+          _isLoadingEbayPrices = false;
+        });
+      } else {
+        debugPrint(
+          '[eBay] No listings found (${stopwatch.elapsedMilliseconds}ms)',
+        );
+        setState(() => _isLoadingEbayPrices = false);
+      }
+    } catch (e) {
+      debugPrint('[eBay] Error: $e (${stopwatch.elapsedMilliseconds}ms)');
+      setState(() => _isLoadingEbayPrices = false);
+    }
+  }
+
+  /// Make a single eBay GTIN search.
+  /// Returns (price, itemWebUrl, imageUrl) — any value may be null if not found.
+  Future<(double?, String?, String?)> _ebayGtinLookup(
+    String gtinValue,
+    String baseUrl,
+    String token,
+  ) async {
+    final requestUrl =
+        '$baseUrl/buy/browse/v1/item_summary/search?gtin=$gtinValue&limit=1';
+    debugPrint('[eBay] GTIN request: $requestUrl');
+    try {
       final response = await http
           .get(
             Uri.parse(requestUrl),
@@ -550,43 +740,29 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             },
           )
           .timeout(const Duration(seconds: 15));
-
-      debugPrint('[eBay] Status: ${response.statusCode}');
+      debugPrint('[eBay] GTIN status: ${response.statusCode}');
       debugPrint(
-        '[eBay] Body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}',
+        '[eBay] GTIN body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}',
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final items = data['itemSummaries'] as List? ?? [];
-
-        if (items.isNotEmpty) {
-          final item = items[0];
-          final priceData = item['price'];
-          if (priceData != null && priceData['value'] != null) {
-            final price = double.tryParse(priceData['value'].toString());
-            if (price != null && price > 0) {
-              debugPrint(
-                '[eBay] price=\$${price.toStringAsFixed(2)} '
-                '(${stopwatch.elapsedMilliseconds}ms)',
-              );
-              setState(() {
-                _ebayAveragePrice = price;
-                _isLoadingEbayPrices = false;
-              });
-              return;
-            }
-          }
-        }
-      }
-
-      debugPrint(
-        '[eBay] No listings found (${stopwatch.elapsedMilliseconds}ms)',
+      if (response.statusCode != 200) return (null, null, null);
+      final data = jsonDecode(response.body);
+      final items = data['itemSummaries'] as List? ?? [];
+      if (items.isEmpty) return (null, null, null);
+      final item = items[0] as Map<String, dynamic>;
+      final priceData = item['price'];
+      if (priceData == null || priceData['value'] == null) return (null, null, null);
+      final price = double.tryParse(priceData['value'].toString());
+      final url = item['itemWebUrl'] as String?;
+      final imageObj = item['image'] as Map<String, dynamic>?;
+      final imageUrl = imageObj?['imageUrl'] as String?;
+      return (
+        price,
+        url?.isNotEmpty == true ? url : null,
+        imageUrl?.isNotEmpty == true ? imageUrl : null,
       );
-      setState(() => _isLoadingEbayPrices = false);
     } catch (e) {
-      debugPrint('[eBay] Error: $e (${stopwatch.elapsedMilliseconds}ms)');
-      setState(() => _isLoadingEbayPrices = false);
+      debugPrint('[eBay] GTIN error: $e');
+      return (null, null, null);
     }
   }
 
