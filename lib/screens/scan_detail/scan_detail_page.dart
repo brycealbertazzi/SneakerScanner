@@ -62,6 +62,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
   bool _pricingInterrupted = false;
 
+  /// True until we confirm whether any platform returned a price.
+  /// Keeps the detail UI hidden while checks run (new scans only).
+  bool _checkingResults = true;
+
   /// The primary identifier used for DB keys and cache lookups.
   String get _primaryCode => widget.scanData.sku ?? '';
 
@@ -120,6 +124,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 _goatColorways = _parseColorwaysFromDb(savedGoatColorways);
               }
               if (pricingStatus == 'loading') _pricingInterrupted = true;
+              // Historical scan — pricing already complete, reveal UI immediately.
+              if (pricingStatus == 'complete') _checkingResults = false;
             });
           }
         }
@@ -163,6 +169,23 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           };
         });
       }
+
+      // For new scans: if no platform found any price, delete the scan and
+      // navigate back rather than showing an empty detail page.
+      final hasAnyPrice =
+          _ebayAveragePrice != null ||
+          _stockXPrice != null ||
+          _goatPrice != null ||
+          (_stockXColorways != null && _stockXColorways!.isNotEmpty) ||
+          (_goatColorways != null && _goatColorways!.isNotEmpty);
+
+      if (_checkingResults && !hasAnyPrice) {
+        await _deleteScan();
+        if (mounted) Navigator.of(context).pop('noResults');
+        return;
+      }
+
+      setState(() => _checkingResults = false);
 
       _savePricesToDatabase();
       _setPricingStatus('complete');
@@ -248,13 +271,15 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       final matchSku = sku ?? '';
       final size = widget.scanData.size;
 
-      // For GTIN lookups, pre-compute the best image (prefer StockX source).
-      // GTIN items use `source` instead of `shop_name`, so we do this before
-      // the loop rather than relying on iteration order.
-      final String? gtinBestImage =
-          (sku == null || sku.isEmpty) && unifiedItems.isNotEmpty
-              ? _pickBestGtinImage(unifiedItems)
-              : null;
+      // Pre-compute the best image across all unified items, preferring StockX
+      // in both paths. StockX CDN (images.stockx.com) loads reliably in Flutter;
+      // GOAT CDN (image.goat.com) can fail even for valid URLs.
+      // SKU items use `shop_name`; GTIN items use `source`.
+      final String? bestItemImage = unifiedItems.isNotEmpty
+          ? (sku != null && sku.isNotEmpty
+              ? _pickBestUnifiedImage(unifiedItems)
+              : _pickBestGtinImage(unifiedItems))
+          : null;
 
       // Extract identity from first matching result + StockX/GOAT prices
       for (final item in unifiedItems) {
@@ -279,8 +304,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 final parsed = double.tryParse(raw);
                 return (parsed != null && parsed > 0) ? raw : null;
               }(),
-              'images': gtinBestImage != null
-                  ? [gtinBestImage]
+              'images': bestItemImage != null
+                  ? [bestItemImage]
                   : item['images'] is List
                       ? item['images']
                       : item['image'] != null
@@ -323,6 +348,24 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           debugPrint('[Unified] GOAT price: \$${price.toStringAsFixed(2)} (${stopwatch.elapsedMilliseconds}ms)');
           _goatPrice = price;
           _goatSlug = slug;
+        }
+      }
+
+      // If identity was set but the first item had no images, scan all items
+      // for a usable image URL (a later item — e.g. GOAT — may have one).
+      if (productInfo != null &&
+          (productInfo['images'] as List?)?.isEmpty != false) {
+        for (final item in unifiedItems) {
+          final imgs = item['images'];
+          if (imgs is List && imgs.isNotEmpty) {
+            productInfo['images'] = imgs;
+            break;
+          }
+          final img = item['image'];
+          if (img != null) {
+            productInfo['images'] = [img];
+            break;
+          }
         }
       }
 
@@ -413,8 +456,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             .child(widget.scanId)
             .update({
               'productTitle': title,
-              'productImage': image is String && image.isNotEmpty
-                  ? image
+              'productImage': image != null && image.toString().isNotEmpty
+                  ? image.toString()
                   : null,
               'retailPrice': retailPrice,
             });
@@ -459,19 +502,52 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   // GTIN helpers
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /// Normalize an image URL — protocol-relative URLs (//cdn.example.com/...)
+  /// are valid in browsers but not in Flutter's Image.network, so prepend https:.
+  String? _normalizeImageUrl(String? url) {
+    if (url == null || url.isEmpty) return null;
+    if (url.startsWith('//')) return 'https:$url';
+    return url;
+  }
+
+  /// Pick the best image URL from KicksDB unified SKU items.
+  /// Prefers shop_name == 'stockx' (reliable CDN); falls back to any item with an image.
+  String? _pickBestUnifiedImage(List<Map<String, dynamic>> items) {
+    for (final item in items) {
+      final shopName = (item['shop_name'] ?? '').toString().toLowerCase();
+      if (shopName == 'stockx') {
+        final imgs = item['images'];
+        if (imgs is List && imgs.isNotEmpty) {
+          final url = _normalizeImageUrl(imgs[0]?.toString());
+          if (url != null) return url;
+        }
+      }
+    }
+    for (final item in items) {
+      final imgs = item['images'];
+      if (imgs is List && imgs.isNotEmpty) {
+        final url = _normalizeImageUrl(imgs[0]?.toString());
+        if (url != null) return url;
+      }
+      final url = _normalizeImageUrl(item['image']?.toString());
+      if (url != null) return url;
+    }
+    return null;
+  }
+
   /// Pick the best image URL from KicksDB GTIN items.
   /// Prefers the StockX source; falls back to the first item that has any image.
   String? _pickBestGtinImage(List<Map<String, dynamic>> items) {
     for (final item in items) {
       final source = (item['source'] ?? '').toString().toLowerCase();
       if (source == 'stockx') {
-        final img = item['image']?.toString();
-        if (img != null && img.isNotEmpty) return img;
+        final url = _normalizeImageUrl(item['image']?.toString());
+        if (url != null) return url;
       }
     }
     for (final item in items) {
-      final img = item['image']?.toString();
-      if (img != null && img.isNotEmpty) return img;
+      final url = _normalizeImageUrl(item['image']?.toString());
+      if (url != null) return url;
     }
     return null;
   }
@@ -937,6 +1013,16 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     try {
       final updateData = <String, dynamic>{};
 
+      // Save image regardless of which source found it (KicksDB or eBay fallback).
+      // This ensures history always shows the image if one was found.
+      final images = _productInfo?['images'] as List?;
+      if (images != null && images.isNotEmpty) {
+        final imageUrl = images[0]?.toString();
+        if (imageUrl != null && imageUrl.isNotEmpty) {
+          updateData['productImage'] = imageUrl;
+        }
+      }
+
       final retailPriceStr = _productInfo?['retailPrice'] as String?;
       final retailPrice =
           retailPriceStr ?? (_manualRetailPrice?.toStringAsFixed(2));
@@ -1000,12 +1086,45 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     });
   }
 
+  Future<void> _deleteScan() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || widget.scanId.isEmpty) return;
+    try {
+      await _database
+          .child('scans')
+          .child(user.uid)
+          .child(widget.scanId)
+          .remove();
+      debugPrint('[deleteScan] Removed scan with no results: ${widget.scanId}');
+    } catch (e) {
+      debugPrint('[deleteScan] Error: $e');
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Build
   // ═══════════════════════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
+    // Show a spinner while we wait for the first price result on new scans.
+    if (_checkingResults) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF121212),
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(color: Color(0xFF646CFF)),
+        ),
+      );
+    }
+
     final hasPrices =
         _ebayAveragePrice != null ||
         _stockXPrice != null ||

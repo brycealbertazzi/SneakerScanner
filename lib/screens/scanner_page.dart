@@ -505,7 +505,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
           // SKU found — go directly to detail page
           final scanId = await _saveScan(scanData);
           if (mounted) {
-            await Navigator.of(context).push(
+            final result = await Navigator.of(context).push<String>(
               MaterialPageRoute(
                 builder: (context) => ScanDetailPage(
                   scanId: scanId ?? '',
@@ -514,6 +514,12 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                 ),
               ),
             );
+            if (mounted && result == 'noResults') {
+              _showNoResultsModal(
+                scanData,
+                onEnterManually: () => _showManualSkuDialog(fullText, scanData),
+              );
+            }
           }
         } else {
           // No SKU — show dialog with option to enter manually or proceed without
@@ -560,7 +566,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       final data = currentScanData.copyWith(gtin: gtin);
       final scanId = await _saveScan(data);
       if (mounted) {
-        await Navigator.of(context).push(
+        final result = await Navigator.of(context).push<String>(
           MaterialPageRoute(
             builder: (context) => ScanDetailPage(
               scanId: scanId ?? '',
@@ -572,6 +578,9 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
         // User returned from ScanDetailPage — safe to restart camera now
         // (barcode scanner controller is long disposed by this point).
         if (mounted) await _previewController.start();
+        if (mounted && result == 'noResults') {
+          _showNoResultsModal(data);
+        }
       }
     } else {
       // User cancelled — barcode scanner is disposed, restart camera before
@@ -670,7 +679,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                         final data = currentScanData.copyWith(sku: sku);
                         final scanId = await _saveScan(data);
                         if (mounted) {
-                          await Navigator.of(context).push(
+                          final result = await Navigator.of(context).push<String>(
                             MaterialPageRoute(
                               builder: (context) => ScanDetailPage(
                                 scanId: scanId ?? '',
@@ -680,6 +689,9 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                               ),
                             ),
                           );
+                          if (mounted && result == 'noResults') {
+                            _showNoResultsModal(data);
+                          }
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -715,6 +727,91 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showNoResultsModal(ScanData scanData, {VoidCallback? onEnterManually}) {
+    final identifier = scanData.sku ?? scanData.gtin ?? 'the scanned item';
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF333333), width: 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.search_off, size: 48, color: Colors.grey[500]),
+              const SizedBox(height: 16),
+              Text(
+                'No Results Found',
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'No marketplace listings were found for $identifier.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[400]),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF646CFF),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('OK'),
+                ),
+              ),
+              if (onEnterManually != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Wrong SKU detected?',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                      onEnterManually();
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(color: Colors.grey[600]!),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text('Enter SKU Manually'),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
