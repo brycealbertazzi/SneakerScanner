@@ -6,6 +6,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../models/scan_data.dart';
 import '../services/gtin_utils.dart';
+import 'main_screen.dart';
 import 'scan_detail/scan_detail_page.dart';
 
 class ScannerPage extends StatefulWidget {
@@ -428,6 +429,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                 scanData,
                 onEnterManually: () => _showManualSkuDialog(fullText, scanData),
               );
+            } else if (mounted) {
+              context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
             }
           }
         } else {
@@ -488,6 +491,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
         if (mounted) await _previewController.start();
         if (mounted && result == 'noResults') {
           _showNoResultsModal(data);
+        } else if (mounted) {
+          context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
         }
       }
     } else {
@@ -598,6 +603,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                           );
                           if (mounted && result == 'noResults') {
                             _showNoResultsModal(data);
+                          } else if (mounted) {
+                            context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
                           }
                         }
                       },

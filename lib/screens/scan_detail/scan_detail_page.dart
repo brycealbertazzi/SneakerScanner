@@ -41,6 +41,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   double? _ebayAveragePrice;
   String? _ebayItemUrl;
   String? _ebayImageUrl;
+  String? _ebayTitle;
+
+  /// Product title resolved from whichever API returns first.
+  /// KicksDB is priority; eBay is the fallback.
+  String? _resolvedTitle;
 
   // StockX price state (via KicksDB)
   bool _isLoadingStockXPrice = true;
@@ -76,7 +81,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   @override
   void initState() {
     super.initState();
-    _resolvedScanId = _resolvedScanId;
+    _resolvedScanId = widget.scanId;
+    // Historical scans already have confirmed results — skip the checking phase.
+    if (_resolvedScanId.isNotEmpty) _checkingResults = false;
     _loadProductInfo();
   }
 
@@ -108,6 +115,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             final savedGoatPrice = double.tryParse(
               (scanDataMap['goatPrice'] as String?) ?? '',
             );
+            final savedEbayPrice = double.tryParse(
+              (scanDataMap['ebayPrice'] as String?) ?? '',
+            );
             final savedStockXColorways = scanDataMap['stockxColorways'];
             final savedGoatColorways = scanDataMap['goatColorways'];
             final pricingStatus = scanDataMap['pricingStatus'] as String?;
@@ -122,6 +132,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 _goatPrice = savedGoatPrice;
                 _isLoadingGoatPrice = false;
               }
+              if (savedEbayPrice != null) {
+                _ebayAveragePrice = savedEbayPrice;
+                _isLoadingEbayPrices = false;
+              }
               if (savedStockXColorways is List && savedStockXColorways.isNotEmpty) {
                 _stockXColorways = _parseColorwaysFromDb(savedStockXColorways);
               }
@@ -129,8 +143,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 _goatColorways = _parseColorwaysFromDb(savedGoatColorways);
               }
               if (pricingStatus == 'loading') _pricingInterrupted = true;
-              // Historical scan — pricing already complete, reveal UI immediately.
-              if (pricingStatus == 'complete') _checkingResults = false;
             });
           }
         }
@@ -162,6 +174,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       final ebayFuture = _fetchEbayPrices();
       await _lookupProduct();
       await ebayFuture;
+
+      // eBay title fallback — only applies when KicksDB didn't find a title.
+      if (_resolvedTitle == null && _ebayTitle != null && _ebayTitle!.isNotEmpty) {
+        setState(() => _resolvedTitle = _ebayTitle);
+      }
 
       // If KicksDB returned no image but eBay did, use eBay's image as fallback.
       if (_ebayImageUrl != null &&
@@ -299,8 +316,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
         // Identity: use the first result that has a title
         if (productInfo == null) {
-          final title = item['title'] ?? item['name'];
-          if (title != null) {
+          final title = (item['title'] ?? item['name'])?.toString();
+          if (title != null && title.isNotEmpty) {
+            if (_resolvedTitle == null) setState(() => _resolvedTitle = title);
             productInfo = {
               'title': title,
               'brand': item['brand'] ?? '',
@@ -464,7 +482,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             .child(user.uid)
             .child(_resolvedScanId)
             .update({
-              'productTitle': title,
+              'productTitle': _resolvedTitle ?? title?.toString(),
               'productImage': image != null && image.toString().isNotEmpty
                   ? image.toString()
                   : null,
@@ -737,6 +755,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             final imageObj = item['image'] as Map<String, dynamic>?;
             final imageUrl = imageObj?['imageUrl'] as String?;
             if (imageUrl != null && imageUrl.isNotEmpty) _ebayImageUrl = imageUrl;
+            final titleStr = item['title'] as String?;
+            if (titleStr != null && titleStr.isNotEmpty) _ebayTitle = titleStr;
           }
         }
       } else if (gtin != null && gtin.isNotEmpty) {
@@ -745,19 +765,21 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         final hasLeadingZero = gtin.length == 13 && gtin.startsWith('0');
         final primaryGtin = hasLeadingZero ? gtin.substring(1) : gtin;
 
-        final (p1, url1, img1) = await _ebayGtinLookup(primaryGtin, baseUrl, token);
+        final (p1, url1, img1, title1) = await _ebayGtinLookup(primaryGtin, baseUrl, token);
         price = p1;
         if (url1 != null) _ebayItemUrl = url1;
         if (img1 != null) _ebayImageUrl = img1;
+        if (title1 != null) _ebayTitle = title1;
 
         if (price == null && hasLeadingZero) {
           debugPrint(
             '[eBay] 12-digit GTIN got no results, retrying with 13-digit: $gtin',
           );
-          final (p2, url2, img2) = await _ebayGtinLookup(gtin, baseUrl, token);
+          final (p2, url2, img2, title2) = await _ebayGtinLookup(gtin, baseUrl, token);
           price = p2;
           if (url2 != null) _ebayItemUrl = url2;
           if (img2 != null) _ebayImageUrl = img2;
+          if (title2 != null) _ebayTitle = title2;
         }
       } else {
         debugPrint('[eBay] No SKU or GTIN available, skipping');
@@ -787,8 +809,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   }
 
   /// Make a single eBay GTIN search.
-  /// Returns (price, itemWebUrl, imageUrl) — any value may be null if not found.
-  Future<(double?, String?, String?)> _ebayGtinLookup(
+  /// Returns (price, itemWebUrl, imageUrl, title) — any value may be null if not found.
+  Future<(double?, String?, String?, String?)> _ebayGtinLookup(
     String gtinValue,
     String baseUrl,
     String token,
@@ -811,25 +833,27 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       debugPrint(
         '[eBay] GTIN body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}',
       );
-      if (response.statusCode != 200) return (null, null, null);
+      if (response.statusCode != 200) return (null, null, null, null);
       final data = jsonDecode(response.body);
       final items = data['itemSummaries'] as List? ?? [];
-      if (items.isEmpty) return (null, null, null);
+      if (items.isEmpty) return (null, null, null, null);
       final item = items[0] as Map<String, dynamic>;
       final priceData = item['price'];
-      if (priceData == null || priceData['value'] == null) return (null, null, null);
+      if (priceData == null || priceData['value'] == null) return (null, null, null, null);
       final price = double.tryParse(priceData['value'].toString());
       final url = item['itemWebUrl'] as String?;
       final imageObj = item['image'] as Map<String, dynamic>?;
       final imageUrl = imageObj?['imageUrl'] as String?;
+      final titleStr = item['title'] as String?;
       return (
         price,
         url?.isNotEmpty == true ? url : null,
         imageUrl?.isNotEmpty == true ? imageUrl : null,
+        titleStr?.isNotEmpty == true ? titleStr : null,
       );
     } catch (e) {
       debugPrint('[eBay] GTIN error: $e');
-      return (null, null, null);
+      return (null, null, null, null);
     }
   }
 
@@ -1004,10 +1028,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     try {
       final updateData = <String, dynamic>{};
 
-      // Save product title (not written by _lookupProduct for new scans).
-      final title = _productInfo?['title'] as String?;
-      if (title != null && title.isNotEmpty && title != 'Product Not Found') {
-        updateData['productTitle'] = title;
+      // Save the resolved product title from whichever API found it first.
+      if (_resolvedTitle != null && _resolvedTitle!.isNotEmpty) {
+        updateData['productTitle'] = _resolvedTitle;
       }
 
       // Save image regardless of which source found it (KicksDB or eBay fallback).
@@ -1097,10 +1120,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         'code': scanData.sku ?? scanData.displayName,
         'format': 'STYLE_CODE',
         'timestamp': ServerValue.timestamp,
-        'productTitle': () {
-          final t = _productInfo?['title'] as String?;
-          return (t != null && t.isNotEmpty && t != 'Product Not Found') ? t : null;
-        }(),
+        'productTitle': (_resolvedTitle?.isNotEmpty == true) ? _resolvedTitle : null,
         'productImage': null,
         'retailPrice': null,
         'ebayPrice': null,
@@ -1239,11 +1259,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
                     // 2. Product Title
                     Text(
-                      _identityConfirmed
-                          ? (_productInfo?['title'] ?? 'Unknown Product')
-                          : (widget.scanData.displayName.isNotEmpty
-                                ? widget.scanData.displayName
-                                : 'Scanned Product'),
+                      _resolvedTitle ??
+                          (widget.scanData.displayName.isNotEmpty
+                              ? widget.scanData.displayName
+                              : 'Scanned Product'),
                       style: GoogleFonts.poppins(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,

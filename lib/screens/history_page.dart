@@ -22,12 +22,22 @@ class _HistoryPageState extends State<HistoryPage> {
   DateTime? _customStartDate;
   DateTime? _customEndDate;
 
+  /// Stored once so StreamBuilder always receives the same stream object,
+  /// preventing re-subscription (and the loading spinner) on every setState.
+  late final Stream<DatabaseEvent> _scansStream;
+
   DatabaseReference get _scansRef {
     final user = FirebaseAuth.instance.currentUser;
     return FirebaseDatabase.instance
         .ref()
         .child('scans')
         .child(user?.uid ?? '');
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _scansStream = _scansRef.orderByChild('timestamp').onValue;
   }
 
   @override
@@ -277,7 +287,7 @@ class _HistoryPageState extends State<HistoryPage> {
 
               Expanded(
                 child: StreamBuilder<DatabaseEvent>(
-                  stream: _scansRef.orderByChild('timestamp').onValue,
+                  stream: _scansStream,
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
                       return Center(
