@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class ApiKeys {
   ApiKeys._();
@@ -21,6 +22,18 @@ class ApiKeys {
   static Future<bool> fetch() async {
     if (_loaded) return true;
     try {
+      // Ensure the auth token is fresh before calling — avoids the race
+      // condition where currentUser is set but the token hasn't been minted yet
+      // after the app restores its session from persistence.
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        debugPrint('[ApiKeys] No signed-in user, skipping fetch');
+        return false;
+      }
+      debugPrint('[ApiKeys] Refreshing token for uid: ${user.uid}');
+      final token = await user.getIdToken(true);
+      debugPrint('[ApiKeys] Token refreshed, length=${token?.length ?? 0}');
+
       final callable = FirebaseFunctions.instanceFor(
         region: 'us-central1',
       ).httpsCallable('getApiKeys');
