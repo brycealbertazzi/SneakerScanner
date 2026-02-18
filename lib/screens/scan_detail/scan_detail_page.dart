@@ -47,6 +47,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   /// KicksDB is priority; eBay is the fallback.
   String? _resolvedTitle;
 
+  /// Brand resolved from the first KicksDB call that returns one.
+  /// OCR-extracted brand (widget.scanData.brand) is the fallback.
+  String? _resolvedBrand;
+
   // StockX price state (via KicksDB)
   bool _isLoadingStockXPrice = true;
   double? _stockXPrice;
@@ -319,6 +323,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           final title = (item['title'] ?? item['name'])?.toString();
           if (title != null && title.isNotEmpty) {
             if (_resolvedTitle == null) setState(() => _resolvedTitle = title);
+            final apiBrand = item['brand']?.toString();
+            if (_resolvedBrand == null && apiBrand != null && apiBrand.isNotEmpty) {
+              setState(() => _resolvedBrand = apiBrand);
+            }
             productInfo = {
               'title': title,
               'brand': item['brand'] ?? '',
@@ -1033,6 +1041,12 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         updateData['productTitle'] = _resolvedTitle;
       }
 
+      // Save the resolved brand (KicksDB-verified, or OCR fallback).
+      final resolvedBrand = _resolvedBrand ?? widget.scanData.brand;
+      if (resolvedBrand != null && resolvedBrand.isNotEmpty) {
+        updateData['brand'] = resolvedBrand;
+      }
+
       // Save image regardless of which source found it (KicksDB or eBay fallback).
       // This ensures history always shows the image if one was found.
       final images = _productInfo?['images'] as List?;
@@ -1115,8 +1129,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     try {
       final scanData = widget.scanData;
       final scanRef = _database.child('scans').child(user.uid).push();
+      final resolvedBrand = _resolvedBrand ?? scanData.brand;
       await scanRef.set({
         ...scanData.toFirebase(),
+        if (resolvedBrand != null && resolvedBrand.isNotEmpty) 'brand': resolvedBrand,
         'code': scanData.sku ?? scanData.displayName,
         'format': 'STYLE_CODE',
         'timestamp': ServerValue.timestamp,
@@ -1273,8 +1289,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
                     // 3. Brand Badge
                     Builder(builder: (context) {
-                      final badgeBrand = widget.scanData.brand ??
-                          _productInfo?['brand']?.toString();
+                      final badgeBrand = _resolvedBrand ?? widget.scanData.brand;
                       if (badgeBrand == null || badgeBrand.isEmpty) {
                         return const SizedBox.shrink();
                       }
@@ -1372,7 +1387,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   List<Widget> _buildInfoCards() {
     final cards = <Widget>[];
 
-    final brand = widget.scanData.brand ?? _productInfo?['brand'] as String?;
+    final brand = _resolvedBrand ?? widget.scanData.brand;
     if (brand != null && brand.isNotEmpty) {
       cards.add(InfoCard(label: 'Brand', value: brand, icon: Icons.business));
       cards.add(const SizedBox(height: 12));

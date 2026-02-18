@@ -429,7 +429,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                 scanData,
                 onEnterManually: () => _showManualSkuDialog(fullText, scanData),
               );
-            } else if (mounted) {
+            } else if (mounted && result != 'scanAnother') {
               context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
             }
           }
@@ -491,7 +491,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
         if (mounted) await _previewController.start();
         if (mounted && result == 'noResults') {
           _showNoResultsModal(data);
-        } else if (mounted) {
+        } else if (mounted && result != 'scanAnother') {
           context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
         }
       }
@@ -603,7 +603,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                           );
                           if (mounted && result == 'noResults') {
                             _showNoResultsModal(data);
-                          } else if (mounted) {
+                          } else if (mounted && result != 'scanAnother') {
                             context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
                           }
                         }
