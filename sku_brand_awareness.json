@@ -69,6 +69,36 @@
     "patterns": [
       "^(?:[MWU])([0-9]{4}[A-Z]?)([A-Z]{2,6})$",
       "^([A-Z]{2}[0-9]{3})([A-Z0-9]{2,6})$"
+    ],
+    "new_balance_color_codes": [
+      { "code": "GRY", "family": "Grey" },
+      { "code": "GY", "family": "Grey" },
+      { "code": "BLK", "family": "Black" },
+      { "code": "BK", "family": "Black" },
+      { "code": "WHT", "family": "White" },
+      { "code": "WT", "family": "White" },
+      { "code": "RED", "family": "Red" },
+      { "code": "RD", "family": "Red" },
+      { "code": "BLU", "family": "Blue" },
+      { "code": "NVY", "family": "Blue" },
+      { "code": "NAV", "family": "Blue" },
+      { "code": "GRN", "family": "Green" },
+      { "code": "GN", "family": "Green" },
+      { "code": "YLW", "family": "Yellow" },
+      { "code": "YEL", "family": "Yellow" },
+      { "code": "ORG", "family": "Orange" },
+      { "code": "OR", "family": "Orange" },
+      { "code": "PNK", "family": "Pink" },
+      { "code": "PK", "family": "Pink" },
+      { "code": "PUR", "family": "Purple" },
+      { "code": "BRN", "family": "Brown" },
+      { "code": "TAN", "family": "Brown" },
+      { "code": "BEG", "family": "Beige" },
+      { "code": "CRM", "family": "Cream" },
+      { "code": "IVY", "family": "White" },
+      { "code": "BGE", "family": "Beige" },
+      { "code": "MLT", "family": "Multi" },
+      { "code": "MUL", "family": "Multi" }
     ]
   },
   {

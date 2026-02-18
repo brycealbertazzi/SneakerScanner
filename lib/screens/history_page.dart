@@ -46,14 +46,12 @@ class _HistoryPageState extends State<HistoryPage> {
       final productTitle = (data['productTitle'] ?? '')
           .toString()
           .toLowerCase();
-      final modelName = (scanData.modelName ?? '').toLowerCase();
       final timestamp = data['timestamp'] as int?;
 
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
         if (!code.contains(query) &&
-            !productTitle.contains(query) &&
-            !modelName.contains(query)) {
+            !productTitle.contains(query)) {
           return false;
         }
       }

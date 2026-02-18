@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,7 +18,6 @@ class ScannerPage extends StatefulWidget {
 class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   bool _isProcessing = false;
 
-  final DatabaseReference _database = FirebaseDatabase.instance.ref();
   final ImagePicker _imagePicker = ImagePicker();
   final MobileScannerController _previewController = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
@@ -175,89 +172,6 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       debugPrint('All SKU candidates rejected for brand "${foundBrand ?? 'unknown'}": $allCandidates');
     }
 
-    // --- Product name extraction ---
-    String? productName;
-    final labelFieldPattern = RegExp(
-      r'^(DPCI|STYLE|SKU|ITEM|BRAND|COLOR|SIZE|UPC|TCIN|BARCODE)[#:\s]',
-      caseSensitive: false,
-    );
-    final codePattern = RegExp(
-      r'^\d{3}-\d{2}-\d{4}$|^[A-Z]{2,3}\d{4}-\d{3}$|^\d{6,}$|^\d{12,13}$',
-    );
-
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (trimmed.length < 3) continue;
-      if (labelFieldPattern.hasMatch(trimmed)) continue;
-      if (codePattern.hasMatch(trimmed.toUpperCase())) continue;
-      final alphaCount = trimmed.replaceAll(RegExp(r'[^a-zA-Z]'), '').length;
-      if (alphaCount < trimmed.length * 0.5) continue;
-      final words = trimmed.split(RegExp(r'\s+'));
-      if (words.length < 2) continue;
-      if (foundBrand != null && trimmed.toUpperCase().trim() == foundBrand) {
-        continue;
-      }
-      productName = trimmed;
-      break;
-    }
-
-    // --- Colorway extraction ---
-    String? colorway;
-    // Look for COLOR: or COLORWAY: labeled field
-    final colorLabelMatch = RegExp(
-      r'COLOU?R(?:WAY)?[:\s]+([A-Z][A-Z /\-]+)',
-      caseSensitive: false,
-    ).firstMatch(normalized);
-    if (colorLabelMatch != null) {
-      colorway = _titleCase(colorLabelMatch.group(1)!.trim());
-    }
-    // Fallback: slash-separated color patterns like BLACK/WHITE-FIRE RED
-    if (colorway == null) {
-      final slashColorMatch = RegExp(
-        r'\b([A-Z]{3,}(?:\s+[A-Z]+)*(?:/[A-Z]+(?:\s+[A-Z]+)*){1,4})\b',
-      ).firstMatch(normalized);
-      if (slashColorMatch != null) {
-        final candidate = slashColorMatch.group(1)!;
-        // Only treat as colorway if it looks like colors (has a slash)
-        if (candidate.contains('/')) {
-          colorway = _titleCase(candidate);
-        }
-      }
-    }
-
-    // --- Assemble model name ---
-    String? modelName;
-    if (foundBrand != null || productName != null) {
-      String titleCase(String s) => s
-          .split(' ')
-          .map(
-            (w) => w.isEmpty
-                ? w
-                : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}',
-          )
-          .join(' ');
-
-      final parts = <String>[];
-      if (foundBrand != null) {
-        final brandTitle = titleCase(foundBrand);
-        parts.add(brandTitle);
-        if (productName != null &&
-            !productName.toUpperCase().startsWith(foundBrand)) {
-          parts.add(productName);
-        } else if (productName != null) {
-          parts.add(productName);
-          parts.clear();
-          parts.add(productName);
-        }
-      } else if (productName != null) {
-        parts.add(productName);
-      }
-      final assembled = parts.join(' ').trim();
-      if (assembled.isNotEmpty) {
-        modelName = assembled;
-      }
-    }
-
     // --- Size extraction ---
     String? size;
     final sizeMatch = RegExp(
@@ -279,8 +193,6 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
 
     return ScanData(
       brand: brandForStorage,
-      modelName: modelName,
-      colorway: colorway,
       sku: code,
       size: size,
     );
@@ -496,19 +408,16 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
           debugPrint('SKU: not found');
         }
         debugPrint('Brand: ${scanData.brand ?? 'n/a'}, '
-            'Model: ${scanData.modelName ?? 'n/a'}, '
-            'Colorway: ${scanData.colorway ?? 'n/a'}, '
             'Size: ${scanData.size ?? 'n/a'}');
         debugPrint('═══════════════════');
 
         if (scanData.sku != null) {
           // SKU found — go directly to detail page
-          final scanId = await _saveScan(scanData);
           if (mounted) {
             final result = await Navigator.of(context).push<String>(
               MaterialPageRoute(
                 builder: (context) => ScanDetailPage(
-                  scanId: scanId ?? '',
+                  scanId: '',
                   scanData: scanData,
                   timestamp: DateTime.now().millisecondsSinceEpoch,
                 ),
@@ -564,12 +473,11 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       debugPrint('═══════════════════');
 
       final data = currentScanData.copyWith(gtin: gtin);
-      final scanId = await _saveScan(data);
       if (mounted) {
         final result = await Navigator.of(context).push<String>(
           MaterialPageRoute(
             builder: (context) => ScanDetailPage(
-              scanId: scanId ?? '',
+              scanId: '',
               scanData: data,
               timestamp: DateTime.now().millisecondsSinceEpoch,
             ),
@@ -677,12 +585,11 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                         if (sku.isEmpty) return;
                         Navigator.of(dialogContext).pop();
                         final data = currentScanData.copyWith(sku: sku);
-                        final scanId = await _saveScan(data);
                         if (mounted) {
                           final result = await Navigator.of(context).push<String>(
                             MaterialPageRoute(
                               builder: (context) => ScanDetailPage(
-                                scanId: scanId ?? '',
+                                scanId: '',
                                 scanData: data,
                                 timestamp:
                                     DateTime.now().millisecondsSinceEpoch,
@@ -817,29 +724,6 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
         ),
       ),
     );
-  }
-
-  Future<String?> _saveScan(ScanData scanData) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return null;
-
-    final scanRef = _database.child('scans').child(user.uid).push();
-    await scanRef.set({
-      ...scanData.toFirebase(),
-      // Legacy fields for backward compatibility with history display
-      'code': scanData.sku ?? scanData.displayName,
-      'format': 'STYLE_CODE',
-      'timestamp': ServerValue.timestamp,
-      'productTitle': null,
-      'productImage': null,
-      'retailPrice': null,
-      'ebayPrice': null,
-      'stockxPrice': null,
-      'goatPrice': null,
-      'labelName': scanData.modelName,
-    });
-
-    return scanRef.key;
   }
 
   @override

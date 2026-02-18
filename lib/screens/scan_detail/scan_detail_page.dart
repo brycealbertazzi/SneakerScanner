@@ -66,12 +66,17 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   /// Keeps the detail UI hidden while checks run (new scans only).
   bool _checkingResults = true;
 
+  /// Mutable scan ID — empty for new scans until results are confirmed and
+  /// the record is persisted. Non-empty for historical scans reopened from history.
+  String _resolvedScanId = '';
+
   /// The primary identifier used for DB keys and cache lookups.
   String get _primaryCode => widget.scanData.sku ?? '';
 
   @override
   void initState() {
     super.initState();
+    _resolvedScanId = _resolvedScanId;
     _loadProductInfo();
   }
 
@@ -83,11 +88,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        if (widget.scanId.isNotEmpty) {
+        if (_resolvedScanId.isNotEmpty) {
           final scanSnapshot = await _database
               .child('scans')
               .child(user.uid)
-              .child(widget.scanId)
+              .child(_resolvedScanId)
               .get();
 
           if (scanSnapshot.exists) {
@@ -180,9 +185,13 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           (_goatColorways != null && _goatColorways!.isNotEmpty);
 
       if (_checkingResults && !hasAnyPrice) {
-        await _deleteScan();
         if (mounted) Navigator.of(context).pop('noResults');
         return;
+      }
+
+      // New scan — create the DB record now that we have at least one price.
+      if (_resolvedScanId.isEmpty) {
+        await _createScanInDb();
       }
 
       setState(() => _checkingResults = false);
@@ -449,11 +458,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       }
 
       final user = FirebaseAuth.instance.currentUser;
-      if (user != null && widget.scanId.isNotEmpty) {
+      if (user != null && _resolvedScanId.isNotEmpty) {
         await _database
             .child('scans')
             .child(user.uid)
-            .child(widget.scanId)
+            .child(_resolvedScanId)
             .update({
               'productTitle': title,
               'productImage': image != null && image.toString().isNotEmpty
@@ -605,24 +614,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         (_productInfo?['styleCode'] as String?);
     if (sku != null && sku.isNotEmpty) {
       return sku;
-    }
-
-    final brand = widget.scanData.brand ?? _productInfo?['brand'] as String?;
-    final modelName = widget.scanData.modelName;
-    final colorway = widget.scanData.colorway;
-
-    if (brand != null &&
-        brand.isNotEmpty &&
-        modelName != null &&
-        modelName.isNotEmpty) {
-      final parts = [brand, modelName];
-      if (colorway != null && colorway.isNotEmpty) parts.add(colorway);
-      final query = parts.join(' ');
-      if (forStockX) {
-        final words = query.split(' ');
-        if (words.length > 6) return words.take(6).join(' ');
-      }
-      return query;
     }
 
     final title = _productInfo?['title'] as String?;
@@ -1008,10 +999,16 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
   Future<void> _savePricesToDatabase() async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || widget.scanId.isEmpty) return;
+    if (user == null || _resolvedScanId.isEmpty) return;
 
     try {
       final updateData = <String, dynamic>{};
+
+      // Save product title (not written by _lookupProduct for new scans).
+      final title = _productInfo?['title'] as String?;
+      if (title != null && title.isNotEmpty && title != 'Product Not Found') {
+        updateData['productTitle'] = title;
+      }
 
       // Save image regardless of which source found it (KicksDB or eBay fallback).
       // This ensures history always shows the image if one was found.
@@ -1070,7 +1067,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         await _database
             .child('scans')
             .child(user.uid)
-            .child(widget.scanId)
+            .child(_resolvedScanId)
             .update(updateData);
       }
     } catch (e) {
@@ -1080,24 +1077,41 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
   void _setPricingStatus(String status) {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || widget.scanId.isEmpty) return;
-    _database.child('scans').child(user.uid).child(widget.scanId).update({
+    if (user == null || _resolvedScanId.isEmpty) return;
+    _database.child('scans').child(user.uid).child(_resolvedScanId).update({
       'pricingStatus': status,
     });
   }
 
-  Future<void> _deleteScan() async {
+  /// Creates the Firebase scan record for a new scan after prices are confirmed.
+  /// Only called when [_resolvedScanId] is empty (i.e. a brand-new scan).
+  Future<void> _createScanInDb() async {
+    if (_resolvedScanId.isNotEmpty) return;
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || widget.scanId.isEmpty) return;
+    if (user == null) return;
     try {
-      await _database
-          .child('scans')
-          .child(user.uid)
-          .child(widget.scanId)
-          .remove();
-      debugPrint('[deleteScan] Removed scan with no results: ${widget.scanId}');
+      final scanData = widget.scanData;
+      final scanRef = _database.child('scans').child(user.uid).push();
+      await scanRef.set({
+        ...scanData.toFirebase(),
+        'code': scanData.sku ?? scanData.displayName,
+        'format': 'STYLE_CODE',
+        'timestamp': ServerValue.timestamp,
+        'productTitle': () {
+          final t = _productInfo?['title'] as String?;
+          return (t != null && t.isNotEmpty && t != 'Product Not Found') ? t : null;
+        }(),
+        'productImage': null,
+        'retailPrice': null,
+        'ebayPrice': null,
+        'stockxPrice': null,
+        'goatPrice': null,
+        'pricingStatus': 'complete',
+      });
+      _resolvedScanId = scanRef.key ?? '';
+      debugPrint('[createScan] Scan created: $_resolvedScanId');
     } catch (e) {
-      debugPrint('[deleteScan] Error: $e');
+      debugPrint('[createScan] Error: $e');
     }
   }
 
@@ -1345,32 +1359,21 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       cards.add(const SizedBox(height: 12));
     }
 
-    final modelName =
-        widget.scanData.modelName ?? _productInfo?['title'] as String?;
-    if (modelName != null &&
-        modelName.isNotEmpty &&
-        modelName != 'Product Not Found') {
-      cards.add(
-        InfoCard(label: 'Model Name', value: modelName, icon: Icons.label),
-      );
-      cards.add(const SizedBox(height: 12));
-    }
-
-    final colorway =
-        widget.scanData.colorway ?? _productInfo?['colorway'] as String?;
-    if (colorway != null && colorway.isNotEmpty) {
-      cards.add(
-        InfoCard(label: 'Colorway', value: colorway, icon: Icons.palette),
-      );
-      cards.add(const SizedBox(height: 12));
-    }
-
     if (widget.scanData.sku != null) {
       cards.add(
         InfoCard(
           label: 'SKU',
           value: widget.scanData.sku!,
           icon: Icons.qr_code,
+        ),
+      );
+      cards.add(const SizedBox(height: 12));
+    } else if (widget.scanData.gtin != null) {
+      cards.add(
+        InfoCard(
+          label: 'GTIN',
+          value: widget.scanData.gtin!,
+          icon: Icons.barcode_reader,
         ),
       );
       cards.add(const SizedBox(height: 12));
