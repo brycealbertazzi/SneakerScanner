@@ -415,6 +415,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
         if (scanData.sku != null) {
           // SKU found — go directly to detail page
           if (mounted) {
+            await _previewController.stop();
             final result = await Navigator.of(context).push<String>(
               MaterialPageRoute(
                 builder: (context) => ScanDetailPage(
@@ -425,11 +426,14 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
               ),
             );
             if (mounted && result == 'noResults') {
+              await _previewController.start();
               _showNoResultsModal(
                 scanData,
                 onEnterManually: () => _showManualSkuDialog(fullText, scanData),
               );
-            } else if (mounted && result != 'scanAnother') {
+            } else if (mounted && result == 'scanAnother') {
+              await _previewController.start();
+            } else if (mounted) {
               context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
             }
           }
@@ -486,12 +490,12 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
             ),
           ),
         );
-        // User returned from ScanDetailPage — safe to restart camera now
-        // (barcode scanner controller is long disposed by this point).
-        if (mounted) await _previewController.start();
         if (mounted && result == 'noResults') {
+          await _previewController.start();
           _showNoResultsModal(data);
-        } else if (mounted && result != 'scanAnother') {
+        } else if (mounted && result == 'scanAnother') {
+          await _previewController.start();
+        } else if (mounted) {
           context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
         }
       }
@@ -589,6 +593,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                         final sku = controller.text.trim().toUpperCase();
                         if (sku.isEmpty) return;
                         Navigator.of(dialogContext).pop();
+                        await _previewController.stop();
                         final data = currentScanData.copyWith(sku: sku);
                         if (mounted) {
                           final result = await Navigator.of(context).push<String>(
@@ -602,8 +607,11 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                             ),
                           );
                           if (mounted && result == 'noResults') {
+                            await _previewController.start();
                             _showNoResultsModal(data);
-                          } else if (mounted && result != 'scanAnother') {
+                          } else if (mounted && result == 'scanAnother') {
+                            await _previewController.start();
+                          } else if (mounted) {
                             context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
                           }
                         }
