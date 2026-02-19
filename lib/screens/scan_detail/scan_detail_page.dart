@@ -404,8 +404,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         }
       }
 
-      // ── Step 2: Colorway fallback (Nike/Jordan only) ───────────────
-      final brand = productInfo?['brand'] as String? ?? widget.scanData.brand ?? '';
+      // ── Step 2: Colorway fallback (Nike/Jordan, New Balance, Asics, Puma) ─
+      final brand = _resolvedBrand ?? productInfo?['brand'] as String? ?? widget.scanData.brand ?? '';
       if (isNikeOrJordan(brand) && sku != null && sku.isNotEmpty) {
         final parsed = parseNikeSku(sku);
         if (parsed != null) {
@@ -427,6 +427,93 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             debugPrint('═══ STEP 2: GOAT colorway fallback ═══');
             final variants = await _fetchColorwayVariants(
               'goat', sku, modelBlock, stopwatch,
+            );
+            if (variants.isNotEmpty) {
+              _goatColorways = variants;
+              _goatPrice = variants.first.price;
+              _goatSlug = variants.first.slug;
+            }
+          }
+        }
+      } else if (isNewBalance(brand) && sku != null && sku.isNotEmpty) {
+        final parsed = parseNewBalanceSku(sku);
+        if (parsed != null) {
+          final (modelBlock, _) = parsed;
+
+          if (_stockXPrice == null) {
+            debugPrint('═══ STEP 2: StockX NB colorway fallback ═══');
+            final variants = await _fetchColorwayVariants(
+              'stockx', sku, modelBlock, stopwatch, brandKey: 'new_balance',
+            );
+            if (variants.isNotEmpty) {
+              _stockXColorways = variants;
+              _stockXPrice = variants.first.price;
+              _stockXSlug = variants.first.slug;
+            }
+          }
+
+          if (_goatPrice == null) {
+            debugPrint('═══ STEP 2: GOAT NB colorway fallback ═══');
+            final variants = await _fetchColorwayVariants(
+              'goat', sku, modelBlock, stopwatch, brandKey: 'new_balance',
+            );
+            if (variants.isNotEmpty) {
+              _goatColorways = variants;
+              _goatPrice = variants.first.price;
+              _goatSlug = variants.first.slug;
+            }
+          }
+        }
+      } else if (isAsics(brand) && sku != null && sku.isNotEmpty) {
+        final parsed = parseAsicsSku(sku);
+        if (parsed != null) {
+          final (modelBlock, _) = parsed;
+
+          if (_stockXPrice == null) {
+            debugPrint('═══ STEP 2: StockX Asics colorway fallback ═══');
+            final variants = await _fetchColorwayVariants(
+              'stockx', sku, modelBlock, stopwatch, brandKey: 'asics',
+            );
+            if (variants.isNotEmpty) {
+              _stockXColorways = variants;
+              _stockXPrice = variants.first.price;
+              _stockXSlug = variants.first.slug;
+            }
+          }
+
+          if (_goatPrice == null) {
+            debugPrint('═══ STEP 2: GOAT Asics colorway fallback ═══');
+            final variants = await _fetchColorwayVariants(
+              'goat', sku, modelBlock, stopwatch, brandKey: 'asics',
+            );
+            if (variants.isNotEmpty) {
+              _goatColorways = variants;
+              _goatPrice = variants.first.price;
+              _goatSlug = variants.first.slug;
+            }
+          }
+        }
+      } else if (isPuma(brand) && sku != null && sku.isNotEmpty) {
+        final parsed = parsePumaSku(sku);
+        if (parsed != null) {
+          final (modelBlock, _) = parsed;
+
+          if (_stockXPrice == null) {
+            debugPrint('═══ STEP 2: StockX Puma colorway fallback ═══');
+            final variants = await _fetchColorwayVariants(
+              'stockx', sku, modelBlock, stopwatch, brandKey: 'puma',
+            );
+            if (variants.isNotEmpty) {
+              _stockXColorways = variants;
+              _stockXPrice = variants.first.price;
+              _stockXSlug = variants.first.slug;
+            }
+          }
+
+          if (_goatPrice == null) {
+            debugPrint('═══ STEP 2: GOAT Puma colorway fallback ═══');
+            final variants = await _fetchColorwayVariants(
+              'goat', sku, modelBlock, stopwatch, brandKey: 'puma',
             );
             if (variants.isNotEmpty) {
               _goatColorways = variants;
@@ -918,12 +1005,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   }
 
   /// Fetch colorway variants from a platform-specific KicksDB endpoint.
+  /// [brandKey] is either 'nike' (default) or 'new_balance'.
   Future<List<ColorwayVariant>> _fetchColorwayVariants(
     String platform,
     String sku,
     String modelBlock,
-    Stopwatch stopwatch,
-  ) async {
+    Stopwatch stopwatch, {
+    String brandKey = 'nike',
+  }) async {
     final uri = Uri.parse(
       'https://api.kicks.dev/v3/$platform/products'
       '?query=${Uri.encodeComponent(sku)}&limit=5'
@@ -962,22 +1051,51 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       final seenFamilies = <String>{};
       for (final product in candidates) {
         final apiSku = (product['style_id'] ?? product['sku'] ?? '').toString();
-        final parsed = parseNikeSku(apiSku);
-        if (parsed == null) continue;
 
-        final (apiModel, apiColor) = parsed;
-        // Model block must match; colorway can differ
+        // Parse the API SKU using the appropriate brand parser.
+        String apiModel;
+        String apiColor;
+        if (brandKey == 'new_balance') {
+          final parsed = parseNewBalanceSku(apiSku);
+          if (parsed == null) continue;
+          (apiModel, apiColor) = parsed;
+          // NB colorway must start with a letter.
+          if (apiColor.isEmpty || !RegExp(r'^[A-Z]').hasMatch(apiColor.toUpperCase())) continue;
+        } else if (brandKey == 'asics') {
+          final parsed = parseAsicsSku(apiSku);
+          if (parsed == null) continue;
+          (apiModel, apiColor) = parsed;
+        } else if (brandKey == 'puma') {
+          final parsed = parsePumaSku(apiSku);
+          if (parsed == null) continue;
+          (apiModel, apiColor) = parsed;
+        } else {
+          final parsed = parseNikeSku(apiSku);
+          if (parsed == null) continue;
+          (apiModel, apiColor) = parsed;
+        }
+
+        // Model block must match; colorway can differ.
         if (apiModel.toUpperCase() != modelBlock.toUpperCase()) continue;
 
         // Extract price (old format: min_price → avg_price → variants lowest_ask)
         final price = _extractOldFormatPrice(product);
         if (price == null || price <= 0) continue;
 
-        final (family, color) = nikeColorFamily(apiColor);
+        final (String family, Color color) = brandKey == 'new_balance'
+            ? nbColorFamily(apiColor)
+            : brandKey == 'asics'
+                ? asicsColorFamily(apiColor)
+                : brandKey == 'puma'
+                    ? pumaColorFamily(apiColor)
+                    : nikeColorFamily(apiColor);
 
-        // Skip duplicate color families (e.g. 001 and 003 are both Black)
-        if (seenFamilies.contains(family)) continue;
-        seenFamilies.add(family);
+        // Deduplicate: Nike/NB by color family; Asics/Puma by color code
+        // (generic-family brands would collapse all variants into one otherwise).
+        final dedupeKey =
+            (brandKey == 'asics' || brandKey == 'puma') ? apiColor : family;
+        if (seenFamilies.contains(dedupeKey)) continue;
+        seenFamilies.add(dedupeKey);
 
         final slug = (product['slug'] ?? product['id'] ?? product['name'])?.toString();
 
