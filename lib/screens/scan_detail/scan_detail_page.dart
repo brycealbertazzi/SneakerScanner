@@ -817,7 +817,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       if (sku != null && sku.isNotEmpty) {
         final requestUrl =
             '$baseUrl/buy/browse/v1/item_summary/search?'
-            'q=${Uri.encodeComponent(sku)}&limit=1';
+            'q=${Uri.encodeComponent(sku)}';
         debugPrint('[eBay] Request: $requestUrl');
 
         final response = await http
@@ -839,8 +839,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           final items = data['itemSummaries'] as List? ?? [];
-          if (items.isNotEmpty) {
-            final item = items[0] as Map<String, dynamic>;
+          final item = _firstFootwearItem(items);
+          if (item != null) {
             final priceData = item['price'];
             if (priceData != null && priceData['value'] != null) {
               price = double.tryParse(priceData['value'].toString());
@@ -911,7 +911,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     String token,
   ) async {
     final requestUrl =
-        '$baseUrl/buy/browse/v1/item_summary/search?gtin=$gtinValue&limit=1';
+        '$baseUrl/buy/browse/v1/item_summary/search?gtin=$gtinValue';
     debugPrint('[eBay] GTIN request: $requestUrl');
     try {
       final response = await http
@@ -931,8 +931,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       if (response.statusCode != 200) return (null, null, null, null);
       final data = jsonDecode(response.body);
       final items = data['itemSummaries'] as List? ?? [];
-      if (items.isEmpty) return (null, null, null, null);
-      final item = items[0] as Map<String, dynamic>;
+      final item = _firstFootwearItem(items);
+      if (item == null) return (null, null, null, null);
       final priceData = item['price'];
       if (priceData == null || priceData['value'] == null) return (null, null, null, null);
       final price = double.tryParse(priceData['value'].toString());
@@ -950,6 +950,20 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       debugPrint('[eBay] GTIN error: $e');
       return (null, null, null, null);
     }
+  }
+
+  /// Returns the first item in [items] whose categories contain "shoe" (case-insensitive).
+  /// Covers both "Shoe" and "Shoes". Returns null if no matching item is found.
+  static Map<String, dynamic>? _firstFootwearItem(List items) {
+    for (final raw in items) {
+      final item = raw as Map<String, dynamic>;
+      final categories = item['categories'] as List? ?? [];
+      for (final cat in categories) {
+        final name = ((cat as Map)['categoryName'] as String? ?? '').toLowerCase();
+        if (name.contains('shoe')) return item;
+      }
+    }
+    return null;
   }
 
   /// Check if [scannedSku]'s alphanumeric characters (in order) are a
