@@ -17,6 +17,21 @@ class MarketPriceSection extends StatefulWidget {
   final bool productFound;
   final List<ColorwayVariant>? colorways;
 
+  /// eBay: "Seller Fee" row. Rate is a decimal (e.g. 0.08 for 8%).
+  final double? sellerFeeRate;
+
+  /// StockX: "Transaction Fee" row. Rate is a decimal (e.g. 0.08 for 8%).
+  final double? transactionFeeRate;
+
+  /// StockX: "Payment Processing" row. Rate is a decimal (e.g. 0.03 for 3%).
+  final double? paymentProcessingFeeRate;
+
+  /// GOAT: flat dollar "Seller Fee" row (e.g. 5.0 for $5).
+  final double? sellerFlatFee;
+
+  /// GOAT: "Commission" row. Rate is a decimal (e.g. 0.095 for 9.5%).
+  final double? commissionFeeRate;
+
   const MarketPriceSection({
     super.key,
     required this.label,
@@ -30,6 +45,11 @@ class MarketPriceSection extends StatefulWidget {
     this.onOpenMarketplace,
     this.productFound = true,
     this.colorways,
+    this.sellerFeeRate,
+    this.transactionFeeRate,
+    this.paymentProcessingFeeRate,
+    this.sellerFlatFee,
+    this.commissionFeeRate,
   });
 
   @override
@@ -47,10 +67,48 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
     return widget.price;
   }
 
+  double? get _sellerFeeAmount {
+    final price = _displayPrice;
+    if (widget.sellerFeeRate == null || price == null) return null;
+    return price * widget.sellerFeeRate!;
+  }
+
+  double? get _transactionFeeAmount {
+    final price = _displayPrice;
+    if (widget.transactionFeeRate == null || price == null) return null;
+    return price * widget.transactionFeeRate!;
+  }
+
+  double? get _paymentProcessingFeeAmount {
+    final price = _displayPrice;
+    if (widget.paymentProcessingFeeRate == null || price == null) return null;
+    return price * widget.paymentProcessingFeeRate!;
+  }
+
+  double? get _commissionFeeAmount {
+    final price = _displayPrice;
+    if (widget.commissionFeeRate == null || price == null) return null;
+    return price * widget.commissionFeeRate!;
+  }
+
+  double get _totalFeeAmount =>
+      (_sellerFeeAmount ?? 0) +
+      (_transactionFeeAmount ?? 0) +
+      (_paymentProcessingFeeAmount ?? 0) +
+      (widget.sellerFlatFee ?? 0) +
+      (_commissionFeeAmount ?? 0);
+
+  bool get _hasFees =>
+      widget.sellerFeeRate != null ||
+      widget.transactionFeeRate != null ||
+      widget.paymentProcessingFeeRate != null ||
+      widget.sellerFlatFee != null ||
+      widget.commissionFeeRate != null;
+
   double? get _displayProfit {
     final price = _displayPrice;
     if (widget.retailPrice != null && price != null) {
-      return price - widget.retailPrice!;
+      return price - _totalFeeAmount - widget.retailPrice!;
     }
     return _hasColorways ? null : widget.profit;
   }
@@ -58,9 +116,70 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
   double? get _displayProfitPercent {
     final price = _displayPrice;
     if (widget.retailPrice != null && price != null) {
-      return ((price - widget.retailPrice!) / widget.retailPrice!) * 100;
+      final afterFees = price - _totalFeeAmount;
+      return ((afterFees - widget.retailPrice!) / widget.retailPrice!) * 100;
     }
     return _hasColorways ? null : widget.profitPercent;
+  }
+
+  Widget _feeRow(String label, double rate, double amount) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '$label (${(rate * 100).toStringAsFixed(1)}%)',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: Colors.grey[500],
+            ),
+          ),
+          Text(
+            '-\$${amount.toStringAsFixed(2)}',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.orange[300],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _flatFeeRow(String label, double amount) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: Colors.grey[500],
+            ),
+          ),
+          Text(
+            '-\$${amount.toStringAsFixed(2)}',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: Colors.orange[300],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _openColorwayLink() {
@@ -310,6 +429,28 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
             ),
           ],
 
+          // Fee Rows
+          if (price != null && _sellerFeeAmount != null) ...[
+            const SizedBox(height: 8),
+            _feeRow('Seller Fee', widget.sellerFeeRate!, _sellerFeeAmount!),
+          ],
+          if (price != null && _transactionFeeAmount != null) ...[
+            const SizedBox(height: 8),
+            _feeRow('Transaction Fee', widget.transactionFeeRate!, _transactionFeeAmount!),
+          ],
+          if (price != null && _paymentProcessingFeeAmount != null) ...[
+            const SizedBox(height: 8),
+            _feeRow('Payment Processing', widget.paymentProcessingFeeRate!, _paymentProcessingFeeAmount!),
+          ],
+          if (price != null && widget.sellerFlatFee != null) ...[
+            const SizedBox(height: 8),
+            _flatFeeRow('Seller Fee', widget.sellerFlatFee!),
+          ],
+          if (price != null && _commissionFeeAmount != null) ...[
+            const SizedBox(height: 8),
+            _feeRow('Commission', widget.commissionFeeRate!, _commissionFeeAmount!),
+          ],
+
           // Profit Row
           if (price != null) ...[
             const SizedBox(height: 10),
@@ -323,7 +464,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Profit',
+                    _hasFees ? 'Profit after fees' : 'Profit',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       color: Colors.grey[400],

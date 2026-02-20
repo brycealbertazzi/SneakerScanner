@@ -89,27 +89,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
     final retailPrice = fetchedRetailPrice ?? widget.manualRetailPrice;
 
     final ebayPrice = widget.ebayAveragePrice;
-
-    double? ebayProfit;
-    double? ebayProfitPercent;
-    if (retailPrice != null && ebayPrice != null) {
-      ebayProfit = ebayPrice - retailPrice;
-      ebayProfitPercent = (ebayProfit / retailPrice) * 100;
-    }
-
-    double? stockXProfit;
-    double? stockXProfitPercent;
-    if (retailPrice != null && widget.stockXPrice != null) {
-      stockXProfit = widget.stockXPrice! - retailPrice;
-      stockXProfitPercent = (stockXProfit / retailPrice) * 100;
-    }
-
-    double? goatProfit;
-    double? goatProfitPercent;
-    if (retailPrice != null && widget.goatPrice != null) {
-      goatProfit = widget.goatPrice! - retailPrice;
-      goatProfitPercent = (goatProfit / retailPrice) * 100;
-    }
+    final ebayFeeRate = ebayPrice != null ? (ebayPrice >= 150 ? 0.08 : 0.136) : null;
 
     return Container(
       width: double.infinity,
@@ -331,12 +311,13 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             icon: Icons.shopping_bag,
             iconColor: const Color(0xFF0064D2),
             price: ebayPrice,
-            profit: ebayProfit,
-            profitPercent: ebayProfitPercent,
+            profit: null,
+            profitPercent: null,
             isLoading: widget.isLoadingEbayPrices,
             retailPrice: retailPrice,
             productFound: ebayPrice != null,
             onOpenMarketplace: ebayPrice != null ? widget.onOpenEbay : null,
+            sellerFeeRate: ebayFeeRate,
           ),
           const SizedBox(height: 12),
 
@@ -346,13 +327,15 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             icon: Icons.store,
             iconColor: const Color(0xFF006340),
             price: widget.stockXPrice,
-            profit: stockXProfit,
-            profitPercent: stockXProfitPercent,
+            profit: null,
+            profitPercent: null,
             isLoading: widget.isLoadingStockXPrice,
             retailPrice: retailPrice,
             productFound: widget.stockXPrice != null,
             colorways: widget.stockXColorways,
             onOpenMarketplace: widget.stockXPrice != null ? widget.onOpenStockX : null,
+            transactionFeeRate: widget.stockXPrice != null ? 0.08 : null,
+            paymentProcessingFeeRate: widget.stockXPrice != null ? 0.03 : null,
           ),
           const SizedBox(height: 12),
 
@@ -362,13 +345,15 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             icon: Icons.storefront,
             iconColor: const Color(0xFF7B61FF),
             price: widget.goatPrice,
-            profit: goatProfit,
-            profitPercent: goatProfitPercent,
+            profit: null,
+            profitPercent: null,
             isLoading: widget.isLoadingGoatPrice,
             retailPrice: retailPrice,
             productFound: widget.goatPrice != null,
             colorways: widget.goatColorways,
             onOpenMarketplace: widget.goatPrice != null ? widget.onOpenGoat : null,
+            sellerFlatFee: widget.goatPrice != null ? 5.0 : null,
+            commissionFeeRate: widget.goatPrice != null ? 0.095 : null,
           ),
         ],
       ),
