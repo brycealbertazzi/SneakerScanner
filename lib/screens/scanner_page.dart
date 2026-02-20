@@ -321,9 +321,6 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     return patterns.any((p) => p.hasMatch(upper));
   }
 
-  // Brands whose SKUs use a hyphen between base and suffix
-  static const _hyphenatedBrands = {'nike', 'puma', 'asics'};
-
   static const _disqualifyingKeywords = [
     'UPC', 'U.P.C.', 'BARCODE', 'PO#', 'PO ', 'P.O.', 'PURCHASE ORDER',
   ];
@@ -344,37 +341,10 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     return false;
   }
 
-  /// Format the chosen SKU for storage using brand-specific conventions.
-  /// Called only AFTER validation passes — raw OCR form goes in, formatted comes out.
+  /// Preserve the exact OCR form of the SKU — just uppercase and trim.
+  /// Separators (space, dash, slash, dot) are kept exactly as OCR read them.
   String _formatSkuForBrand(String rawCode, String? brand) {
-    final upper = rawCode.toUpperCase();
-    final brandKey = _brandKeyFromName(brand);
-
-    if (brandKey != null && _hyphenatedBrands.contains(brandKey)) {
-      // For hyphenated brands: match against brand patterns to find groups
-      final patterns = _brandSkuPatterns[brandKey]!;
-      for (final pattern in patterns) {
-        final match = pattern.firstMatch(upper);
-        if (match != null && match.groupCount >= 2) {
-          final parts = <String>[];
-          for (int i = 1; i <= match.groupCount; i++) {
-            if (match.group(i) != null) parts.add(match.group(i)!);
-          }
-          return parts.join('-');
-        } else if (match != null) {
-          return match.groupCount >= 1 ? match.group(1)! : match.group(0)!;
-        }
-      }
-    } else if (brandKey != null) {
-      // Non-hyphenated brands (adidas, NB, reebok, converse): strip separators
-      return upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
-    }
-
-    // Unknown brand: replace OCR separators (space/dot/slash) with hyphen
-    // where they exist, but don't add hyphens where there were none
-    final cleaned = upper.replaceAll(RegExp(r'[\s./]+'), '-');
-    // Collapse multiple hyphens and trim trailing/leading hyphens
-    return cleaned.replaceAll(RegExp(r'-{2,}'), '-').replaceAll(RegExp(r'^-|-$'), '');
+    return rawCode.trim().toUpperCase();
   }
 
   Future<void> _captureAndProcess() async {
@@ -635,7 +605,9 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                 child: OutlinedButton.icon(
                   onPressed: () {
                     Navigator.of(dialogContext).pop();
-                    _scanBarcode(ocrText, currentScanData);
+                    // Drop any OCR-derived SKU so the barcode GTIN is the
+                    // sole identifier — avoids SKU taking priority over GTIN.
+                    _scanBarcode(ocrText, ScanData(brand: currentScanData.brand));
                   },
                   icon: const Icon(Icons.qr_code_scanner, size: 18),
                   label: const Text('Scan Barcode'),
