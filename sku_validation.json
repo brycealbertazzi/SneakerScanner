@@ -10,11 +10,7 @@
         "keywords": ["UPC", "U.P.C.", "BARCODE"],
         "reason": "Barcode number, not SKU"
       },
-      {
-        "rule": "Preceded by PO label",
-        "keywords": ["PO", "PO#", "P.O.", "PURCHASE ORDER"],
-        "reason": "Purchase order number, not SKU"
-      },
+
       {
         "rule": "Size pattern",
         "regex": "^(US|UK|EU|CM|MM)?\\s?[0-9]{1,2}(\\.[0-9])?$",

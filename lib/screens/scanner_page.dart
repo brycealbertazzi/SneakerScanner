@@ -1,4 +1,7 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
@@ -18,6 +21,8 @@ class ScannerPage extends StatefulWidget {
 
 class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   bool _isProcessing = false;
+
+  static const _ocrChannel = MethodChannel('com.sneakerscanner/ocr');
 
   final ImagePicker _imagePicker = ImagePicker();
   final MobileScannerController _previewController = MobileScannerController(
@@ -148,8 +153,10 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       RegExp(r'\bM[A-Z]?\d{3,4}[A-Z]{1,3}\d{0,2}\b'),
       // Converse: 162050C
       RegExp(r'\b\d{6}C\b'),
-      // Skechers: 232123/BLK, M232301-BBK, 149550 NVY
-      RegExp(r'\b[MW]?\d{5,6}[-\s/.]+[A-Z]{2,4}\b'),
+      // Skechers: 232123/BLK, M232301-BBK, 149550 NVY, 200291W/BLK
+      RegExp(r'\b[MW]?\d{5,6}[A-Z]?[-\s/.]+[A-Z]{2,4}\b'),
+      // Vans: VN0A38FRX9C, VN0A4BV6...
+      RegExp(r'\bVN0[A-Z0-9]{6,8}\b'),
     ];
 
     for (final pattern in codePatterns) {
@@ -233,8 +240,13 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       RegExp(r'^([A-Z]{2})([0-9]{4})$'),
       RegExp(r'^([A-Z0-9]{6})$'),
       RegExp(r'^([A-Z][0-9]{5}[A-Z])$'),
-      // Skechers: 232123/BLK, M232123-BBK
-      RegExp(r'^(?:[MW])?([0-9]{5,6})[\s./\-–_]+([A-Z]{2,4})$'),
+      // Skechers: 232123/BLK, M232123-BBK, 200291W/BLK
+      RegExp(r'^(?:[MW])?([0-9]{5,6}[A-Z]?)[\s./\-–_]+([A-Z]{2,4})$'),
+      // Vans: VN0A38FRX9C, VN0A4BV6...
+      RegExp(r'^VN0[A-Z0-9]{6,8}$'),
+      RegExp(r'^(VN0[A-Z0-9]{4})([A-Z0-9]{2,4})$'),
+      RegExp(r'^([A-Z0-9]{9,11})$'),
+      RegExp(r'^VN0[A-Z0-9]{3,5}[\s./\-–_]*[A-Z0-9]{2,4}$'),
     ],
     'nike': [
       RegExp(r'^([A-Z0-9]{6})-([0-9]{3})$'),
@@ -272,9 +284,15 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       RegExp(r'^([A-Z][0-9]{5}[A-Z])$'),
     ],
     'skechers': [
-      RegExp(r'^(?:[MW])?([0-9]{5,6})[\s./\-–_]+([A-Z]{2,4})$'),
-      RegExp(r'^(?:[MW])?([0-9]{5,6})([A-Z]{2,4})$'),
-      RegExp(r'^(?:[MW])?([0-9]{5,6})$'),
+      RegExp(r'^(?:[MW])?([0-9]{5,6}[A-Z]?)[\s./\-–_]+([A-Z]{2,4})$'),
+      RegExp(r'^(?:[MW])?([0-9]{5,6}[A-Z]?)([A-Z]{2,4})$'),
+      RegExp(r'^(?:[MW])?([0-9]{5,6}[A-Z]?)$'),
+    ],
+    'vans': [
+      RegExp(r'^VN0[A-Z0-9]{6,8}$'),
+      RegExp(r'^(VN0[A-Z0-9]{4})([A-Z0-9]{2,4})$'),
+      RegExp(r'^([A-Z0-9]{9,11})$'),
+      RegExp(r'^VN0[A-Z0-9]{3,5}[\s./\-–_]*[A-Z0-9]{2,4}$'),
     ],
   };
 
@@ -299,6 +317,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       case 'SKECHERS':
       case 'SKETCHERS':
         return 'skechers';
+      case 'VANS':
+        return 'vans';
       default:
         return null;
     }
@@ -336,6 +356,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
 
   static const _disqualifyingKeywords = [
     'UPC', 'U.P.C.', 'BARCODE', 'PO#', 'PO ', 'P.O.', 'PURCHASE ORDER',
+    'ORDER#', 'ORDER ',
   ];
 
   /// Check if a candidate appears on an OCR line preceded (within 12 chars)
@@ -354,8 +375,11 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     return false;
   }
 
+  /// Returns the normalized SKU ready to send to APIs.
+  /// For most brands: just uppercase + trim.
+  /// For Skechers: also corrects OCR misreading '/' as 'I'
+  /// (e.g. 200291WIBLK → 200291W/BLK).
   /// Preserve the exact OCR form of the SKU — just uppercase and trim.
-  /// Separators (space, dash, slash, dot) are kept exactly as OCR read them.
   String _formatSkuForBrand(String rawCode, String? brand) {
     return rawCode.trim().toUpperCase();
   }
@@ -371,19 +395,29 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
 
       setState(() => _isProcessing = true);
 
-      final inputImage = InputImage.fromFilePath(photo.path);
+      // Run OCR — Apple Vision on iOS, ML Kit on Android.
+      final String fullText;
+      if (Platform.isIOS) {
+        fullText = await _ocrChannel.invokeMethod<String>(
+              'recognizeText',
+              {'imagePath': photo.path},
+            ) ??
+            '';
+        debugPrint('OCR text (Vision): $fullText');
+      } else {
+        final inputImage = InputImage.fromFilePath(photo.path);
+        final textRecognizer = TextRecognizer();
+        try {
+          final recognizedText = await textRecognizer.processImage(inputImage);
+          fullText = recognizedText.text;
+          debugPrint('OCR text (ML Kit): $fullText');
+        } finally {
+          textRecognizer.close();
+        }
+      }
 
-      // Run OCR on the captured image
-      final textRecognizer = TextRecognizer();
-
-      try {
-        final recognizedText = await textRecognizer.processImage(inputImage);
-
-        final fullText = recognizedText.text;
-        debugPrint('OCR text: $fullText');
-
-        // Parse OCR text into ScanData
-        final scanData = _parseLabelInfo(fullText);
+      // Parse OCR text into ScanData
+      final scanData = _parseLabelInfo(fullText);
 
         debugPrint('═══ SCAN RESULT ═══');
         if (scanData.sku != null) {
@@ -427,9 +461,6 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
             _showManualSkuDialog(fullText, scanData);
           }
         }
-      } finally {
-        textRecognizer.close();
-      }
     } catch (e) {
       debugPrint('Capture error: $e');
       if (mounted) {
