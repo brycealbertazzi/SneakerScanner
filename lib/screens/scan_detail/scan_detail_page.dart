@@ -244,9 +244,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       List<Map<String, dynamic>> unifiedItems = [];
 
       if (sku != null && sku.isNotEmpty) {
-        final unifiedUri = Uri.parse(
-          'https://api.kicks.dev/v3/unified/products'
-          '/${Uri.encodeComponent(sku)}?similarity=0.85',
+        final unifiedUri = Uri(
+          scheme: 'https',
+          host: 'api.kicks.dev',
+          pathSegments: ['v3', 'unified', 'products', sku],
+          queryParameters: {'similarity': '0.85'},
         );
         debugPrint('═══ STEP 1: KicksDB Unified ═══');
         debugPrint('[Unified] Request: $unifiedUri');
@@ -679,9 +681,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   Future<List<Map<String, dynamic>>> _fetchUnifiedGtinItems(
     String gtinValue,
   ) async {
-    final uri = Uri.parse(
-      'https://api.kicks.dev/v3/unified/gtin'
-      '?identifier=${Uri.encodeComponent(gtinValue)}',
+    final uri = Uri(
+      scheme: 'https',
+      host: 'api.kicks.dev',
+      path: '/v3/unified/gtin',
+      queryParameters: {'identifier': gtinValue},
     );
     debugPrint('[Unified] GTIN request: $uri');
     try {
@@ -815,14 +819,17 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       double? price;
 
       if (sku != null && sku.isNotEmpty) {
-        final requestUrl =
-            '$baseUrl/buy/browse/v1/item_summary/search?'
-            'q=${Uri.encodeComponent(sku)}';
-        debugPrint('[eBay] Request: $requestUrl');
+        final ebayHost = baseUrl.replaceFirst('https://', '');
+        final requestUri = Uri.https(
+          ebayHost,
+          '/buy/browse/v1/item_summary/search',
+          {'q': sku},
+        );
+        debugPrint('[eBay] Request: $requestUri');
 
         final response = await http
             .get(
-              Uri.parse(requestUrl),
+              requestUri,
               headers: {
                 'Authorization': 'Bearer $token',
                 'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
@@ -839,7 +846,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           final items = data['itemSummaries'] as List? ?? [];
-          final item = _firstFootwearItem(items);
+          final item = _bestFootwearItem(items, ocrText: widget.scanData.ocrText);
           if (item != null) {
             final priceData = item['price'];
             if (priceData != null && priceData['value'] != null) {
@@ -876,8 +883,52 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           if (img2 != null) _ebayImageUrl = img2;
           if (title2 != null) _ebayTitle = title2;
         }
+      } else if (widget.scanData.titleSearch != null &&
+          widget.scanData.titleSearch!.isNotEmpty) {
+        // Title-search mode: user entered a free-text title from the manual dialog.
+        final titleQuery = widget.scanData.titleSearch!;
+        final ebayHost = baseUrl.replaceFirst('https://', '');
+        final requestUri = Uri.https(
+          ebayHost,
+          '/buy/browse/v1/item_summary/search',
+          {'q': titleQuery},
+        );
+        debugPrint('[eBay] Title search request: $requestUri');
+
+        final response = await http
+            .get(
+              requestUri,
+              headers: {
+                'Authorization': 'Bearer $token',
+                'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+                'Content-Type': 'application/json',
+              },
+            )
+            .timeout(const Duration(seconds: 15));
+
+        debugPrint('[eBay] Title search status: ${response.statusCode}');
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final items = data['itemSummaries'] as List? ?? [];
+          // Score against the entered title so the closest match wins.
+          final item = _bestFootwearItem(items, ocrText: titleQuery);
+          if (item != null) {
+            final priceData = item['price'];
+            if (priceData != null && priceData['value'] != null) {
+              price = double.tryParse(priceData['value'].toString());
+            }
+            final webUrl = item['itemWebUrl'] as String?;
+            if (webUrl != null && webUrl.isNotEmpty) _ebayItemUrl = webUrl;
+            final imageObj = item['image'] as Map<String, dynamic>?;
+            final imageUrl = imageObj?['imageUrl'] as String?;
+            if (imageUrl != null && imageUrl.isNotEmpty) _ebayImageUrl = imageUrl;
+            final titleStr = item['title'] as String?;
+            if (titleStr != null && titleStr.isNotEmpty) _ebayTitle = titleStr;
+          }
+        }
       } else {
-        debugPrint('[eBay] No SKU or GTIN available, skipping');
+        debugPrint('[eBay] No SKU, GTIN, or title available, skipping');
         setState(() => _isLoadingEbayPrices = false);
         return;
       }
@@ -910,13 +961,17 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     String baseUrl,
     String token,
   ) async {
-    final requestUrl =
-        '$baseUrl/buy/browse/v1/item_summary/search?gtin=$gtinValue';
-    debugPrint('[eBay] GTIN request: $requestUrl');
+    final ebayHost = baseUrl.replaceFirst('https://', '');
+    final requestUri = Uri.https(
+      ebayHost,
+      '/buy/browse/v1/item_summary/search',
+      {'gtin': gtinValue},
+    );
+    debugPrint('[eBay] GTIN request: $requestUri');
     try {
       final response = await http
           .get(
-            Uri.parse(requestUrl),
+            requestUri,
             headers: {
               'Authorization': 'Bearer $token',
               'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
@@ -931,7 +986,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       if (response.statusCode != 200) return (null, null, null, null);
       final data = jsonDecode(response.body);
       final items = data['itemSummaries'] as List? ?? [];
-      final item = _firstFootwearItem(items);
+      final item = _bestFootwearItem(items, ocrText: widget.scanData.ocrText);
       if (item == null) return (null, null, null, null);
       final priceData = item['price'];
       if (priceData == null || priceData['value'] == null) return (null, null, null, null);
@@ -952,18 +1007,45 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     }
   }
 
-  /// Returns the first item in [items] whose categories contain "shoe" (case-insensitive).
-  /// Covers both "Shoe" and "Shoes". Returns null if no matching item is found.
-  static Map<String, dynamic>? _firstFootwearItem(List items) {
+  static const _ocrStopwords = {
+    'a', 'an', 'the', 'and', 'or', 'for', 'of', 'in', 'on', 'at', 'to',
+    'is', 'it', 'as', 'by', 'be', 'we', 'us', 'my', 'no', 'so', 'do',
+    'if', 'up', 'he', 'she', 'his', 'her', 'its', 'our', 'are', 'was',
+    'with', 'from', 'this', 'that', 'have', 'has', 'had', 'not', 'but',
+  };
+
+  /// Returns the item from [items] whose title has the most word overlap with
+  /// [ocrText]. Falls back to the first item on ties or when ocrText is null.
+  /// Returns null if [items] is empty.
+  static Map<String, dynamic>? _bestFootwearItem(List items, {String? ocrText}) {
+    if (items.isEmpty) return null;
+    if (items.length == 1 || ocrText == null || ocrText.isEmpty) {
+      return items.first as Map<String, dynamic>;
+    }
+
+    // Build meaningful OCR word set (lowercase, no stopwords, 2+ chars).
+    final ocrWords = ocrText
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.length >= 2 && !_ocrStopwords.contains(w))
+        .toSet();
+
+    if (ocrWords.isEmpty) return items.first as Map<String, dynamic>;
+
+    // Score each item by word overlap with OCR text; first item wins ties.
+    int bestScore = -1;
+    Map<String, dynamic> bestItem = items.first as Map<String, dynamic>;
     for (final raw in items) {
       final item = raw as Map<String, dynamic>;
-      final categories = item['categories'] as List? ?? [];
-      for (final cat in categories) {
-        final name = ((cat as Map)['categoryName'] as String? ?? '').toLowerCase();
-        if (name.contains('shoe')) return item;
+      final title = (item['title'] as String? ?? '').toLowerCase();
+      final titleWords = title.split(RegExp(r'\s+')).toSet();
+      final score = ocrWords.where((w) => titleWords.contains(w)).length;
+      if (score > bestScore) {
+        bestScore = score;
+        bestItem = item;
       }
     }
-    return null;
+    return bestItem;
   }
 
   /// Check if [scannedSku]'s alphanumeric characters (in order) are a
@@ -1027,10 +1109,16 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     Stopwatch stopwatch, {
     String brandKey = 'nike',
   }) async {
-    final uri = Uri.parse(
-      'https://api.kicks.dev/v3/$platform/products'
-      '?query=${Uri.encodeComponent(sku)}&limit=5'
-      '&display[prices]=true&display[variants]=true',
+    final uri = Uri(
+      scheme: 'https',
+      host: 'api.kicks.dev',
+      path: '/v3/$platform/products',
+      queryParameters: {
+        'query': sku,
+        'limit': '5',
+        'display[prices]': 'true',
+        'display[variants]': 'true',
+      },
     );
     debugPrint('[KicksDB $platform colorway] Request: $uri');
 

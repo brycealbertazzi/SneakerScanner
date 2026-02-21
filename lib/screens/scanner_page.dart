@@ -148,6 +148,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       RegExp(r'\bM[A-Z]?\d{3,4}[A-Z]{1,3}\d{0,2}\b'),
       // Converse: 162050C
       RegExp(r'\b\d{6}C\b'),
+      // Skechers: 232123/BLK, M232301-BBK, 149550 NVY
+      RegExp(r'\b[MW]?\d{5,6}[-\s/.]+[A-Z]{2,4}\b'),
     ];
 
     for (final pattern in codePatterns) {
@@ -196,6 +198,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       brand: brandForStorage,
       sku: code,
       size: size,
+      ocrText: normalized,
     );
   }
 
@@ -230,6 +233,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       RegExp(r'^([A-Z]{2})([0-9]{4})$'),
       RegExp(r'^([A-Z0-9]{6})$'),
       RegExp(r'^([A-Z][0-9]{5}[A-Z])$'),
+      // Skechers: 232123/BLK, M232123-BBK
+      RegExp(r'^(?:[MW])?([0-9]{5,6})[\s./\-–_]+([A-Z]{2,4})$'),
     ],
     'nike': [
       RegExp(r'^([A-Z0-9]{6})-([0-9]{3})$'),
@@ -266,6 +271,11 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     'converse': [
       RegExp(r'^([A-Z][0-9]{5}[A-Z])$'),
     ],
+    'skechers': [
+      RegExp(r'^(?:[MW])?([0-9]{5,6})[\s./\-–_]+([A-Z]{2,4})$'),
+      RegExp(r'^(?:[MW])?([0-9]{5,6})([A-Z]{2,4})$'),
+      RegExp(r'^(?:[MW])?([0-9]{5,6})$'),
+    ],
   };
 
   static String? _brandKeyFromName(String? brand) {
@@ -286,6 +296,9 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
         return 'reebok';
       case 'CONVERSE':
         return 'converse';
+      case 'SKECHERS':
+      case 'SKETCHERS':
+        return 'skechers';
       default:
         return null;
     }
@@ -385,8 +398,9 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
         if (scanData.sku != null) {
           // SKU found — go directly to detail page
           if (mounted) {
+            final nav = Navigator.of(context);
             await _previewController.stop();
-            final result = await Navigator.of(context).push<String>(
+            final result = await nav.push<String>(
               MaterialPageRoute(
                 builder: (context) => ScanDetailPage(
                   scanId: '',
@@ -470,8 +484,10 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
         }
       }
     } else {
-      // User cancelled — barcode scanner is disposed, restart camera before
-      // showing the dialog again.
+      // User cancelled — wait for the barcode scanner's camera session to
+      // fully release (triggered by PopScope) before reactivating our preview.
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (!mounted) return;
       await _previewController.start();
       if (mounted) _showManualSkuDialog(ocrText, currentScanData);
     }
@@ -620,6 +636,155 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    _showTitleSearchDialog(currentScanData);
+                  },
+                  icon: const Icon(Icons.search, size: 18),
+                  label: const Text('Search by Title'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: BorderSide(color: Colors.grey[600]!),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showTitleSearchDialog(ScanData currentScanData) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF333333), width: 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Search by Title',
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Enter the shoe name, model, colorway, or any text from the label.',
+                style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[400]),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                style: GoogleFonts.inter(fontSize: 15, color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'e.g. Nike Air Max 90 White',
+                  hintStyle: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFF252525),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF646CFF),
+                      width: 1,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey[400],
+                        side: BorderSide(color: Colors.grey[600]!),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        final title = controller.text.trim();
+                        if (title.isEmpty) return;
+                        Navigator.of(dialogContext).pop();
+                        final nav = Navigator.of(context);
+                        await _previewController.stop();
+                        final data = ScanData(
+                          brand: currentScanData.brand,
+                          titleSearch: title,
+                        );
+                        if (!mounted) return;
+                        final result = await nav.push<String>(
+                          MaterialPageRoute(
+                            builder: (context) => ScanDetailPage(
+                              scanId: '',
+                              scanData: data,
+                              timestamp: DateTime.now().millisecondsSinceEpoch,
+                            ),
+                          ),
+                        );
+                        if (mounted && result == 'noResults') {
+                          await _previewController.start();
+                          _showNoResultsModal(data);
+                        } else if (mounted && result == 'scanAnother') {
+                          await _previewController.start();
+                        } else if (mounted) {
+                          context
+                              .findAncestorStateOfType<MainScreenState>()
+                              ?.switchToTab(1);
+                        }
+                      },
+                      icon: const Icon(Icons.search, size: 18),
+                      label: const Text('Search'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF646CFF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -874,7 +1039,11 @@ class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
       _boxHeight,
     );
 
-    return Scaffold(
+    return PopScope(
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) _controller.stop();
+      },
+      child: Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
@@ -933,6 +1102,7 @@ class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
           ),
         ],
       ),
+    ),
     );
   }
 }

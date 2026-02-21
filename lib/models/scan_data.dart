@@ -4,11 +4,19 @@ class ScanData {
   final String? gtin;
   final String? size;
 
+  /// Raw normalized OCR text from the label scan. Not persisted to Firebase.
+  final String? ocrText;
+
+  /// User-entered title for title-based eBay search. Not persisted to Firebase.
+  final String? titleSearch;
+
   const ScanData({
     this.brand,
     this.sku,
     this.gtin,
     this.size,
+    this.ocrText,
+    this.titleSearch,
   });
 
   bool get hasIdentifier => sku != null || gtin != null;
@@ -62,12 +70,16 @@ class ScanData {
     String? sku,
     String? gtin,
     String? size,
+    String? ocrText,
+    String? titleSearch,
   }) {
     return ScanData(
       brand: brand ?? this.brand,
       sku: sku ?? this.sku,
       gtin: gtin ?? this.gtin,
       size: size ?? this.size,
+      ocrText: ocrText ?? this.ocrText,
+      titleSearch: titleSearch ?? this.titleSearch,
     );
   }
 }
