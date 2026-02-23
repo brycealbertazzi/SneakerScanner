@@ -127,7 +127,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             final pricingStatus = scanDataMap['pricingStatus'] as String?;
 
             setState(() {
-              if (savedRetailPrice != null) _manualRetailPrice = savedRetailPrice;
+              if (savedRetailPrice != null)
+                _manualRetailPrice = savedRetailPrice;
               if (savedStockXPrice != null) {
                 _stockXPrice = savedStockXPrice;
                 _isLoadingStockXPrice = false;
@@ -140,7 +141,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 _ebayAveragePrice = savedEbayPrice;
                 _isLoadingEbayPrices = false;
               }
-              if (savedStockXColorways is List && savedStockXColorways.isNotEmpty) {
+              if (savedStockXColorways is List &&
+                  savedStockXColorways.isNotEmpty) {
                 _stockXColorways = _parseColorwaysFromDb(savedStockXColorways);
               }
               if (savedGoatColorways is List && savedGoatColorways.isNotEmpty) {
@@ -180,7 +182,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       await ebayFuture;
 
       // eBay title fallback — only applies when KicksDB didn't find a title.
-      if (_resolvedTitle == null && _ebayTitle != null && _ebayTitle!.isNotEmpty) {
+      if (_resolvedTitle == null &&
+          _ebayTitle != null &&
+          _ebayTitle!.isNotEmpty) {
         setState(() => _resolvedTitle = _ebayTitle);
       }
 
@@ -272,7 +276,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               for (var item in body['data']) {
                 unifiedItems.add(item as Map<String, dynamic>);
               }
-            } else if (body.containsKey('shop_name') || body.containsKey('title')) {
+            } else if (body.containsKey('shop_name') ||
+                body.containsKey('title')) {
               unifiedItems.add(body);
             }
           } else if (body is List) {
@@ -309,15 +314,16 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       // SKU items use `shop_name`; GTIN items use `source`.
       final String? bestItemImage = unifiedItems.isNotEmpty
           ? (sku != null && sku.isNotEmpty
-              ? _pickBestUnifiedImage(unifiedItems)
-              : _pickBestGtinImage(unifiedItems))
+                ? _pickBestUnifiedImage(unifiedItems)
+                : _pickBestGtinImage(unifiedItems))
           : null;
 
       // Extract identity from first matching result + StockX/GOAT prices
       for (final item in unifiedItems) {
         // SKU unified items use `shop_name`; GTIN items use `source`.
-        final shopName =
-            (item['shop_name'] ?? item['source'] ?? '').toString().toLowerCase();
+        final shopName = (item['shop_name'] ?? item['source'] ?? '')
+            .toString()
+            .toLowerCase();
         final apiSku = (item['sku'] ?? '').toString();
 
         // Identity: use the first result that has a title
@@ -326,7 +332,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           if (title != null && title.isNotEmpty) {
             if (_resolvedTitle == null) setState(() => _resolvedTitle = title);
             final apiBrand = item['brand']?.toString();
-            if (_resolvedBrand == null && apiBrand != null && apiBrand.isNotEmpty) {
+            if (_resolvedBrand == null &&
+                apiBrand != null &&
+                apiBrand.isNotEmpty) {
               setState(() => _resolvedBrand = apiBrand);
             }
             productInfo = {
@@ -335,7 +343,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               'sku': apiSku,
               'styleCode': apiSku,
               'retailPrice': () {
-                final raw = item['retailPrice']?.toString() ??
+                final raw =
+                    item['retailPrice']?.toString() ??
                     item['retail_price']?.toString();
                 if (raw == null) return null;
                 final parsed = double.tryParse(raw);
@@ -344,23 +353,27 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               'images': bestItemImage != null
                   ? [bestItemImage]
                   : item['images'] is List
-                      ? item['images']
-                      : item['image'] != null
-                          ? [item['image']]
-                          : [],
+                  ? item['images']
+                  : item['image'] != null
+                  ? [item['image']]
+                  : [],
               'model': item['model'] ?? '',
               'slug': item['slug'] ?? '',
               'category': item['category'] ?? '',
             };
             confirmed = true;
-            debugPrint('[Unified] Identity found: "$title" (${stopwatch.elapsedMilliseconds}ms)');
+            debugPrint(
+              '[Unified] Identity found: "$title" (${stopwatch.elapsedMilliseconds}ms)',
+            );
           }
         }
 
         // Prices: only from stockx/goat with SKU match
         if (shopName != 'stockx' && shopName != 'goat') continue;
         if (matchSku.isNotEmpty && !_skuSubsequenceMatch(matchSku, apiSku)) {
-          debugPrint('[Unified] Skip $shopName — SKU mismatch: "$apiSku" vs "$matchSku"');
+          debugPrint(
+            '[Unified] Skip $shopName — SKU mismatch: "$apiSku" vs "$matchSku"',
+          );
           continue;
         }
 
@@ -378,11 +391,15 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         final slug = (item['slug'] ?? item['id'] ?? item['name'])?.toString();
 
         if (shopName == 'stockx' && _stockXPrice == null) {
-          debugPrint('[Unified] StockX price: \$${price.toStringAsFixed(2)} (${stopwatch.elapsedMilliseconds}ms)');
+          debugPrint(
+            '[Unified] StockX price: \$${price.toStringAsFixed(2)} (${stopwatch.elapsedMilliseconds}ms)',
+          );
           _stockXPrice = price;
           _stockXSlug = slug;
         } else if (shopName == 'goat' && _goatPrice == null) {
-          debugPrint('[Unified] GOAT price: \$${price.toStringAsFixed(2)} (${stopwatch.elapsedMilliseconds}ms)');
+          debugPrint(
+            '[Unified] GOAT price: \$${price.toStringAsFixed(2)} (${stopwatch.elapsedMilliseconds}ms)',
+          );
           _goatPrice = price;
           _goatSlug = slug;
         }
@@ -407,7 +424,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       }
 
       // ── Step 2: Colorway fallback (Nike/Jordan, New Balance, Asics, Puma) ─
-      final brand = _resolvedBrand ?? productInfo?['brand'] as String? ?? widget.scanData.brand ?? '';
+      final brand =
+          _resolvedBrand ??
+          productInfo?['brand'] as String? ??
+          widget.scanData.brand ??
+          '';
       if (isNikeOrJordan(brand) && sku != null && sku.isNotEmpty) {
         final parsed = parseNikeSku(sku);
         if (parsed != null) {
@@ -416,7 +437,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           if (_stockXPrice == null) {
             debugPrint('═══ STEP 2: StockX colorway fallback ═══');
             final variants = await _fetchColorwayVariants(
-              'stockx', sku, modelBlock, stopwatch,
+              'stockx',
+              sku,
+              modelBlock,
+              stopwatch,
             );
             if (variants.isNotEmpty) {
               _stockXColorways = variants;
@@ -428,7 +452,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           if (_goatPrice == null) {
             debugPrint('═══ STEP 2: GOAT colorway fallback ═══');
             final variants = await _fetchColorwayVariants(
-              'goat', sku, modelBlock, stopwatch,
+              'goat',
+              sku,
+              modelBlock,
+              stopwatch,
             );
             if (variants.isNotEmpty) {
               _goatColorways = variants;
@@ -445,7 +472,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           if (_stockXPrice == null) {
             debugPrint('═══ STEP 2: StockX NB colorway fallback ═══');
             final variants = await _fetchColorwayVariants(
-              'stockx', sku, modelBlock, stopwatch, brandKey: 'new_balance',
+              'stockx',
+              sku,
+              modelBlock,
+              stopwatch,
+              brandKey: 'new_balance',
             );
             if (variants.isNotEmpty) {
               _stockXColorways = variants;
@@ -457,7 +488,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           if (_goatPrice == null) {
             debugPrint('═══ STEP 2: GOAT NB colorway fallback ═══');
             final variants = await _fetchColorwayVariants(
-              'goat', sku, modelBlock, stopwatch, brandKey: 'new_balance',
+              'goat',
+              sku,
+              modelBlock,
+              stopwatch,
+              brandKey: 'new_balance',
             );
             if (variants.isNotEmpty) {
               _goatColorways = variants;
@@ -474,7 +509,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           if (_stockXPrice == null) {
             debugPrint('═══ STEP 2: StockX Asics colorway fallback ═══');
             final variants = await _fetchColorwayVariants(
-              'stockx', sku, modelBlock, stopwatch, brandKey: 'asics',
+              'stockx',
+              sku,
+              modelBlock,
+              stopwatch,
+              brandKey: 'asics',
             );
             if (variants.isNotEmpty) {
               _stockXColorways = variants;
@@ -486,7 +525,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           if (_goatPrice == null) {
             debugPrint('═══ STEP 2: GOAT Asics colorway fallback ═══');
             final variants = await _fetchColorwayVariants(
-              'goat', sku, modelBlock, stopwatch, brandKey: 'asics',
+              'goat',
+              sku,
+              modelBlock,
+              stopwatch,
+              brandKey: 'asics',
             );
             if (variants.isNotEmpty) {
               _goatColorways = variants;
@@ -503,7 +546,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           if (_stockXPrice == null) {
             debugPrint('═══ STEP 2: StockX Puma colorway fallback ═══');
             final variants = await _fetchColorwayVariants(
-              'stockx', sku, modelBlock, stopwatch, brandKey: 'puma',
+              'stockx',
+              sku,
+              modelBlock,
+              stopwatch,
+              brandKey: 'puma',
             );
             if (variants.isNotEmpty) {
               _stockXColorways = variants;
@@ -515,7 +562,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           if (_goatPrice == null) {
             debugPrint('═══ STEP 2: GOAT Puma colorway fallback ═══');
             final variants = await _fetchColorwayVariants(
-              'goat', sku, modelBlock, stopwatch, brandKey: 'puma',
+              'goat',
+              sku,
+              modelBlock,
+              stopwatch,
+              brandKey: 'puma',
             );
             if (variants.isNotEmpty) {
               _goatColorways = variants;
@@ -588,12 +639,16 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       }
 
       debugPrint('');
-      debugPrint('╔══════════════════════════════════════════════════════════════╗');
+      debugPrint(
+        '╔══════════════════════════════════════════════════════════════╗',
+      );
       debugPrint('║  LOOKUP COMPLETE (${stopwatch.elapsedMilliseconds}ms)');
       debugPrint('║  Product: $title');
       debugPrint('║  StockX: \$${_stockXPrice?.toStringAsFixed(2) ?? "N/A"}');
       debugPrint('║  GOAT: \$${_goatPrice?.toStringAsFixed(2) ?? "N/A"}');
-      debugPrint('╚══════════════════════════════════════════════════════════════╝');
+      debugPrint(
+        '╚══════════════════════════════════════════════════════════════╝',
+      );
       debugPrint('');
 
       setState(() {
@@ -690,7 +745,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     debugPrint('[Unified] GTIN request: $uri');
     try {
       final response = await http
-          .get(uri, headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'})
+          .get(
+            uri,
+            headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'},
+          )
           .timeout(const Duration(seconds: 15));
       debugPrint('[Unified] GTIN status: ${response.statusCode}');
       if (response.statusCode != 200) return [];
@@ -751,7 +809,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
   Future<void> _openEbaySearch() async {
     if (_ebayItemUrl != null && _ebayItemUrl!.isNotEmpty) {
-      await launchUrl(Uri.parse(_ebayItemUrl!), mode: LaunchMode.platformDefault);
+      await launchUrl(
+        Uri.parse(_ebayItemUrl!),
+        mode: LaunchMode.platformDefault,
+      );
       return;
     }
     final searchQuery = _buildSearchQuery();
@@ -846,7 +907,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
           final items = data['itemSummaries'] as List? ?? [];
-          final item = _bestFootwearItem(items, ocrText: widget.scanData.ocrText);
+          final item = _bestFootwearItem(
+            items,
+            ocrText: widget.scanData.ocrText,
+          );
           if (item != null) {
             final priceData = item['price'];
             if (priceData != null && priceData['value'] != null) {
@@ -856,7 +920,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             if (webUrl != null && webUrl.isNotEmpty) _ebayItemUrl = webUrl;
             final imageObj = item['image'] as Map<String, dynamic>?;
             final imageUrl = imageObj?['imageUrl'] as String?;
-            if (imageUrl != null && imageUrl.isNotEmpty) _ebayImageUrl = imageUrl;
+            if (imageUrl != null && imageUrl.isNotEmpty)
+              _ebayImageUrl = imageUrl;
             final titleStr = item['title'] as String?;
             if (titleStr != null && titleStr.isNotEmpty) _ebayTitle = titleStr;
           }
@@ -867,7 +932,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         final hasLeadingZero = gtin.length == 13 && gtin.startsWith('0');
         final primaryGtin = hasLeadingZero ? gtin.substring(1) : gtin;
 
-        final (p1, url1, img1, title1) = await _ebayGtinLookup(primaryGtin, baseUrl, token);
+        final (p1, url1, img1, title1) = await _ebayGtinLookup(
+          primaryGtin,
+          baseUrl,
+          token,
+        );
         price = p1;
         if (url1 != null) _ebayItemUrl = url1;
         if (img1 != null) _ebayImageUrl = img1;
@@ -877,7 +946,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           debugPrint(
             '[eBay] 12-digit GTIN got no results, retrying with 13-digit: $gtin',
           );
-          final (p2, url2, img2, title2) = await _ebayGtinLookup(gtin, baseUrl, token);
+          final (p2, url2, img2, title2) = await _ebayGtinLookup(
+            gtin,
+            baseUrl,
+            token,
+          );
           price = p2;
           if (url2 != null) _ebayItemUrl = url2;
           if (img2 != null) _ebayImageUrl = img2;
@@ -922,7 +995,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             if (webUrl != null && webUrl.isNotEmpty) _ebayItemUrl = webUrl;
             final imageObj = item['image'] as Map<String, dynamic>?;
             final imageUrl = imageObj?['imageUrl'] as String?;
-            if (imageUrl != null && imageUrl.isNotEmpty) _ebayImageUrl = imageUrl;
+            if (imageUrl != null && imageUrl.isNotEmpty)
+              _ebayImageUrl = imageUrl;
             final titleStr = item['title'] as String?;
             if (titleStr != null && titleStr.isNotEmpty) _ebayTitle = titleStr;
           }
@@ -989,7 +1063,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       final item = _bestFootwearItem(items, ocrText: widget.scanData.ocrText);
       if (item == null) return (null, null, null, null);
       final priceData = item['price'];
-      if (priceData == null || priceData['value'] == null) return (null, null, null, null);
+      if (priceData == null || priceData['value'] == null)
+        return (null, null, null, null);
       final price = double.tryParse(priceData['value'].toString());
       final url = item['itemWebUrl'] as String?;
       final imageObj = item['image'] as Map<String, dynamic>?;
@@ -1008,16 +1083,56 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   }
 
   static const _ocrStopwords = {
-    'a', 'an', 'the', 'and', 'or', 'for', 'of', 'in', 'on', 'at', 'to',
-    'is', 'it', 'as', 'by', 'be', 'we', 'us', 'my', 'no', 'so', 'do',
-    'if', 'up', 'he', 'she', 'his', 'her', 'its', 'our', 'are', 'was',
-    'with', 'from', 'this', 'that', 'have', 'has', 'had', 'not', 'but',
+    'a',
+    'an',
+    'the',
+    'and',
+    'or',
+    'for',
+    'of',
+    'in',
+    'on',
+    'at',
+    'to',
+    'is',
+    'it',
+    'as',
+    'by',
+    'be',
+    'we',
+    'us',
+    'my',
+    'no',
+    'so',
+    'do',
+    'if',
+    'up',
+    'he',
+    'she',
+    'his',
+    'her',
+    'its',
+    'our',
+    'are',
+    'was',
+    'with',
+    'from',
+    'this',
+    'that',
+    'have',
+    'has',
+    'had',
+    'not',
+    'but',
   };
 
   /// Returns the item from [items] whose title has the most word overlap with
   /// [ocrText]. Falls back to the first item on ties or when ocrText is null.
   /// Returns null if [items] is empty.
-  static Map<String, dynamic>? _bestFootwearItem(List items, {String? ocrText}) {
+  static Map<String, dynamic>? _bestFootwearItem(
+    List items, {
+    String? ocrText,
+  }) {
     if (items.isEmpty) return null;
     if (items.length == 1 || ocrText == null || ocrText.isEmpty) {
       return items.first as Map<String, dynamic>;
@@ -1051,7 +1166,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   /// Check if [scannedSku]'s alphanumeric characters (in order) are a
   /// subsequence of [apiSku]'s alphanumeric characters.
   bool _skuSubsequenceMatch(String scannedSku, String apiSku) {
-    final scanned = scannedSku.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+    final scanned = scannedSku
+        .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
+        .toUpperCase();
     final api = apiSku.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
     if (scanned.isEmpty) return false;
     int j = 0;
@@ -1062,7 +1179,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   }
 
   /// Extract a price from the `prices` size-map.
-  /// If [size] matches a key, use that; otherwise pick the highest price.
+  /// If [size] matches a key, use that; otherwise return the median price
+  /// (lower-middle element when the count is even).
   double? _extractPriceFromMap(Map<String, dynamic> prices, String? size) {
     if (prices.isEmpty) return null;
 
@@ -1072,17 +1190,17 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       if (p != null && p > 0) return p;
     }
 
-    // Fallback: highest price
-    double? highest;
-    for (final entry in prices.entries) {
-      final p = double.tryParse(entry.value.toString());
-      if (p != null && p > 0 && (highest == null || p > highest)) {
-        highest = p;
-      }
-    }
-    return highest;
+    // Fallback: median price (lower-middle for even counts)
+    final valid =
+        prices.values
+            .map((v) => double.tryParse(v.toString()))
+            .whereType<double>()
+            .where((p) => p > 0)
+            .toList()
+          ..sort();
+    if (valid.isEmpty) return null;
+    return valid[(valid.length - 1) ~/ 2];
   }
-
 
   List<ColorwayVariant> _parseColorwaysFromDb(List<dynamic> list) {
     return list.map((item) {
@@ -1140,7 +1258,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           for (var item in body['data']) {
             candidates.add(item as Map<String, dynamic>);
           }
-        } else if (body.containsKey('title') || body.containsKey('name') || body.containsKey('slug')) {
+        } else if (body.containsKey('title') ||
+            body.containsKey('name') ||
+            body.containsKey('slug')) {
           candidates.add(body);
         }
       } else if (body is List) {
@@ -1162,7 +1282,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           if (parsed == null) continue;
           (apiModel, apiColor) = parsed;
           // NB colorway must start with a letter.
-          if (apiColor.isEmpty || !RegExp(r'^[A-Z]').hasMatch(apiColor.toUpperCase())) continue;
+          if (apiColor.isEmpty ||
+              !RegExp(r'^[A-Z]').hasMatch(apiColor.toUpperCase()))
+            continue;
         } else if (brandKey == 'asics') {
           final parsed = parseAsicsSku(apiSku);
           if (parsed == null) continue;
@@ -1187,28 +1309,32 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         final (String family, Color color) = brandKey == 'new_balance'
             ? nbColorFamily(apiColor)
             : brandKey == 'asics'
-                ? asicsColorFamily(apiColor)
-                : brandKey == 'puma'
-                    ? pumaColorFamily(apiColor)
-                    : nikeColorFamily(apiColor);
+            ? asicsColorFamily(apiColor)
+            : brandKey == 'puma'
+            ? pumaColorFamily(apiColor)
+            : nikeColorFamily(apiColor);
 
         // Deduplicate: Nike/NB by color family; Asics/Puma by color code
         // (generic-family brands would collapse all variants into one otherwise).
-        final dedupeKey =
-            (brandKey == 'asics' || brandKey == 'puma') ? apiColor : family;
+        final dedupeKey = (brandKey == 'asics' || brandKey == 'puma')
+            ? apiColor
+            : family;
         if (seenFamilies.contains(dedupeKey)) continue;
         seenFamilies.add(dedupeKey);
 
-        final slug = (product['slug'] ?? product['id'] ?? product['name'])?.toString();
+        final slug = (product['slug'] ?? product['id'] ?? product['name'])
+            ?.toString();
 
-        variants.add(ColorwayVariant(
-          sku: apiSku,
-          colorCode: apiColor,
-          colorFamily: family,
-          displayColor: color,
-          price: price,
-          slug: slug,
-        ));
+        variants.add(
+          ColorwayVariant(
+            sku: apiSku,
+            colorCode: apiColor,
+            colorFamily: family,
+            displayColor: color,
+            price: price,
+            slug: slug,
+          ),
+        );
       }
 
       debugPrint(
@@ -1298,25 +1424,29 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
       if (_stockXColorways != null && _stockXColorways!.isNotEmpty) {
         updateData['stockxColorways'] = _stockXColorways!
-            .map((v) => {
-                  'sku': v.sku,
-                  'colorCode': v.colorCode,
-                  'colorFamily': v.colorFamily,
-                  'price': v.price,
-                  'slug': v.slug,
-                })
+            .map(
+              (v) => {
+                'sku': v.sku,
+                'colorCode': v.colorCode,
+                'colorFamily': v.colorFamily,
+                'price': v.price,
+                'slug': v.slug,
+              },
+            )
             .toList();
       }
 
       if (_goatColorways != null && _goatColorways!.isNotEmpty) {
         updateData['goatColorways'] = _goatColorways!
-            .map((v) => {
-                  'sku': v.sku,
-                  'colorCode': v.colorCode,
-                  'colorFamily': v.colorFamily,
-                  'price': v.price,
-                  'slug': v.slug,
-                })
+            .map(
+              (v) => {
+                'sku': v.sku,
+                'colorCode': v.colorCode,
+                'colorFamily': v.colorFamily,
+                'price': v.price,
+                'slug': v.slug,
+              },
+            )
             .toList();
       }
 
@@ -1352,11 +1482,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       final resolvedBrand = _resolvedBrand ?? scanData.brand;
       await scanRef.set({
         ...scanData.toFirebase(),
-        if (resolvedBrand != null && resolvedBrand.isNotEmpty) 'brand': resolvedBrand,
+        if (resolvedBrand != null && resolvedBrand.isNotEmpty)
+          'brand': resolvedBrand,
         'code': scanData.sku ?? scanData.displayName,
         'format': 'STYLE_CODE',
         'timestamp': ServerValue.timestamp,
-        'productTitle': (_resolvedTitle?.isNotEmpty == true) ? _resolvedTitle : null,
+        'productTitle': (_resolvedTitle?.isNotEmpty == true)
+            ? _resolvedTitle
+            : null,
         'productImage': null,
         'retailPrice': null,
         'ebayPrice': null,
@@ -1365,7 +1498,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         'pricingStatus': 'complete',
       });
       _resolvedScanId = scanRef.key ?? '';
-      debugPrint('[createScan] Scan created: $_resolvedScanId');
     } catch (e) {
       debugPrint('[createScan] Error: $e');
     }
@@ -1508,29 +1640,34 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                     const SizedBox(height: 8),
 
                     // 3. Brand Badge
-                    Builder(builder: (context) {
-                      final badgeBrand = _resolvedBrand ?? widget.scanData.brand;
-                      if (badgeBrand == null || badgeBrand.isEmpty) {
-                        return const SizedBox.shrink();
-                      }
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF646CFF).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          badgeBrand,
-                          style: GoogleFonts.inter(
-                            color: const Color(0xFF646CFF),
-                            fontWeight: FontWeight.w600,
+                    Builder(
+                      builder: (context) {
+                        final badgeBrand =
+                            _resolvedBrand ?? widget.scanData.brand;
+                        if (badgeBrand == null || badgeBrand.isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
                           ),
-                        ),
-                      );
-                    }),
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF646CFF,
+                            ).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            badgeBrand,
+                            style: GoogleFonts.inter(
+                              color: const Color(0xFF646CFF),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                     const SizedBox(height: 20),
 
                     // 4. Info Cards
@@ -1594,7 +1731,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                       _buildPricingInterruptedMessage(),
                       const SizedBox(height: 16),
                     ],
-
 
                     const SizedBox(height: 32),
                   ],
