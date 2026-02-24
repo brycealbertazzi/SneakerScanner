@@ -4,6 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 
+final RouteObserver<ModalRoute<void>> routeObserver =
+    RouteObserver<ModalRoute<void>>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -35,6 +38,7 @@ class SneakerScannerApp extends StatelessWidget {
           ),
         ),
       ),
+      navigatorObservers: [routeObserver],
       home: const SplashScreen(),
     );
   }

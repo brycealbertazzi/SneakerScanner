@@ -7,6 +7,7 @@ import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../main.dart' show routeObserver;
 import '../models/scan_data.dart';
 import '../services/gtin_utils.dart';
 import '../services/subscription_service.dart';
@@ -21,7 +22,9 @@ class ScannerPage extends StatefulWidget {
   State<ScannerPage> createState() => _ScannerPageState();
 }
 
-class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
+class _ScannerPageState extends State<ScannerPage>
+    with WidgetsBindingObserver
+    implements RouteAware {
   bool _isProcessing = false;
 
   static const _ocrChannel = MethodChannel('com.sneakerscanner/ocr');
@@ -40,7 +43,14 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
+  }
+
+  @override
   void dispose() {
+    routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     _previewController.dispose();
     super.dispose();
@@ -54,6 +64,23 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       _previewController.start();
     }
   }
+
+  // RouteAware — stop camera when another route is pushed on top, restart on return
+  @override
+  void didPushNext() {
+    _previewController.stop();
+  }
+
+  @override
+  void didPopNext() {
+    _previewController.start();
+  }
+
+  @override
+  void didPush() {}
+
+  @override
+  void didPop() {}
 
   ScanData _parseLabelInfo(String text) {
     // Normalize: collapse whitespace, uppercase

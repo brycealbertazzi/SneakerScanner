@@ -11,33 +11,227 @@ class PaywallPage extends StatefulWidget {
   State<PaywallPage> createState() => _PaywallPageState();
 }
 
-class _PaywallPageState extends State<PaywallPage> {
+class _PaywallPageState extends State<PaywallPage>
+    with WidgetsBindingObserver {
   final _sub = SubscriptionService.instance;
+
+  bool _restorePressed = false;
+  bool _privacyPressed = false;
+  bool _termsPressed = false;
+  bool _wasActiveOnInit = false;
+  bool _restoredDialogShowing = false;
 
   @override
   void initState() {
     super.initState();
+    _wasActiveOnInit = _sub.isSubscribed;
     _sub.addListener(_onSubChanged);
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _sub.removeListener(_onSubChanged);
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _sub.purchasePending) {
+      // Give StoreKit 1 second to deliver its event after the app resumes.
+      // For a successful purchase, _purchasePending will be cleared by the
+      // Firebase write well within that window, making this a no-op.
+      // For a silent cancellation (no stream event), this resets the button.
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) _sub.forceCancelPending();
+      });
+    }
+  }
+
   void _onSubChanged() {
     if (!mounted) return;
-    // If subscription became active, pop paywall with success
     if (_sub.status == SubscriptionStatus.active) {
-      Navigator.of(context).pop(true);
+      if (_wasActiveOnInit) {
+        // User was already subscribed — this is a restore confirmation.
+        // Show dialog instead of popping so camera/nav stack is undisturbed.
+        setState(() {});
+        _showRestoredDialog();
+      } else {
+        // New subscription (or restore on a new device) — pop with success.
+        Navigator.of(context).pop(true);
+      }
       return;
     }
     setState(() {});
-    if (_sub.purchaseError != null) {
+    if (_sub.purchaseCancelled) {
+      _sub.clearCancelled();
+      _showCancelledDialog();
+    } else if (_sub.purchaseError != null) {
       _showError(_sub.purchaseError!);
       _sub.clearError();
     }
+  }
+
+  void _showRestoredDialog() {
+    if (_restoredDialogShowing) return;
+    _restoredDialogShowing = true;
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF333333), width: 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.green,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Purchases Restored',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Your subscription has been restored successfully.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: Colors.grey[400],
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    _restoredDialogShowing = false;
+                    Navigator.of(ctx).pop();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'OK',
+                    style: GoogleFonts.inter(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showCancelledDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF333333), width: 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: const Icon(
+                  Icons.info_outline_rounded,
+                  color: Colors.orange,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Purchase Not Completed',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Your purchase was not completed. You can try again whenever you\'re ready.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: Colors.grey[400],
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF646CFF),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'OK',
+                    style: GoogleFonts.inter(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showError(String message) {
@@ -247,56 +441,106 @@ class _PaywallPageState extends State<PaywallPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  // CTA button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: pending ? null : _sub.buyAnnual,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF646CFF),
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor:
-                            const Color(0xFF646CFF).withValues(alpha: 0.5),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                  // CTA button or subscribed badge
+                  if (_sub.isSubscribed)
+                    Container(
+                      width: double.infinity,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.green.withValues(alpha: 0.4),
+                          width: 1.5,
                         ),
-                        elevation: 0,
                       ),
-                      child: pending
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                color: Colors.white,
-                              ),
-                            )
-                          : Text(
-                              'Start Annual Plan',
-                              style: GoogleFonts.poppins(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                              ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            color: Colors.green,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'You\'re subscribed',
+                            style: GoogleFonts.poppins(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.green,
                             ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: pending ? null : _sub.buyAnnual,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF646CFF),
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor:
+                              const Color(0xFF646CFF).withValues(alpha: 0.5),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: pending
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                'Start Annual Plan',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                      ),
+                    ),
+                  const SizedBox(height: 22),
+
+                  // Cancel subscription hint
+                  Text(
+                    'Cancel subscription anytime in Settings',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: Colors.grey[500],
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
 
                   // Restore purchases
                   GestureDetector(
                     onTap: pending ? null : _sub.restorePurchases,
+                    onTapDown: (_) => setState(() => _restorePressed = true),
+                    onTapUp: (_) => setState(() => _restorePressed = false),
+                    onTapCancel: () => setState(() => _restorePressed = false),
                     child: Text(
                       'Restore Purchases',
                       style: GoogleFonts.inter(
                         fontSize: 13,
-                        color: Colors.grey[500],
+                        color: _restorePressed
+                            ? Colors.white
+                            : Colors.grey[500],
                         decoration: TextDecoration.underline,
-                        decorationColor: Colors.grey[500],
+                        decorationColor: _restorePressed
+                            ? Colors.white
+                            : Colors.grey[500],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 16),
 
                   // Privacy & Terms links
                   Row(
@@ -307,13 +551,23 @@ class _PaywallPageState extends State<PaywallPage> {
                           Uri.parse('https://privacy.sneakscan.com'),
                           mode: LaunchMode.externalApplication,
                         ),
+                        onTapDown: (_) =>
+                            setState(() => _privacyPressed = true),
+                        onTapUp: (_) =>
+                            setState(() => _privacyPressed = false),
+                        onTapCancel: () =>
+                            setState(() => _privacyPressed = false),
                         child: Text(
                           'Privacy',
                           style: GoogleFonts.inter(
                             fontSize: 13,
-                            color: Colors.grey[500],
+                            color: _privacyPressed
+                                ? Colors.white
+                                : Colors.grey[500],
                             decoration: TextDecoration.underline,
-                            decorationColor: Colors.grey[500],
+                            decorationColor: _privacyPressed
+                                ? Colors.white
+                                : Colors.grey[500],
                           ),
                         ),
                       ),
@@ -332,19 +586,29 @@ class _PaywallPageState extends State<PaywallPage> {
                           Uri.parse('https://terms.sneakscan.com'),
                           mode: LaunchMode.externalApplication,
                         ),
+                        onTapDown: (_) =>
+                            setState(() => _termsPressed = true),
+                        onTapUp: (_) =>
+                            setState(() => _termsPressed = false),
+                        onTapCancel: () =>
+                            setState(() => _termsPressed = false),
                         child: Text(
                           'Terms',
                           style: GoogleFonts.inter(
                             fontSize: 13,
-                            color: Colors.grey[500],
+                            color: _termsPressed
+                                ? Colors.white
+                                : Colors.grey[500],
                             decoration: TextDecoration.underline,
-                            decorationColor: Colors.grey[500],
+                            decorationColor: _termsPressed
+                                ? Colors.white
+                                : Colors.grey[500],
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 32),
                 ],
               ),
             ),

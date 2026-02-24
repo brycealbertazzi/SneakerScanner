@@ -20,6 +20,7 @@ class SubscriptionService extends ChangeNotifier {
   int _scansLimit = kFreeScanLimit;
   ProductDetails? _annualProduct;
   bool _purchasePending = false;
+  bool _purchaseCancelled = false;
   String? _purchaseError;
 
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
@@ -30,6 +31,7 @@ class SubscriptionService extends ChangeNotifier {
   int get scansLimit => _scansLimit;
   int get scansRemaining => (_scansLimit - _scansUsed).clamp(0, _scansLimit);
   bool get purchasePending => _purchasePending;
+  bool get purchaseCancelled => _purchaseCancelled;
   String? get purchaseError => _purchaseError;
   ProductDetails? get annualProduct => _annualProduct;
 
@@ -152,6 +154,7 @@ class SubscriptionService extends ChangeNotifier {
       return;
     }
     _purchaseError = null;
+    _purchaseCancelled = false;
     _purchasePending = true;
     notifyListeners();
 
@@ -185,6 +188,7 @@ class SubscriptionService extends ChangeNotifier {
 
   void _onPurchaseUpdate(List<PurchaseDetails> purchases) {
     for (final purchase in purchases) {
+
       if (purchase.status == PurchaseStatus.pending) {
         _purchasePending = true;
         notifyListeners();
@@ -193,40 +197,86 @@ class SubscriptionService extends ChangeNotifier {
         _validateAndFinish(purchase);
       } else if (purchase.status == PurchaseStatus.error) {
         _purchasePending = false;
-        _purchaseError = purchase.error?.message ?? 'Purchase failed.';
+        // iOS fires SKErrorPaymentCancelled (code 2 / "paymentCancelled") when
+        // the user dismisses the payment or sign-in sheet — treat as cancellation,
+        // not as a hard error.
+        final isCancellation = _isCancellationError(purchase.error);
+        if (isCancellation) {
+          _purchaseCancelled = true;
+        } else {
+          _purchaseError = purchase.error?.message ?? 'Purchase failed.';
+        }
         notifyListeners();
         InAppPurchase.instance.completePurchase(purchase);
       } else if (purchase.status == PurchaseStatus.canceled) {
         _purchasePending = false;
+        _purchaseCancelled = true;
         notifyListeners();
         InAppPurchase.instance.completePurchase(purchase);
       }
     }
   }
 
+  bool _isCancellationError(IAPError? error) {
+    if (error == null) return false;
+    final code = error.code.toLowerCase();
+    final message = error.message.toLowerCase();
+    return code.contains('cancel') || message.contains('cancel');
+  }
+
   Future<void> _validateAndFinish(PurchaseDetails purchase) async {
+    final user = FirebaseAuth.instance.currentUser;
     try {
-      final callable =
-          FirebaseFunctions.instance.httpsCallable('validatePurchase');
-      await callable.call({
-        'platform': Platform.isIOS ? 'apple' : 'google',
-        'productId': purchase.productID,
-        'purchaseToken': Platform.isAndroid
-            ? purchase.verificationData.serverVerificationData
-            : null,
-        'receiptData': Platform.isIOS
-            ? purchase.verificationData.serverVerificationData
-            : null,
-        'transactionId': purchase.purchaseID,
-      });
-      // Firebase listener will update status automatically
+      // Optimistically activate — trust the platform confirmation immediately.
+      // Server-side validation runs in the background and can update/revoke
+      // the subscription later if needed.
+      if (user != null) {
+        await FirebaseDatabase.instance
+            .ref()
+            .child('users')
+            .child(user.uid)
+            .child('subscription')
+            .update({
+          'status': 'active',
+          'platform': Platform.isIOS ? 'apple' : 'google',
+          'productId': purchase.productID,
+          'originalTransactionId': purchase.purchaseID,
+        });
+      }
     } catch (e) {
-      _purchaseError = 'Validation failed. Please contact support.';
+      debugPrint('[IAP] Failed to activate subscription: $e');
+      _purchaseError = 'Failed to activate. Please try again.';
     } finally {
       _purchasePending = false;
       notifyListeners();
       await InAppPurchase.instance.completePurchase(purchase);
     }
+
+    // Background server validation — non-blocking, no error shown to user.
+    _validateInBackground(purchase);
+  }
+
+  void _validateInBackground(PurchaseDetails purchase) {
+    Future(() async {
+      try {
+        final callable =
+            FirebaseFunctions.instance.httpsCallable('validatePurchase');
+        await callable.call({
+          'platform': Platform.isIOS ? 'apple' : 'google',
+          'productId': purchase.productID,
+          'purchaseToken': Platform.isAndroid
+              ? purchase.verificationData.serverVerificationData
+              : null,
+          'receiptData': Platform.isIOS
+              ? purchase.verificationData.serverVerificationData
+              : null,
+          'transactionId': purchase.purchaseID,
+        });
+        debugPrint('[IAP] Background server validation successful');
+      } catch (e) {
+        debugPrint('[IAP] Background server validation failed (non-fatal): $e');
+      }
+    });
   }
 
   /// Increments scan count in Firebase. Returns false if user cannot scan.
@@ -252,6 +302,20 @@ class SubscriptionService extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearCancelled() {
+    _purchaseCancelled = false;
+    notifyListeners();
+  }
+
+  /// Called when the app returns to the foreground while a purchase is still
+  /// pending. Treats the pending purchase as cancelled immediately.
+  void forceCancelPending() {
+    if (!_purchasePending) return;
+    _purchasePending = false;
+    _purchaseCancelled = true;
+    notifyListeners();
+  }
+
   void reset() {
     _purchaseSubscription?.cancel();
     _firebaseSubscription?.cancel();
@@ -260,6 +324,7 @@ class SubscriptionService extends ChangeNotifier {
     _scansLimit = kFreeScanLimit;
     _annualProduct = null;
     _purchasePending = false;
+    _purchaseCancelled = false;
     _purchaseError = null;
   }
 
