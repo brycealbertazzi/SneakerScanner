@@ -9,7 +9,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../models/scan_data.dart';
 import '../services/gtin_utils.dart';
+import '../services/subscription_service.dart';
 import 'main_screen.dart';
+import 'paywall_page.dart';
 import 'scan_detail/scan_detail_page.dart';
 
 class ScannerPage extends StatefulWidget {
@@ -384,6 +386,25 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     return rawCode.trim().toUpperCase();
   }
 
+  /// Returns true if the user can start a scan (has available scans or active subscription).
+  /// If not, shows the paywall and returns true only if they then subscribe.
+  Future<bool> _checkSubscription() async {
+    final sub = SubscriptionService.instance;
+    if (sub.status == SubscriptionStatus.loading) {
+      // Brief wait for the initial Firebase snapshot
+      await Future.delayed(const Duration(milliseconds: 600));
+    }
+    if (sub.canScan) return true;
+    if (!mounted) return false;
+    final subscribed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const PaywallPage(),
+      ),
+    );
+    return subscribed == true;
+  }
+
   Future<void> _captureAndProcess() async {
     try {
       final XFile? photo = await _imagePicker.pickImage(
@@ -434,6 +455,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
           if (mounted) {
             final nav = Navigator.of(context);
             await _previewController.stop();
+            await SubscriptionService.instance.incrementScanCount();
             final result = await nav.push<String>(
               MaterialPageRoute(
                 builder: (context) => ScanDetailPage(
@@ -496,6 +518,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
 
       final data = currentScanData.copyWith(gtin: gtin);
       if (mounted) {
+        await SubscriptionService.instance.incrementScanCount();
+        if (!mounted) return;
         final result = await Navigator.of(context).push<String>(
           MaterialPageRoute(
             builder: (context) => ScanDetailPage(
@@ -613,6 +637,8 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                         await _previewController.stop();
                         final data = currentScanData.copyWith(sku: sku);
                         if (mounted) {
+                          await SubscriptionService.instance.incrementScanCount();
+                          if (!mounted) return;
                           final result = await Navigator.of(context).push<String>(
                             MaterialPageRoute(
                               builder: (context) => ScanDetailPage(
@@ -650,8 +676,9 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.of(dialogContext).pop();
+                    if (!await _checkSubscription()) return;
                     // Drop any OCR-derived SKU so the barcode GTIN is the
                     // sole identifier — avoids SKU taking priority over GTIN.
                     _scanBarcode(ocrText, ScanData(brand: currentScanData.brand));
@@ -672,8 +699,9 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.of(dialogContext).pop();
+                    if (!await _checkSubscription()) return;
                     _showTitleSearchDialog(currentScanData);
                   },
                   icon: const Icon(Icons.search, size: 18),
@@ -783,6 +811,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                           titleSearch: title,
                         );
                         if (!mounted) return;
+                        await SubscriptionService.instance.incrementScanCount();
                         final result = await nav.push<String>(
                           MaterialPageRoute(
                             builder: (context) => ScanDetailPage(
@@ -973,7 +1002,11 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _captureAndProcess,
+                onPressed: _isProcessing
+                    ? null
+                    : () async {
+                        if (await _checkSubscription()) _captureAndProcess();
+                      },
                 icon: const Icon(Icons.camera_alt),
                 label: const Text('Scan Label'),
                 style: ElevatedButton.styleFrom(
@@ -995,7 +1028,11 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
               child: OutlinedButton.icon(
                 onPressed: _isProcessing
                     ? null
-                    : () => _showManualSkuDialog('', const ScanData()),
+                    : () async {
+                        if (await _checkSubscription()) {
+                          _showManualSkuDialog('', const ScanData());
+                        }
+                      },
                 icon: const Icon(Icons.keyboard, size: 18),
                 label: const Text('Enter SKU Manually'),
                 style: OutlinedButton.styleFrom(

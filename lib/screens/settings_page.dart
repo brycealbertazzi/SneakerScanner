@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_database/firebase_database.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../services/stockx_auth_service.dart';
+import '../services/subscription_service.dart';
 import 'login_screen.dart';
+import 'paywall_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -15,67 +15,22 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  bool _stockXConnected = false;
-  bool _checkingStockX = true;
+  final _sub = SubscriptionService.instance;
 
   @override
   void initState() {
     super.initState();
-    _checkStockXConnection();
+    _sub.addListener(_onSubChanged);
   }
 
-  Future<void> _checkStockXConnection() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      try {
-        final snapshot = await FirebaseDatabase.instance
-            .ref()
-            .child('stockxTokens')
-            .child(user.uid)
-            .get();
-        if (mounted) {
-          setState(() {
-            _stockXConnected = snapshot.exists;
-            _checkingStockX = false;
-          });
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _checkingStockX = false;
-          });
-        }
-      }
-    } else {
-      if (mounted) {
-        setState(() {
-          _checkingStockX = false;
-        });
-      }
-    }
+  @override
+  void dispose() {
+    _sub.removeListener(_onSubChanged);
+    super.dispose();
   }
 
-  Future<void> _disconnectStockX() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      await FirebaseDatabase.instance
-          .ref()
-          .child('stockxTokens')
-          .child(user.uid)
-          .remove();
-      StockXAuthService.clearTokens();
-      if (mounted) {
-        setState(() {
-          _stockXConnected = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('StockX disconnected'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
-    }
+  void _onSubChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _signOut(BuildContext context) async {
@@ -192,6 +147,45 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  String _planLabel() {
+    switch (_sub.status) {
+      case SubscriptionStatus.active:
+        return 'Annual Plan';
+      case SubscriptionStatus.freeTrial:
+        return 'Free Trial';
+      case SubscriptionStatus.expired:
+        return 'Expired';
+      case SubscriptionStatus.cancelled:
+        return 'Cancelled';
+      case SubscriptionStatus.loading:
+        return '...';
+    }
+  }
+
+  String _scansLabel() {
+    if (_sub.status == SubscriptionStatus.active) {
+      return 'Unlimited';
+    }
+    if (_sub.status == SubscriptionStatus.loading) {
+      return '...';
+    }
+    return '${_sub.scansRemaining} of ${_sub.scansLimit} remaining';
+  }
+
+  Color _planColor() {
+    switch (_sub.status) {
+      case SubscriptionStatus.active:
+        return Colors.green;
+      case SubscriptionStatus.freeTrial:
+        return Colors.amber;
+      case SubscriptionStatus.expired:
+      case SubscriptionStatus.cancelled:
+        return Colors.red;
+      case SubscriptionStatus.loading:
+        return Colors.grey;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
@@ -304,110 +298,60 @@ class _SettingsPageState extends State<SettingsPage> {
                 children: [
                   _buildSettingsTile(
                     icon: Icons.workspace_premium_rounded,
-                    iconColor: Colors.amber,
+                    iconColor: _planColor(),
                     title: 'Current Plan',
-                    subtitle: 'Free',
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF646CFF).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        'Upgrade',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF646CFF),
-                        ),
-                      ),
-                    ),
-                    onTap: () {
-                      // TODO: Navigate to subscription page
-                    },
+                    subtitle: _planLabel(),
+                    trailing: _sub.status != SubscriptionStatus.active
+                        ? GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  fullscreenDialog: true,
+                                  builder: (_) => const PaywallPage(),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF646CFF)
+                                    .withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                'Upgrade',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF646CFF),
+                                ),
+                              ),
+                            ),
+                          )
+                        : null,
+                    onTap: _sub.status != SubscriptionStatus.active
+                        ? () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                fullscreenDialog: true,
+                                builder: (_) => const PaywallPage(),
+                              ),
+                            );
+                          }
+                        : null,
                   ),
                   _buildDivider(),
                   _buildSettingsTile(
                     icon: Icons.qr_code_scanner,
                     iconColor: const Color(0xFF646CFF),
-                    title: 'Scans This Month',
-                    subtitle: 'Unlimited on Free plan',
+                    title: 'Scans',
+                    subtitle: _scansLabel(),
                     onTap: null,
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Integrations Section
-            Text(
-              'INTEGRATIONS',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[600],
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
-              ),
-              child: _buildSettingsTile(
-                icon: Icons.store_rounded,
-                iconColor: _stockXConnected ? Colors.green : Colors.grey,
-                title: 'StockX',
-                subtitle: _checkingStockX
-                    ? 'Checking...'
-                    : (_stockXConnected ? 'Connected' : 'Not connected'),
-                onTap: () {
-                  if (_stockXConnected) {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        backgroundColor: const Color(0xFF1A1A1A),
-                        title: Text(
-                          'StockX Connected',
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        content: Text(
-                          'Your StockX account is connected. Would you like to disconnect?',
-                          style: GoogleFonts.inter(color: Colors.grey[400]),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(),
-                            child: Text(
-                              'Cancel',
-                              style: GoogleFonts.inter(color: Colors.grey[400]),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.of(ctx).pop();
-                              _disconnectStockX();
-                            },
-                            child: Text(
-                              'Disconnect',
-                              style: GoogleFonts.inter(color: Colors.red),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  } else {
-                    StockXAuthService.launchOAuth();
-                  }
-                },
               ),
             ),
             const SizedBox(height: 24),
@@ -436,9 +380,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     iconColor: Colors.orange,
                     title: 'Notifications',
                     subtitle: 'Manage notification preferences',
-                    onTap: () {
-                      // TODO: Navigate to notifications settings
-                    },
+                    onTap: () {},
                   ),
                   _buildDivider(),
                   _buildSettingsTile(
@@ -446,9 +388,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     iconColor: Colors.blue,
                     title: 'Help & Support',
                     subtitle: 'Get help or send feedback',
-                    onTap: () {
-                      // TODO: Navigate to help page
-                    },
+                    onTap: () {},
                   ),
                   _buildDivider(),
                   _buildSettingsTile(
@@ -456,9 +396,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     iconColor: Colors.teal,
                     title: 'About',
                     subtitle: 'Version 1.0.0',
-                    onTap: () {
-                      // TODO: Show about dialog
-                    },
+                    onTap: () {},
                   ),
                 ],
               ),

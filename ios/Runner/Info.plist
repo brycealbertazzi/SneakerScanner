@@ -51,7 +51,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>This app needs camera access to scan barcodes on sneaker boxes.</string>
+	<string>This app needs access to the camera to scan the labels and barcodes of sneaker boxes</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

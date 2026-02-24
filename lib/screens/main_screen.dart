@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../api_keys.dart';
 import '../services/stockx_auth_service.dart';
+import '../services/subscription_service.dart';
 import 'scanner_page.dart';
 import 'history_page.dart';
 import 'settings_page.dart';
@@ -26,6 +27,7 @@ class MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     _loadApiKeys();
+    SubscriptionService.instance.initialize();
     _appLinks = AppLinks();
     _appLinks.uriLinkStream.listen((Uri uri) {
       debugPrint('[StockX OAuth] Deep link received: $uri');
