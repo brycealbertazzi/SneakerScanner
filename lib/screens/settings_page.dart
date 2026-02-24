@@ -301,47 +301,14 @@ class _SettingsPageState extends State<SettingsPage> {
                     iconColor: _planColor(),
                     title: 'Current Plan',
                     subtitle: _planLabel(),
-                    trailing: _sub.status != SubscriptionStatus.active
-                        ? GestureDetector(
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  fullscreenDialog: true,
-                                  builder: (_) => const PaywallPage(),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF646CFF)
-                                    .withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                'Upgrade',
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF646CFF),
-                                ),
-                              ),
-                            ),
-                          )
-                        : null,
-                    onTap: _sub.status != SubscriptionStatus.active
-                        ? () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                fullscreenDialog: true,
-                                builder: (_) => const PaywallPage(),
-                              ),
-                            );
-                          }
-                        : null,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          fullscreenDialog: true,
+                          builder: (_) => const PaywallPage(),
+                        ),
+                      );
+                    },
                   ),
                   _buildDivider(),
                   _buildSettingsTile(
@@ -350,53 +317,6 @@ class _SettingsPageState extends State<SettingsPage> {
                     title: 'Scans',
                     subtitle: _scansLabel(),
                     onTap: null,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // App Section
-            Text(
-              'APP',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[600],
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
-              ),
-              child: Column(
-                children: [
-                  _buildSettingsTile(
-                    icon: Icons.notifications_outlined,
-                    iconColor: Colors.orange,
-                    title: 'Notifications',
-                    subtitle: 'Manage notification preferences',
-                    onTap: () {},
-                  ),
-                  _buildDivider(),
-                  _buildSettingsTile(
-                    icon: Icons.help_outline_rounded,
-                    iconColor: Colors.blue,
-                    title: 'Help & Support',
-                    subtitle: 'Get help or send feedback',
-                    onTap: () {},
-                  ),
-                  _buildDivider(),
-                  _buildSettingsTile(
-                    icon: Icons.info_outline_rounded,
-                    iconColor: Colors.teal,
-                    title: 'About',
-                    subtitle: 'Version 1.0.0',
-                    onTap: () {},
                   ),
                 ],
               ),

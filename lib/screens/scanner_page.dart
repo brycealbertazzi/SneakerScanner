@@ -181,7 +181,9 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       }
     }
     if (code == null && allCandidates.isNotEmpty) {
-      debugPrint('All SKU candidates rejected for brand "${foundBrand ?? 'unknown'}": $allCandidates');
+      debugPrint(
+        'All SKU candidates rejected for brand "${foundBrand ?? 'unknown'}": $allCandidates',
+      );
     }
 
     // --- Size extraction ---
@@ -274,17 +276,9 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       RegExp(r'^(?:[MWU])([0-9]{4}[A-Z]?)([A-Z]{2,6})$'),
       RegExp(r'^([A-Z]{2}[0-9]{3})([A-Z0-9]{2,6})$'),
     ],
-    'adidas': [
-      RegExp(r'^([A-Z0-9]{6})$'),
-      RegExp(r'^([A-Z]{2})([0-9]{4})$'),
-    ],
-    'reebok': [
-      RegExp(r'^([A-Z]{2}[0-9]{4})$'),
-      RegExp(r'^([A-Z0-9]{6})$'),
-    ],
-    'converse': [
-      RegExp(r'^([A-Z][0-9]{5}[A-Z])$'),
-    ],
+    'adidas': [RegExp(r'^([A-Z0-9]{6})$'), RegExp(r'^([A-Z]{2})([0-9]{4})$')],
+    'reebok': [RegExp(r'^([A-Z]{2}[0-9]{4})$'), RegExp(r'^([A-Z0-9]{6})$')],
+    'converse': [RegExp(r'^([A-Z][0-9]{5}[A-Z])$')],
     'skechers': [
       RegExp(r'^(?:[MW])?([0-9]{5,6}[A-Z]?)[\s./\-–_]+([A-Z]{2,4})$'),
       RegExp(r'^(?:[MW])?([0-9]{5,6}[A-Z]?)([A-Z]{2,4})$'),
@@ -328,11 +322,11 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
 
   // Strong disqualifiers from sku_validation.json
   static final _strongDisqualifiers = [
-    RegExp(r'^[0-9]{12,14}$'),                          // GTIN / UPC / EAN
+    RegExp(r'^[0-9]{12,14}$'), // GTIN / UPC / EAN
     RegExp(r'^(US|UK|EU|CM|MM)?\s?[0-9]{1,2}(\.[0-9])?$'), // Size value
-    RegExp(r'^[A-Z]{2}[0-9]{2}$'),                      // Season code (FW23, SP24)
-    RegExp(r'^(19|20)[0-9]{2}$'),                        // 4-digit year
-    RegExp(r'^[A-Z]{6,11}$'),                            // All letters, no digits
+    RegExp(r'^[A-Z]{2}[0-9]{2}$'), // Season code (FW23, SP24)
+    RegExp(r'^(19|20)[0-9]{2}$'), // 4-digit year
+    RegExp(r'^[A-Z]{6,11}$'), // All letters, no digits
   ];
 
   bool _isValidSku(String code, String? brand) {
@@ -350,15 +344,23 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     // Validate raw form against brand patterns (patterns already handle
     // various separators: hyphens, spaces, dots, slashes)
     final brandKey = _brandKeyFromName(brand);
-    final patterns = (brandKey != null && _brandSkuPatterns.containsKey(brandKey))
+    final patterns =
+        (brandKey != null && _brandSkuPatterns.containsKey(brandKey))
         ? _brandSkuPatterns[brandKey]!
         : _brandSkuPatterns['all']!;
     return patterns.any((p) => p.hasMatch(upper));
   }
 
   static const _disqualifyingKeywords = [
-    'UPC', 'U.P.C.', 'BARCODE', 'PO#', 'PO ', 'P.O.', 'PURCHASE ORDER',
-    'ORDER#', 'ORDER ',
+    'UPC',
+    'U.P.C.',
+    'BARCODE',
+    'PO#',
+    'PO ',
+    'P.O.',
+    'PURCHASE ORDER',
+    'ORDER#',
+    'ORDER ',
   ];
 
   /// Check if a candidate appears on an OCR line preceded (within 12 chars)
@@ -419,10 +421,10 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       // Run OCR — Apple Vision on iOS, ML Kit on Android.
       final String fullText;
       if (Platform.isIOS) {
-        fullText = await _ocrChannel.invokeMethod<String>(
-              'recognizeText',
-              {'imagePath': photo.path},
-            ) ??
+        fullText =
+            await _ocrChannel.invokeMethod<String>('recognizeText', {
+              'imagePath': photo.path,
+            }) ??
             '';
         debugPrint('OCR text (Vision): $fullText');
       } else {
@@ -440,49 +442,51 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
       // Parse OCR text into ScanData
       final scanData = _parseLabelInfo(fullText);
 
-        debugPrint('═══ SCAN RESULT ═══');
-        if (scanData.sku != null) {
-          debugPrint('SKU found: ${scanData.sku}');
-        } else {
-          debugPrint('SKU: not found');
-        }
-        debugPrint('Brand: ${scanData.brand ?? 'n/a'}, '
-            'Size: ${scanData.size ?? 'n/a'}');
-        debugPrint('═══════════════════');
+      debugPrint('═══ SCAN RESULT ═══');
+      if (scanData.sku != null) {
+        debugPrint('SKU found: ${scanData.sku}');
+      } else {
+        debugPrint('SKU: not found');
+      }
+      debugPrint(
+        'Brand: ${scanData.brand ?? 'n/a'}, '
+        'Size: ${scanData.size ?? 'n/a'}',
+      );
+      debugPrint('═══════════════════');
 
-        if (scanData.sku != null) {
-          // SKU found — go directly to detail page
-          if (mounted) {
-            final nav = Navigator.of(context);
-            await _previewController.stop();
-            await SubscriptionService.instance.incrementScanCount();
-            final result = await nav.push<String>(
-              MaterialPageRoute(
-                builder: (context) => ScanDetailPage(
-                  scanId: '',
-                  scanData: scanData,
-                  timestamp: DateTime.now().millisecondsSinceEpoch,
-                ),
+      if (scanData.sku != null) {
+        // SKU found — go directly to detail page
+        if (mounted) {
+          final nav = Navigator.of(context);
+          await _previewController.stop();
+          await SubscriptionService.instance.incrementScanCount();
+          final result = await nav.push<String>(
+            MaterialPageRoute(
+              builder: (context) => ScanDetailPage(
+                scanId: '',
+                scanData: scanData,
+                timestamp: DateTime.now().millisecondsSinceEpoch,
               ),
+            ),
+          );
+          if (mounted && result == 'noResults') {
+            await _previewController.start();
+            _showNoResultsModal(
+              scanData,
+              onEnterManually: () => _showManualSkuDialog(fullText, scanData),
             );
-            if (mounted && result == 'noResults') {
-              await _previewController.start();
-              _showNoResultsModal(
-                scanData,
-                onEnterManually: () => _showManualSkuDialog(fullText, scanData),
-              );
-            } else if (mounted && result == 'scanAnother') {
-              await _previewController.start();
-            } else if (mounted) {
-              context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
-            }
-          }
-        } else {
-          // No SKU — show dialog with option to enter manually or proceed without
-          if (mounted) {
-            _showManualSkuDialog(fullText, scanData);
+          } else if (mounted && result == 'scanAnother') {
+            await _previewController.start();
+          } else if (mounted) {
+            context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
           }
         }
+      } else {
+        // No SKU — show dialog with option to enter manually or proceed without
+        if (mounted) {
+          _showManualSkuDialog(fullText, scanData);
+        }
+      }
     } catch (e) {
       debugPrint('Capture error: $e');
       if (mounted) {
@@ -504,9 +508,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
     if (!mounted) return;
 
     final gtin = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (context) => const _BarcodeScannerPage(),
-      ),
+      MaterialPageRoute(builder: (context) => const _BarcodeScannerPage()),
     );
 
     if (!mounted) return;
@@ -576,7 +578,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
               const SizedBox(height: 12),
               Text(
                 ocrText.isEmpty
-                    ? 'Type the SKU from the shoe label or box.'
+                    ? 'Type the SKU from the shoe label.'
                     : 'We couldn\'t detect a SKU. Enter it manually or scan the barcode.',
                 style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[400]),
               ),
@@ -637,25 +639,29 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                         await _previewController.stop();
                         final data = currentScanData.copyWith(sku: sku);
                         if (mounted) {
-                          await SubscriptionService.instance.incrementScanCount();
+                          await SubscriptionService.instance
+                              .incrementScanCount();
                           if (!mounted) return;
-                          final result = await Navigator.of(context).push<String>(
-                            MaterialPageRoute(
-                              builder: (context) => ScanDetailPage(
-                                scanId: '',
-                                scanData: data,
-                                timestamp:
-                                    DateTime.now().millisecondsSinceEpoch,
-                              ),
-                            ),
-                          );
+                          final result = await Navigator.of(context)
+                              .push<String>(
+                                MaterialPageRoute(
+                                  builder: (context) => ScanDetailPage(
+                                    scanId: '',
+                                    scanData: data,
+                                    timestamp:
+                                        DateTime.now().millisecondsSinceEpoch,
+                                  ),
+                                ),
+                              );
                           if (mounted && result == 'noResults') {
                             await _previewController.start();
                             _showNoResultsModal(data);
                           } else if (mounted && result == 'scanAnother') {
                             await _previewController.start();
                           } else if (mounted) {
-                            context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
+                            context
+                                .findAncestorStateOfType<MainScreenState>()
+                                ?.switchToTab(1);
                           }
                         }
                       },
@@ -681,7 +687,10 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
                     if (!await _checkSubscription()) return;
                     // Drop any OCR-derived SKU so the barcode GTIN is the
                     // sole identifier — avoids SKU taking priority over GTIN.
-                    _scanBarcode(ocrText, ScanData(brand: currentScanData.brand));
+                    _scanBarcode(
+                      ocrText,
+                      ScanData(brand: currentScanData.brand),
+                    );
                   },
                   icon: const Icon(Icons.qr_code_scanner, size: 18),
                   label: const Text('Scan Barcode'),
@@ -955,7 +964,7 @@ class _ScannerPageState extends State<ScannerPage> with WidgetsBindingObserver {
             ),
             const SizedBox(height: 4),
             Text(
-              'Take a photo of a shoe label or box',
+              'Take a photo of a shoe label on the box',
               style: GoogleFonts.inter(fontSize: 14, color: Colors.grey[500]),
             ),
             const SizedBox(height: 24),
@@ -1112,65 +1121,62 @@ class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
         if (didPop) _controller.stop();
       },
       child: Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
         backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(
-          'Scan Barcode',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: Text(
+            'Scan Barcode',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+          actions: [
+            IconButton(
+              icon: ValueListenableBuilder(
+                valueListenable: _controller,
+                builder: (context, state, child) {
+                  return Icon(
+                    state.torchState == TorchState.on
+                        ? Icons.flash_on
+                        : Icons.flash_off,
+                  );
+                },
+              ),
+              onPressed: () => _controller.toggleTorch(),
+            ),
+          ],
         ),
-        actions: [
-          IconButton(
-            icon: ValueListenableBuilder(
-              valueListenable: _controller,
-              builder: (context, state, child) {
-                return Icon(
-                  state.torchState == TorchState.on
-                      ? Icons.flash_on
-                      : Icons.flash_off,
-                );
-              },
+        body: Stack(
+          children: [
+            MobileScanner(
+              controller: _controller,
+              scanWindow: scanWindow,
+              onDetect: _onDetect,
             ),
-            onPressed: () => _controller.toggleTorch(),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          MobileScanner(
-            controller: _controller,
-            scanWindow: scanWindow,
-            onDetect: _onDetect,
-          ),
-          // Scan overlay — dimensions must match scanWindow above
-          Center(
-            child: Container(
-              width: _boxWidth,
-              height: _boxHeight,
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFF646CFF), width: 2),
-                borderRadius: BorderRadius.circular(12),
+            // Scan overlay — dimensions must match scanWindow above
+            Center(
+              child: Container(
+                width: _boxWidth,
+                height: _boxHeight,
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFF646CFF), width: 2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
             ),
-          ),
-          // Instruction text
-          Positioned(
-            bottom: 80,
-            left: 0,
-            right: 0,
-            child: Text(
-              'Point camera at the barcode',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.inter(
-                fontSize: 15,
-                color: Colors.white70,
+            // Instruction text
+            Positioned(
+              bottom: 80,
+              left: 0,
+              right: 0,
+              child: Text(
+                'Point camera at the barcode',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(fontSize: 15, color: Colors.white70),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
     );
   }
 }
