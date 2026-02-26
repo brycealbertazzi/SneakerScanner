@@ -16,7 +16,9 @@ import 'paywall_page.dart';
 import 'scan_detail/scan_detail_page.dart';
 
 class ScannerPage extends StatefulWidget {
-  const ScannerPage({super.key});
+  const ScannerPage({super.key, this.activeNotifier});
+
+  final ValueNotifier<bool>? activeNotifier;
 
   @override
   State<ScannerPage> createState() => _ScannerPageState();
@@ -26,6 +28,7 @@ class _ScannerPageState extends State<ScannerPage>
     with WidgetsBindingObserver
     implements RouteAware {
   bool _isProcessing = false;
+  bool _isCameraStarting = false;
 
   static const _ocrChannel = MethodChannel('com.sneakerscanner/ocr');
 
@@ -34,12 +37,15 @@ class _ScannerPageState extends State<ScannerPage>
     detectionSpeed: DetectionSpeed.noDuplicates,
     facing: CameraFacing.back,
     torchEnabled: false,
+    autoStart: false,
   );
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.activeNotifier?.addListener(_onActiveChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startCamera());
   }
 
   @override
@@ -50,10 +56,31 @@ class _ScannerPageState extends State<ScannerPage>
 
   @override
   void dispose() {
+    widget.activeNotifier?.removeListener(_onActiveChanged);
     routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
     _previewController.dispose();
     super.dispose();
+  }
+
+  void _onActiveChanged() {
+    if (widget.activeNotifier?.value == true) {
+      _startCamera();
+    } else {
+      _previewController.stop();
+    }
+  }
+
+  // Atomic guard: prevents concurrent start() calls (e.g. didPopNext() and
+  // didChangeAppLifecycleState(resumed) firing at the same time).
+  Future<void> _startCamera() async {
+    if (_isCameraStarting || _previewController.value.isRunning) return;
+    _isCameraStarting = true;
+    try {
+      await _previewController.start();
+    } finally {
+      _isCameraStarting = false;
+    }
   }
 
   @override
@@ -61,7 +88,7 @@ class _ScannerPageState extends State<ScannerPage>
     if (state == AppLifecycleState.paused) {
       _previewController.stop();
     } else if (state == AppLifecycleState.resumed) {
-      _previewController.start();
+      _startCamera();
     }
   }
 
@@ -73,7 +100,7 @@ class _ScannerPageState extends State<ScannerPage>
 
   @override
   void didPopNext() {
-    _previewController.start();
+    _startCamera();
   }
 
   @override
@@ -497,13 +524,12 @@ class _ScannerPageState extends State<ScannerPage>
             ),
           );
           if (mounted && result == 'noResults') {
-            await _previewController.start();
             _showNoResultsModal(
               scanData,
               onEnterManually: () => _showManualSkuDialog(fullText, scanData),
             );
           } else if (mounted && result == 'scanAnother') {
-            await _previewController.start();
+            // camera restarted by didPopNext()
           } else if (mounted) {
             context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
           }
@@ -559,10 +585,9 @@ class _ScannerPageState extends State<ScannerPage>
           ),
         );
         if (mounted && result == 'noResults') {
-          await _previewController.start();
           _showNoResultsModal(data);
         } else if (mounted && result == 'scanAnother') {
-          await _previewController.start();
+          // camera restarted by didPopNext()
         } else if (mounted) {
           context.findAncestorStateOfType<MainScreenState>()?.switchToTab(1);
         }
@@ -572,7 +597,7 @@ class _ScannerPageState extends State<ScannerPage>
       // fully release (triggered by PopScope) before reactivating our preview.
       await Future.delayed(const Duration(milliseconds: 400));
       if (!mounted) return;
-      await _previewController.start();
+      await _startCamera();
       if (mounted) _showManualSkuDialog(ocrText, currentScanData);
     }
   }
@@ -681,10 +706,9 @@ class _ScannerPageState extends State<ScannerPage>
                                 ),
                               );
                           if (mounted && result == 'noResults') {
-                            await _previewController.start();
                             _showNoResultsModal(data);
                           } else if (mounted && result == 'scanAnother') {
-                            await _previewController.start();
+                            // camera restarted by didPopNext()
                           } else if (mounted) {
                             context
                                 .findAncestorStateOfType<MainScreenState>()
@@ -858,10 +882,9 @@ class _ScannerPageState extends State<ScannerPage>
                           ),
                         );
                         if (mounted && result == 'noResults') {
-                          await _previewController.start();
                           _showNoResultsModal(data);
                         } else if (mounted && result == 'scanAnother') {
-                          await _previewController.start();
+                          // camera restarted by didPopNext()
                         } else if (mounted) {
                           context
                               .findAncestorStateOfType<MainScreenState>()
@@ -1006,6 +1029,8 @@ class _ScannerPageState extends State<ScannerPage>
                     MobileScanner(
                       controller: _previewController,
                       onDetect: (_) {},
+                      errorBuilder: (context, error) =>
+                          const ColoredBox(color: Colors.black),
                     ),
                     if (_isProcessing)
                       Container(
@@ -1178,6 +1203,8 @@ class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
               controller: _controller,
               scanWindow: scanWindow,
               onDetect: _onDetect,
+              errorBuilder: (context, error) =>
+                  const ColoredBox(color: Colors.black),
             ),
             // Scan overlay — dimensions must match scanWindow above
             Center(

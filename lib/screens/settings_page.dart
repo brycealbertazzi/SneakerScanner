@@ -190,7 +190,9 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final photoUrl = user?.photoURL;
-    final displayName = user?.displayName ?? 'User';
+    final displayName = user?.displayName ??
+        user?.email?.split('@').first ??
+        'User';
     final email = user?.email ?? '';
 
     return Scaffold(
@@ -420,7 +422,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
-            if (trailing != null) trailing,
+            ?trailing,
             if (onTap != null && trailing == null)
               Icon(Icons.chevron_right, color: Colors.grey[600], size: 22),
           ],

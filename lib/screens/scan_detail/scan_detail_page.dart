@@ -127,8 +127,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             final pricingStatus = scanDataMap['pricingStatus'] as String?;
 
             setState(() {
-              if (savedRetailPrice != null)
+              if (savedRetailPrice != null) {
                 _manualRetailPrice = savedRetailPrice;
+              }
               if (savedStockXPrice != null) {
                 _stockXPrice = savedStockXPrice;
                 _isLoadingStockXPrice = false;
@@ -920,8 +921,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             if (webUrl != null && webUrl.isNotEmpty) _ebayItemUrl = webUrl;
             final imageObj = item['image'] as Map<String, dynamic>?;
             final imageUrl = imageObj?['imageUrl'] as String?;
-            if (imageUrl != null && imageUrl.isNotEmpty)
+            if (imageUrl != null && imageUrl.isNotEmpty) {
               _ebayImageUrl = imageUrl;
+            }
             final titleStr = item['title'] as String?;
             if (titleStr != null && titleStr.isNotEmpty) _ebayTitle = titleStr;
           }
@@ -995,8 +997,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             if (webUrl != null && webUrl.isNotEmpty) _ebayItemUrl = webUrl;
             final imageObj = item['image'] as Map<String, dynamic>?;
             final imageUrl = imageObj?['imageUrl'] as String?;
-            if (imageUrl != null && imageUrl.isNotEmpty)
+            if (imageUrl != null && imageUrl.isNotEmpty) {
               _ebayImageUrl = imageUrl;
+            }
             final titleStr = item['title'] as String?;
             if (titleStr != null && titleStr.isNotEmpty) _ebayTitle = titleStr;
           }
@@ -1063,8 +1066,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       final item = _bestFootwearItem(items, ocrText: widget.scanData.ocrText);
       if (item == null) return (null, null, null, null);
       final priceData = item['price'];
-      if (priceData == null || priceData['value'] == null)
+      if (priceData == null || priceData['value'] == null) {
         return (null, null, null, null);
+      }
       final price = double.tryParse(priceData['value'].toString());
       final url = item['itemWebUrl'] as String?;
       final imageObj = item['image'] as Map<String, dynamic>?;
@@ -1283,8 +1287,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           (apiModel, apiColor) = parsed;
           // NB colorway must start with a letter.
           if (apiColor.isEmpty ||
-              !RegExp(r'^[A-Z]').hasMatch(apiColor.toUpperCase()))
+              !RegExp(r'^[A-Z]').hasMatch(apiColor.toUpperCase())) {
             continue;
+          }
         } else if (brandKey == 'asics') {
           final parsed = parseAsicsSku(apiSku);
           if (parsed == null) continue;

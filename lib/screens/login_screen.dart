@@ -1,7 +1,12 @@
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import 'main_screen.dart';
 
@@ -14,6 +19,22 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
+
+  String _generateNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(
+      length,
+      (_) => charset[random.nextInt(charset.length)],
+    ).join();
+  }
+
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
 
   Future<void> _signInWithGoogle() async {
     setState(() => _isLoading = true);
@@ -46,6 +67,171 @@ class _LoginScreenState extends State<LoginScreen> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Sign in failed: $e')));
+      }
+    }
+  }
+
+  Future<void> _signInWithApple() async {
+    setState(() => _isLoading = true);
+    final rawNonce = _generateNonce();
+    final nonce = _sha256ofString(rawNonce);
+    OAuthCredential? oauthCredential;
+
+    try {
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+      if (appleCredential.identityToken == null) {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Apple Sign-In failed: no identity token received'),
+            ),
+          );
+        }
+        return;
+      }
+      oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: appleCredential.identityToken,
+        rawNonce: rawNonce,
+        accessToken: appleCredential.authorizationCode,
+      );
+      debugPrint(
+        '[Apple] identityToken length: ${appleCredential.identityToken!.length}',
+      );
+      debugPrint(
+        '[Apple] authorizationCode: ${appleCredential.authorizationCode}',
+      );
+      debugPrint('[Apple] userIdentifier: ${appleCredential.userIdentifier}');
+      // Decode JWT payload (middle segment) to inspect claims
+      try {
+        final parts = appleCredential.identityToken!.split('.');
+        if (parts.length == 3) {
+          String payload = parts[1];
+          // Pad base64 to multiple of 4
+          while (payload.length % 4 != 0) {
+            payload += '=';
+          }
+          final decoded = utf8.decode(base64Url.decode(payload));
+          debugPrint('[Apple] JWT payload: $decoded');
+        }
+      } catch (e) {
+        debugPrint('[Apple] Could not decode JWT: $e');
+      }
+      debugPrint('[Apple] Calling Firebase signInWithCredential...');
+      await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      debugPrint('[Apple] Firebase sign-in succeeded');
+      // Apple only provides name on the very first sign-in — capture and persist it
+      final givenName = appleCredential.givenName;
+      final familyName = appleCredential.familyName;
+      if (givenName != null || familyName != null) {
+        final fullName = [givenName, familyName]
+            .where((s) => s != null && s.isNotEmpty)
+            .join(' ');
+        if (fullName.isNotEmpty) {
+          await FirebaseAuth.instance.currentUser?.updateDisplayName(fullName);
+        }
+      }
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const MainScreen()),
+        );
+      }
+    } on SignInWithAppleAuthorizationException catch (e) {
+      debugPrint(
+        '[Apple] Authorization exception: code=${e.code} message=${e.message}',
+      );
+      setState(() => _isLoading = false);
+    } on FirebaseAuthException catch (e) {
+      debugPrint(
+        '[Apple] FirebaseAuthException: code=${e.code} message=${e.message} plugin=${e.plugin}',
+      );
+      debugPrint('[Apple] FirebaseAuthException stackTrace: ${e.stackTrace}');
+      if (e.code == 'account-exists-with-different-credential' &&
+          oauthCredential != null) {
+        await _linkAppleToGoogle(oauthCredential);
+      } else {
+        setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Sign in failed [${e.code}]: ${e.message}')),
+          );
+        }
+      }
+    } catch (e, st) {
+      debugPrint('[Apple] Unexpected error: $e');
+      debugPrint('[Apple] Stack: $st');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _linkAppleToGoogle(OAuthCredential appleCredential) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text(
+          'Link Accounts',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'This Apple ID\'s email is already associated with a Google account. '
+          'Sign in with Google to link both accounts — your scan history will be preserved.',
+          style: TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Sign in with Google',
+              style: TextStyle(color: Color(0xFF646CFF)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+      final googleAuth = await googleUser.authentication;
+      final googleCredential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(
+        googleCredential,
+      );
+      await userCredential.user!.linkWithCredential(appleCredential);
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const MainScreen()),
+        );
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Account linking failed: $e')));
       }
     }
   }
@@ -138,6 +324,37 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ],
                             ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _signInWithApple,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          side: const BorderSide(color: Colors.white24),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.apple, size: 22, color: Colors.white),
+                          SizedBox(width: 12),
+                          Text(
+                            'Continue with Apple',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

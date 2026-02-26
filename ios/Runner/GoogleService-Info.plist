@@ -3,9 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>773179554972-l9jtvpf5ri7md0a2pbqtqhaj7dr2muon.apps.googleusercontent.com</string>
+	<string>773179554972-4g3gnp6kg1jjtsklq15dbfmc9g02ad0t.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.773179554972-l9jtvpf5ri7md0a2pbqtqhaj7dr2muon</string>
+	<string>com.googleusercontent.apps.773179554972-4g3gnp6kg1jjtsklq15dbfmc9g02ad0t</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>773179554972-6t4m6rlt8ndsj7hccfahg9serju1a68j.apps.googleusercontent.com</string>
 	<key>API_KEY</key>
 	<string>AIzaSyB_mVa2_1X6PO3P7UmITA_-q_issze40Ss</string>
 	<key>GCM_SENDER_ID</key>
@@ -29,7 +31,7 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true/>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:773179554972:ios:99da421aee480d633e0159</string>
+	<string>1:773179554972:ios:9d35d0a68bd311a53e0159</string>
 	<key>DATABASE_URL</key>
 	<string>https://sneaker-scanner-f77aa-default-rtdb.firebaseio.com</string>
 </dict>

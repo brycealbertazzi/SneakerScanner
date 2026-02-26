@@ -20,8 +20,7 @@ class MainScreen extends StatefulWidget {
 class MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   late AppLinks _appLinks;
-
-  final List<Widget> _pages = const [ScannerPage(), HistoryPage()];
+  final ValueNotifier<bool> _scannerActive = ValueNotifier(true);
 
   @override
   void initState() {
@@ -67,7 +66,14 @@ class MainScreenState extends State<MainScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    _scannerActive.dispose();
+    super.dispose();
+  }
+
   void switchToTab(int index) {
+    _scannerActive.value = index == 0;
     setState(() {
       _currentIndex = index;
     });
@@ -116,10 +122,19 @@ class MainScreenState extends State<MainScreen> {
         ],
       ),
       extendBodyBehindAppBar: true,
-      body: _pages[_currentIndex],
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          ScannerPage(activeNotifier: _scannerActive),
+          const HistoryPage(),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          _scannerActive.value = index == 0;
+          setState(() => _currentIndex = index);
+        },
         backgroundColor: const Color(0xFF1A1A1A),
         selectedItemColor: const Color(0xFF646CFF),
         unselectedItemColor: Colors.grey[600],
