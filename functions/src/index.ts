@@ -77,10 +77,6 @@ export const validatePurchase = onCall(
       throw new HttpsError("invalid-argument", "Missing platform or productId.");
     }
 
-    const subRef = admin
-      .database()
-      .ref(`users/${uid}/subscription`);
-
     if (platform === "apple") {
       if (!receiptData) {
         throw new HttpsError("invalid-argument", "Missing receiptData for Apple.");
@@ -92,7 +88,7 @@ export const validatePurchase = onCall(
       if (!result.valid) {
         throw new HttpsError("failed-precondition", "Apple receipt invalid.");
       }
-      await subRef.update({
+      await admin.database().ref(`users/${uid}/subscriptions/apple`).update({
         status: "active",
         platform: "apple",
         productId,
@@ -121,7 +117,7 @@ export const validatePurchase = onCall(
           "Google purchase invalid."
         );
       }
-      await subRef.update({
+      await admin.database().ref(`users/${uid}/subscriptions/google`).update({
         status: "active",
         platform: "google",
         productId,
@@ -209,7 +205,7 @@ export const appleNotifications = onRequest(
       const snapshot = await admin
         .database()
         .ref("users")
-        .orderByChild("subscription/originalTransactionId")
+        .orderByChild("subscriptions/apple/originalTransactionId")
         .equalTo(originalTransactionId)
         .limitToFirst(1)
         .get();
@@ -221,7 +217,7 @@ export const appleNotifications = onRequest(
       }
 
       const uid = Object.keys(snapshot.val())[0];
-      const subRef = admin.database().ref(`users/${uid}/subscription`);
+      const subRef = admin.database().ref(`users/${uid}/subscriptions/apple`);
 
       // Map Apple notification types to our status
       const cancelTypes = ["CANCEL", "REVOKE", "REFUND"];
@@ -292,7 +288,7 @@ export const googleNotifications = onMessagePublished(
       const snapshot = await admin
         .database()
         .ref("users")
-        .orderByChild("subscription/purchaseToken")
+        .orderByChild("subscriptions/google/purchaseToken")
         .equalTo(purchaseToken)
         .limitToFirst(1)
         .get();
@@ -303,7 +299,7 @@ export const googleNotifications = onMessagePublished(
       }
 
       const uid = Object.keys(snapshot.val())[0];
-      const subRef = admin.database().ref(`users/${uid}/subscription`);
+      const subRef = admin.database().ref(`users/${uid}/subscriptions/google`);
 
       // Google Play subscription notification types:
       // 1=RECOVERED, 2=RENEWED, 3=CANCELED, 4=PURCHASED, 5=ON_HOLD

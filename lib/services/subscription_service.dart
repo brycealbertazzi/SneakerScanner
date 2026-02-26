@@ -43,6 +43,17 @@ class SubscriptionService extends ChangeNotifier {
 
   bool get isSubscribed => _status == SubscriptionStatus.active;
 
+  /// Returns the platform-specific subscription node reference.
+  DatabaseReference _subRef(String uid) {
+    final platform = Platform.isIOS ? 'apple' : 'google';
+    return FirebaseDatabase.instance
+        .ref()
+        .child('users')
+        .child(uid)
+        .child('subscriptions')
+        .child(platform);
+  }
+
   Future<void> initialize() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -50,13 +61,9 @@ class SubscriptionService extends ChangeNotifier {
     // Ensure subscription doc exists (new/existing users get free trial)
     await _ensureSubscriptionExists(user.uid);
 
-    // Listen to Firebase subscription node
+    // Listen to platform-specific Firebase subscription node
     _firebaseSubscription?.cancel();
-    _firebaseSubscription = FirebaseDatabase.instance
-        .ref()
-        .child('users')
-        .child(user.uid)
-        .child('subscription')
+    _firebaseSubscription = _subRef(user.uid)
         .onValue
         .listen(_onFirebaseUpdate);
 
@@ -75,24 +82,34 @@ class SubscriptionService extends ChangeNotifier {
   }
 
   Future<void> _ensureSubscriptionExists(String uid) async {
-    final ref = FirebaseDatabase.instance
-        .ref()
-        .child('users')
-        .child(uid)
-        .child('subscription');
+    final ref = _subRef(uid);
     final snapshot = await ref.get();
-    if (!snapshot.exists) {
-      await ref.set({
-        'status': 'free_trial',
-        'scansUsed': 0,
-        'scansLimit': kFreeScanLimit,
-        'platform': null,
-        'productId': null,
-        'originalTransactionId': null,
-        'purchaseToken': null,
-        'expiresAt': null,
-      });
+    if (snapshot.exists) return;
+
+    // Migrate existing users from the old single-node path (iOS only).
+    if (Platform.isIOS) {
+      final oldRef = FirebaseDatabase.instance
+          .ref()
+          .child('users')
+          .child(uid)
+          .child('subscription');
+      final oldSnapshot = await oldRef.get();
+      if (oldSnapshot.exists) {
+        await ref.set(oldSnapshot.value);
+        return;
+      }
     }
+
+    await ref.set({
+      'status': 'free_trial',
+      'scansUsed': 0,
+      'scansLimit': kFreeScanLimit,
+      'platform': Platform.isIOS ? 'apple' : 'google',
+      'productId': null,
+      'originalTransactionId': null,
+      'purchaseToken': null,
+      'expiresAt': null,
+    });
   }
 
   void _onFirebaseUpdate(DatabaseEvent event) {
@@ -231,12 +248,7 @@ class SubscriptionService extends ChangeNotifier {
       // Server-side validation runs in the background and can update/revoke
       // the subscription later if needed.
       if (user != null) {
-        await FirebaseDatabase.instance
-            .ref()
-            .child('users')
-            .child(user.uid)
-            .child('subscription')
-            .update({
+        await _subRef(user.uid).update({
           'status': 'active',
           'platform': Platform.isIOS ? 'apple' : 'google',
           'productId': purchase.productID,
@@ -284,12 +296,7 @@ class SubscriptionService extends ChangeNotifier {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || !canScan) return false;
     try {
-      final ref = FirebaseDatabase.instance
-          .ref()
-          .child('users')
-          .child(user.uid)
-          .child('subscription')
-          .child('scansUsed');
+      final ref = _subRef(user.uid).child('scansUsed');
       await ref.set(ServerValue.increment(1));
       return true;
     } catch (e) {
