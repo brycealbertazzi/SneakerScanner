@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:app_links/app_links.dart';
@@ -21,10 +23,15 @@ class MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   late AppLinks _appLinks;
   final ValueNotifier<bool> _scannerActive = ValueNotifier(true);
+  late final StreamSubscription<User?> _userSub;
 
   @override
   void initState() {
     super.initState();
+    // Rebuild avatar whenever user profile changes (displayName, photoURL, etc.)
+    _userSub = FirebaseAuth.instance.userChanges().listen((_) {
+      if (mounted) setState(() {});
+    });
     _loadApiKeys();
     SubscriptionService.instance.initialize();
     _appLinks = AppLinks();
@@ -68,6 +75,7 @@ class MainScreenState extends State<MainScreen> {
 
   @override
   void dispose() {
+    _userSub.cancel();
     _scannerActive.dispose();
     super.dispose();
   }
@@ -87,9 +95,6 @@ class MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-    final photoUrl = user?.photoURL;
-
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -99,24 +104,31 @@ class MainScreenState extends State<MainScreen> {
             padding: const EdgeInsets.only(right: 12),
             child: GestureDetector(
               onTap: _openSettings,
-              child: Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF646CFF), width: 2),
-                ),
-                child: ClipOval(
-                  child: photoUrl != null
-                      ? Image.network(
-                          photoUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              _buildDefaultAvatar(user?.displayName),
-                        )
-                      : _buildDefaultAvatar(user?.displayName),
-                ),
-              ),
+              child: Builder(builder: (context) {
+                final user = FirebaseAuth.instance.currentUser;
+                final photoUrl = user?.photoURL;
+                final displayName = user?.displayName ??
+                    user?.email?.split('@').first;
+                return Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border:
+                        Border.all(color: const Color(0xFF646CFF), width: 2),
+                  ),
+                  child: ClipOval(
+                    child: photoUrl != null
+                        ? Image.network(
+                            photoUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                _buildDefaultAvatar(displayName),
+                          )
+                        : _buildDefaultAvatar(displayName),
+                  ),
+                );
+              }),
             ),
           ),
         ],
