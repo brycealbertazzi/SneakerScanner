@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -512,7 +514,9 @@ class _PaywallPageState extends State<PaywallPage>
 
                   // Cancel subscription hint
                   Text(
-                    'Cancel subscription anytime in Settings',
+                    Platform.isIOS
+                        ? 'Cancel subscription anytime in Settings'
+                        : 'Cancel subscription anytime in your Google Settings',
                     style: GoogleFonts.inter(
                       fontSize: 13,
                       color: Colors.grey[500],
@@ -520,27 +524,29 @@ class _PaywallPageState extends State<PaywallPage>
                   ),
                   const SizedBox(height: 16),
 
-                  // Restore purchases
-                  GestureDetector(
-                    onTap: pending ? null : _sub.restorePurchases,
-                    onTapDown: (_) => setState(() => _restorePressed = true),
-                    onTapUp: (_) => setState(() => _restorePressed = false),
-                    onTapCancel: () => setState(() => _restorePressed = false),
-                    child: Text(
-                      'Restore Purchases',
-                      style: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: _restorePressed
-                            ? Colors.white
-                            : Colors.grey[500],
-                        decoration: TextDecoration.underline,
-                        decorationColor: _restorePressed
-                            ? Colors.white
-                            : Colors.grey[500],
+                  // Restore purchases (iOS only)
+                  if (Platform.isIOS) ...[
+                    GestureDetector(
+                      onTap: pending ? null : _sub.restorePurchases,
+                      onTapDown: (_) => setState(() => _restorePressed = true),
+                      onTapUp: (_) => setState(() => _restorePressed = false),
+                      onTapCancel: () => setState(() => _restorePressed = false),
+                      child: Text(
+                        'Restore Purchases',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: _restorePressed
+                              ? Colors.white
+                              : Colors.grey[500],
+                          decoration: TextDecoration.underline,
+                          decorationColor: _restorePressed
+                              ? Colors.white
+                              : Colors.grey[500],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
+                  ],
 
                   // Privacy & Terms links
                   Row(

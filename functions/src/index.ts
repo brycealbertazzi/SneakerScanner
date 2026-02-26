@@ -384,7 +384,7 @@ async function verifyGooglePurchase(
       serviceAccount.private_key
     );
 
-    const packageName = "com.sneakerscanner.app";
+    const packageName = "com.brycealbertazzi.sneaker_scanner";
     const url =
       `/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}`;
 
