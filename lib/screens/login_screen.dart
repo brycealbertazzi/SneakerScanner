@@ -18,7 +18,10 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  bool _isLoading = false;
+  bool _googleLoading = false;
+  bool _appleLoading = false;
+
+  bool get _isLoading => _googleLoading || _appleLoading;
 
   String _generateNonce([int length = 32]) {
     const charset =
@@ -37,12 +40,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
-    setState(() => _isLoading = true);
+    setState(() => _googleLoading = true);
 
     try {
       final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) {
-        setState(() => _isLoading = false);
+        setState(() => _googleLoading = false);
         return;
       }
 
@@ -62,7 +65,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() => _googleLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -72,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _signInWithApple() async {
-    setState(() => _isLoading = true);
+    setState(() => _appleLoading = true);
     final rawNonce = _generateNonce();
     final nonce = _sha256ofString(rawNonce);
     OAuthCredential? oauthCredential;
@@ -86,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
         nonce: nonce,
       );
       if (appleCredential.identityToken == null) {
-        setState(() => _isLoading = false);
+        setState(() => _appleLoading = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -146,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint(
         '[Apple] Authorization exception: code=${e.code} message=${e.message}',
       );
-      setState(() => _isLoading = false);
+      setState(() => _appleLoading = false);
     } on FirebaseAuthException catch (e) {
       debugPrint(
         '[Apple] FirebaseAuthException: code=${e.code} message=${e.message} plugin=${e.plugin}',
@@ -156,7 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
           oauthCredential != null) {
         await _linkAppleToGoogle(oauthCredential);
       } else {
-        setState(() => _isLoading = false);
+        setState(() => _appleLoading = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Sign in failed [${e.code}]: ${e.message}')),
@@ -166,7 +169,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e, st) {
       debugPrint('[Apple] Unexpected error: $e');
       debugPrint('[Apple] Stack: $st');
-      setState(() => _isLoading = false);
+      setState(() => _appleLoading = false);
     }
   }
 
@@ -201,14 +204,14 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     if (confirmed != true) {
-      setState(() => _isLoading = false);
+      setState(() => _appleLoading = false);
       return;
     }
 
     try {
       final googleUser = await GoogleSignIn().signIn();
       if (googleUser == null) {
-        setState(() => _isLoading = false);
+        setState(() => _appleLoading = false);
         return;
       }
       final googleAuth = await googleUser.authentication;
@@ -227,7 +230,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      setState(() => _appleLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -298,7 +301,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      child: _isLoading
+                      child: _googleLoading
                           ? const SizedBox(
                               width: 24,
                               height: 24,
@@ -340,21 +343,30 @@ class _LoginScreenState extends State<LoginScreen> {
                           side: const BorderSide(color: Colors.white24),
                         ),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.apple, size: 22, color: Colors.white),
-                          SizedBox(width: 12),
-                          Text(
-                            'Continue with Apple',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                      child: _appleLoading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(Icons.apple, size: 22, color: Colors.white),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Continue with Apple',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                 ],
