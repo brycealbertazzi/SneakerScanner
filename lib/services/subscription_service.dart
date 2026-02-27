@@ -22,6 +22,7 @@ class SubscriptionService extends ChangeNotifier {
   bool _purchasePending = false;
   bool _purchaseCancelled = false;
   String? _purchaseError;
+  bool _purchaseInitiated = false;
 
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
   StreamSubscription<DatabaseEvent>? _firebaseSubscription;
@@ -182,6 +183,7 @@ class SubscriptionService extends ChangeNotifier {
     _purchaseError = null;
     _purchaseCancelled = false;
     _purchasePending = true;
+    _purchaseInitiated = true;
     notifyListeners();
 
     final param = PurchaseParam(productDetails: _annualProduct!);
@@ -218,24 +220,42 @@ class SubscriptionService extends ChangeNotifier {
       if (purchase.status == PurchaseStatus.pending) {
         _purchasePending = true;
         notifyListeners();
-      } else if (purchase.status == PurchaseStatus.purchased ||
-          purchase.status == PurchaseStatus.restored) {
+      } else if (purchase.status == PurchaseStatus.purchased) {
+        if (_purchaseInitiated) {
+          _validateAndFinish(purchase);
+        } else {
+          // Stale unfinished transaction from a previous session — complete it
+          // to clean up StoreKit's queue without activating the subscription.
+          debugPrint('[IAP] Completing stale transaction without activating');
+          InAppPurchase.instance.completePurchase(purchase);
+        }
+      } else if (purchase.status == PurchaseStatus.restored) {
+        // Always process restores — comes from restorePurchases() or the
+        // platform silently restoring an existing subscription.
         _validateAndFinish(purchase);
       } else if (purchase.status == PurchaseStatus.error) {
         _purchasePending = false;
+        _purchaseInitiated = false;
+        InAppPurchase.instance.completePurchase(purchase);
         // iOS fires SKErrorPaymentCancelled (code 2 / "paymentCancelled") when
         // the user dismisses the payment or sign-in sheet — treat as cancellation,
         // not as a hard error.
         final isCancellation = _isCancellationError(purchase.error);
-        if (isCancellation) {
+        final isAlreadyOwned = _isAlreadyOwnedError(purchase.error);
+        if (isAlreadyOwned) {
+          // Subscription exists on the store but not in Firebase — restore it.
+          debugPrint('[IAP] Already owned — triggering restore to sync');
+          restorePurchases();
+        } else if (isCancellation) {
           _purchaseCancelled = true;
+          notifyListeners();
         } else {
           _purchaseError = purchase.error?.message ?? 'Purchase failed.';
+          notifyListeners();
         }
-        notifyListeners();
-        InAppPurchase.instance.completePurchase(purchase);
       } else if (purchase.status == PurchaseStatus.canceled) {
         _purchasePending = false;
+        _purchaseInitiated = false;
         _purchaseCancelled = true;
         notifyListeners();
         InAppPurchase.instance.completePurchase(purchase);
@@ -248,6 +268,16 @@ class SubscriptionService extends ChangeNotifier {
     final code = error.code.toLowerCase();
     final message = error.message.toLowerCase();
     return code.contains('cancel') || message.contains('cancel');
+  }
+
+  bool _isAlreadyOwnedError(IAPError? error) {
+    if (error == null) return false;
+    final code = error.code.toLowerCase();
+    final message = error.message.toLowerCase();
+    return code.contains('already_owned') ||
+        code.contains('itemalreadyowned') ||
+        message.contains('already own') ||
+        message.contains('already purchased');
   }
 
   Future<void> _validateAndFinish(PurchaseDetails purchase) async {
@@ -269,6 +299,7 @@ class SubscriptionService extends ChangeNotifier {
       _purchaseError = 'Failed to activate. Please try again.';
     } finally {
       _purchasePending = false;
+      _purchaseInitiated = false;
       notifyListeners();
       await InAppPurchase.instance.completePurchase(purchase);
     }
