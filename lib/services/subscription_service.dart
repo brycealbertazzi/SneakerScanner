@@ -58,19 +58,8 @@ class SubscriptionService extends ChangeNotifier {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    // Ensure subscription doc exists (new/existing users get free trial)
-    await _ensureSubscriptionExists(user.uid);
-
-    // Listen to platform-specific Firebase subscription node
-    _firebaseSubscription?.cancel();
-    _firebaseSubscription = _subRef(user.uid)
-        .onValue
-        .listen(_onFirebaseUpdate);
-
-    // Load IAP products
-    await _loadProducts();
-
-    // Listen to purchase updates
+    // Set up purchase stream listener FIRST — must never be missed regardless
+    // of whether Firebase setup succeeds.
     _purchaseSubscription?.cancel();
     _purchaseSubscription = InAppPurchase.instance.purchaseStream.listen(
       _onPurchaseUpdate,
@@ -79,6 +68,22 @@ class SubscriptionService extends ChangeNotifier {
         notifyListeners();
       },
     );
+
+    // Load IAP products
+    await _loadProducts();
+
+    // Firebase subscription setup — wrapped so a failure here never blocks IAP.
+    try {
+      await _ensureSubscriptionExists(user.uid);
+      _firebaseSubscription?.cancel();
+      _firebaseSubscription = _subRef(user.uid)
+          .onValue
+          .listen(_onFirebaseUpdate);
+    } catch (e) {
+      debugPrint('[Sub] Firebase subscription init failed: $e');
+      _status = SubscriptionStatus.freeTrial;
+      notifyListeners();
+    }
   }
 
   Future<void> _ensureSubscriptionExists(String uid) async {
@@ -114,7 +119,11 @@ class SubscriptionService extends ChangeNotifier {
 
   void _onFirebaseUpdate(DatabaseEvent event) {
     final data = event.snapshot.value as Map<dynamic, dynamic>?;
-    if (data == null) return;
+    if (data == null) {
+      _status = SubscriptionStatus.freeTrial;
+      notifyListeners();
+      return;
+    }
 
     final statusStr = data['status'] as String? ?? 'free_trial';
     _scansUsed = (data['scansUsed'] as int?) ?? 0;

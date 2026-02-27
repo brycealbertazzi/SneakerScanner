@@ -15,6 +15,30 @@
       },
       "oauth_client": [
         {
+          "client_id": "773179554972-258jj6voffri32kvvh385b20b7m51t55.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.brycealbertazzi.sneaker_scanner",
+            "certificate_hash": "a7a10ddf456639d511775e371166cc99e76f9510"
+          }
+        },
+        {
+          "client_id": "773179554972-6t4m6rlt8ndsj7hccfahg9serju1a68j.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.brycealbertazzi.sneaker_scanner",
+            "certificate_hash": "56f2f79be02f381323056784c04e9812ff1619e3"
+          }
+        },
+        {
+          "client_id": "773179554972-nlhggn3168p0qv3b3p8sgfm3073pcel0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.brycealbertazzi.sneaker_scanner",
+            "certificate_hash": "e6f7d8f176f6667e014057b4c30ffff61f4af1c7"
+          }
+        },
+        {
           "client_id": "773179554972-v7eh6ou3cip1fjenbcp662cvkjirav9h.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -32,10 +56,10 @@
               "client_type": 3
             },
             {
-              "client_id": "773179554972-l9jtvpf5ri7md0a2pbqtqhaj7dr2muon.apps.googleusercontent.com",
+              "client_id": "773179554972-4g3gnp6kg1jjtsklq15dbfmc9g02ad0t.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.brycealbertazzi.sneakerScanner"
+                "bundle_id": "com.BryceAlbertazzi.SneakerScanner"
               }
             }
           ]
