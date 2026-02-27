@@ -155,21 +155,26 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         }
 
         if (_primaryCode.isNotEmpty) {
-          final cachedSnapshot = await _database
-              .child('products')
-              .child(_primaryCode)
-              .get();
+          try {
+            final cachedSnapshot = await _database
+                .child('products')
+                .child(_primaryCode)
+                .get();
 
-          if (cachedSnapshot.exists) {
-            final cached = Map<String, dynamic>.from(
-              cachedSnapshot.value as Map,
-            );
-            setState(() {
-              _productInfo = cached;
-              _identityConfirmed = cached['notFound'] != true;
-            });
-            // Don't return — still need to run _lookupProduct for
-            // StockX/GOAT pricing + colorway fallback
+            if (cachedSnapshot.exists) {
+              final cached = Map<String, dynamic>.from(
+                cachedSnapshot.value as Map,
+              );
+              setState(() {
+                _productInfo = cached;
+                _identityConfirmed = cached['notFound'] != true;
+              });
+              // Don't return — still need to run _lookupProduct for
+              // StockX/GOAT pricing + colorway fallback
+            }
+          } catch (e) {
+            debugPrint('[LoadProductInfo] Products cache read failed (non-fatal): $e');
+            // Continue without cached data — API calls will still run.
           }
         }
       }
@@ -190,9 +195,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       }
 
       // If KicksDB returned no image but eBay did, use eBay's image as fallback.
+      // Firebase returns arrays as Maps, so check both List and Map.
+      final cachedImages = _productInfo?['images'];
+      final cachedImagesEmpty = cachedImages == null ||
+          (cachedImages is List && cachedImages.isEmpty) ||
+          (cachedImages is Map && cachedImages.isEmpty);
       if (_ebayImageUrl != null &&
           _ebayImageUrl!.isNotEmpty &&
-          (_productInfo?['images'] as List? ?? []).isEmpty) {
+          cachedImagesEmpty) {
         setState(() {
           _productInfo = {
             ..._productInfo!,
@@ -224,9 +234,15 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
       _savePricesToDatabase();
       _setPricingStatus('complete');
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('[LoadProductInfo] EXCEPTION: $e');
+      debugPrint('[LoadProductInfo] Stack: $stackTrace');
       setState(() {
         _error = 'Failed to load product info';
+        _checkingResults = false;
+        _isLoadingStockXPrice = false;
+        _isLoadingGoatPrice = false;
+        _isLoadingEbayPrices = false;
       });
     }
   }
@@ -674,6 +690,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         _identityConfirmed = false;
         _isLoadingStockXPrice = false;
         _isLoadingGoatPrice = false;
+        _isLoadingEbayPrices = false;
       });
     }
   }
@@ -1400,7 +1417,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
       // Save image regardless of which source found it (KicksDB or eBay fallback).
       // This ensures history always shows the image if one was found.
-      final images = _productInfo?['images'] as List?;
+      final rawImages = _productInfo?['images'];
+      final images = rawImages is List ? rawImages : null;
       if (images != null && images.isNotEmpty) {
         final imageUrl = images[0]?.toString();
         if (imageUrl != null && imageUrl.isNotEmpty) {
@@ -1615,7 +1633,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child:
-                          _productInfo?['images'] != null &&
+                          _productInfo?['images'] is List &&
                               (_productInfo!['images'] as List).isNotEmpty
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(12),
