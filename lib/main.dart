@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
@@ -9,6 +11,9 @@ final RouteObserver<ModalRoute<void>> routeObserver =
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isAndroid) {
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  }
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const SneakerScannerApp());
 }
