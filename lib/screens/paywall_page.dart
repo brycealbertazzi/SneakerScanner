@@ -264,22 +264,8 @@ class _PaywallPageState extends State<PaywallPage>
       body: SafeArea(
         child: Stack(
           children: [
-            // Dismiss button
-            Positioned(
-              top: 12,
-              right: 16,
-              child: IconButton(
-                onPressed: pending ? null : () => Navigator.of(context).pop(false),
-                icon: Icon(
-                  Icons.close_rounded,
-                  color: Colors.grey[600],
-                  size: 28,
-                ),
-              ),
-            ),
-
             // Main content
-            Padding(
+            SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 28),
               child: Column(
                 children: [
@@ -314,7 +300,7 @@ class _PaywallPageState extends State<PaywallPage>
 
                   // Headline
                   Text(
-                    'Sneaker Scanner\nPremium',
+                    'Sneaker Scanner\nUnlimited',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
                       fontSize: 30,
@@ -391,8 +377,7 @@ class _PaywallPageState extends State<PaywallPage>
                     iconColor: Colors.blue,
                     text: 'OCR label & barcode scanning',
                   ),
-
-                  const Spacer(),
+                  const SizedBox(height: 40),
 
                   // Price card
                   Container(
@@ -616,6 +601,20 @@ class _PaywallPageState extends State<PaywallPage>
                   ),
                   const SizedBox(height: 32),
                 ],
+              ),
+            ),
+
+            // Dismiss button — last in Stack so it renders on top and receives touches
+            Positioned(
+              top: 12,
+              right: 16,
+              child: IconButton(
+                onPressed: pending ? null : () => Navigator.of(context).pop(false),
+                icon: Icon(
+                  Icons.close_rounded,
+                  color: Colors.grey[600],
+                  size: 28,
+                ),
               ),
             ),
           ],

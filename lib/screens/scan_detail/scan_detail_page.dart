@@ -13,6 +13,9 @@ import '../../services/nike_colorway_utils.dart';
 import 'widgets/info_card.dart';
 import 'widgets/profit_calculator.dart';
 
+/// Set to true to re-enable the Firebase product cache (read + write).
+const bool kProductCacheEnabled = false;
+
 class ScanDetailPage extends StatefulWidget {
   final String scanId;
   final ScanData scanData;
@@ -154,7 +157,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           }
         }
 
-        if (_primaryCode.isNotEmpty) {
+        if (kProductCacheEnabled && _primaryCode.isNotEmpty) {
           try {
             final cachedSnapshot = await _database
                 .child('products')
@@ -173,7 +176,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               // StockX/GOAT pricing + colorway fallback
             }
           } catch (e) {
-            debugPrint('[LoadProductInfo] Products cache read failed (non-fatal): $e');
+            debugPrint(
+              '[LoadProductInfo] Products cache read failed (non-fatal): $e',
+            );
             // Continue without cached data — API calls will still run.
           }
         }
@@ -197,7 +202,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       // If KicksDB returned no image but eBay did, use eBay's image as fallback.
       // Firebase returns arrays as Maps, so check both List and Map.
       final cachedImages = _productInfo?['images'];
-      final cachedImagesEmpty = cachedImages == null ||
+      final cachedImagesEmpty =
+          cachedImages == null ||
           (cachedImages is List && cachedImages.isEmpty) ||
           (cachedImages is Map && cachedImages.isEmpty);
       if (_ebayImageUrl != null &&
@@ -636,7 +642,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           : null;
       final retailPrice = productInfo['retailPrice'];
 
-      if (_primaryCode.isNotEmpty) {
+      if (kProductCacheEnabled && _primaryCode.isNotEmpty) {
         await _database.child('products').child(_primaryCode).set(productInfo);
       }
 

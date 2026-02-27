@@ -60,6 +60,21 @@ class _LoginScreenState extends State<LoginScreen> {
 
       await FirebaseAuth.instance.signInWithCredential(credential);
 
+      // Always overwrite the Firebase profile with Google's data so that
+      // accounts originally created via Apple (no photo, Apple name) show
+      // the correct Google avatar and display name.
+      final fbUser = FirebaseAuth.instance.currentUser;
+      if (fbUser != null) {
+        final googleDisplayName = googleUser.displayName;
+        final googlePhotoUrl = googleUser.photoUrl;
+        if (googleDisplayName != null && googleDisplayName.isNotEmpty) {
+          await fbUser.updateDisplayName(googleDisplayName);
+        }
+        if (googlePhotoUrl != null && googlePhotoUrl.isNotEmpty) {
+          await fbUser.updatePhotoURL(googlePhotoUrl);
+        }
+      }
+
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const MainScreen()),
