@@ -234,17 +234,19 @@ class SubscriptionService extends ChangeNotifier {
         // platform silently restoring an existing subscription.
         _validateAndFinish(purchase);
       } else if (purchase.status == PurchaseStatus.error) {
+        final wasPurchaseInitiated = _purchaseInitiated;
         _purchasePending = false;
         _purchaseInitiated = false;
         InAppPurchase.instance.completePurchase(purchase);
-        // iOS fires SKErrorPaymentCancelled (code 2 / "paymentCancelled") when
-        // the user dismisses the payment or sign-in sheet — treat as cancellation,
-        // not as a hard error.
         final isCancellation = _isCancellationError(purchase.error);
         final isAlreadyOwned = _isAlreadyOwnedError(purchase.error);
-        if (isAlreadyOwned) {
-          // Subscription exists on the store but not in Firebase — restore it.
-          debugPrint('[IAP] Already owned — triggering restore to sync');
+        if (isAlreadyOwned ||
+            (Platform.isAndroid && wasPurchaseInitiated && !isCancellation)) {
+          // Subscription exists on the store but not in Firebase.
+          // On Android, Google Play may report this as various error codes,
+          // so for any non-cancellation error on a user-initiated purchase
+          // we attempt a restore rather than showing an error.
+          debugPrint('[IAP] Android purchase error — attempting restore to sync');
           restorePurchases();
         } else if (isCancellation) {
           _purchaseCancelled = true;
