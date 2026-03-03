@@ -23,6 +23,7 @@ class SubscriptionService extends ChangeNotifier {
   bool _purchaseCancelled = false;
   String? _purchaseError;
   bool _purchaseInitiated = false;
+  bool _lastActivationWasRestore = false;
 
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
   StreamSubscription<DatabaseEvent>? _firebaseSubscription;
@@ -44,6 +45,7 @@ class SubscriptionService extends ChangeNotifier {
   }
 
   bool get isSubscribed => _status == SubscriptionStatus.active;
+  bool get lastActivationWasRestore => _lastActivationWasRestore;
 
   /// Returns the platform-specific subscription node reference.
   DatabaseReference _subRef(String uid) {
@@ -287,6 +289,7 @@ class SubscriptionService extends ChangeNotifier {
   }
 
   Future<void> _validateAndFinish(PurchaseDetails purchase) async {
+    _lastActivationWasRestore = purchase.status == PurchaseStatus.restored;
     final user = FirebaseAuth.instance.currentUser;
     try {
       // Optimistically activate — trust the platform confirmation immediately.
@@ -371,6 +374,26 @@ class SubscriptionService extends ChangeNotifier {
     _purchasePending = false;
     _purchaseCancelled = true;
     notifyListeners();
+  }
+
+  /// Deletes all Firebase RTDB data for the current user and resets local
+  /// state. Auth record deletion is handled by the caller.
+  Future<void> deleteAccount() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    final uid = user.uid;
+
+    _firebaseSubscription?.cancel();
+    _firebaseSubscription = null;
+
+    final db = FirebaseDatabase.instance.ref();
+    await Future.wait([
+      db.child('users').child(uid).remove(),
+      db.child('stockxTokens').child(uid).remove(),
+      db.child('scans').child(uid).remove(),
+    ]);
+
+    reset();
   }
 
   void reset() {

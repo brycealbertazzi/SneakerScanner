@@ -33,6 +33,144 @@ class _SettingsPageState extends State<SettingsPage> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _deleteAccount(BuildContext context) async {
+    try {
+      // Delete all Firebase RTDB data first.
+      await _sub.deleteAccount();
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to delete account data: $e')),
+      );
+      return;
+    }
+
+    // Attempt to delete the Firebase Auth record. For Apple Sign In this
+    // requires recent auth — if it fails we fall through and just sign out,
+    // since the data is already wiped.
+    final authUser = FirebaseAuth.instance.currentUser;
+    if (authUser != null) {
+      try {
+        await authUser.delete();
+      } catch (_) {
+        // Best-effort — sign out regardless.
+      }
+    }
+
+    await GoogleSignIn().signOut();
+    await FirebaseAuth.instance.signOut();
+
+    if (context.mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+  }
+
+  void _showDeleteAccountConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF333333), width: 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(32),
+                ),
+                child: const Icon(
+                  Icons.delete_forever_rounded,
+                  color: Colors.red,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Delete Account',
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'This will permanently delete your account and all scan history. Your subscription status will be remembered if you sign back in, but your scans cannot be recovered.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: Colors.grey[400],
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.grey[400],
+                        side: BorderSide(color: Colors.grey[600]!),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        style: GoogleFonts.inter(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop();
+                        _deleteAccount(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Text(
+                        'Delete',
+                        style: GoogleFonts.inter(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _signOut(BuildContext context) async {
     await GoogleSignIn().signOut();
     await FirebaseAuth.instance.signOut();
@@ -47,7 +185,7 @@ class _SettingsPageState extends State<SettingsPage> {
   void _showSignOutConfirmation(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
+      builder: (dialogContext) => Dialog(
         backgroundColor: Colors.transparent,
         child: Container(
           padding: const EdgeInsets.all(24),
@@ -96,7 +234,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () => Navigator.of(dialogContext).pop(),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.grey[400],
                         side: BorderSide(color: Colors.grey[600]!),
@@ -118,7 +256,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
-                        Navigator.of(context).pop();
+                        Navigator.of(dialogContext).pop();
                         _signOut(context);
                       },
                       style: ElevatedButton.styleFrom(
@@ -342,12 +480,24 @@ class _SettingsPageState extends State<SettingsPage> {
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
               ),
-              child: _buildSettingsTile(
-                icon: Icons.logout_rounded,
-                iconColor: Colors.red,
-                title: 'Sign Out',
-                subtitle: 'Sign out of your account',
-                onTap: () => _showSignOutConfirmation(context),
+              child: Column(
+                children: [
+                  _buildSettingsTile(
+                    icon: Icons.logout_rounded,
+                    iconColor: Colors.red,
+                    title: 'Sign Out',
+                    subtitle: 'Sign out of your account',
+                    onTap: () => _showSignOutConfirmation(context),
+                  ),
+                  _buildDivider(),
+                  _buildSettingsTile(
+                    icon: Icons.delete_forever_rounded,
+                    iconColor: Colors.red,
+                    title: 'Delete Account',
+                    subtitle: 'Permanently delete your account and data',
+                    onTap: () => _showDeleteAccountConfirmation(context),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 40),

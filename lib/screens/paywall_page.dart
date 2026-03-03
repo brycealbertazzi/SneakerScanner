@@ -13,8 +13,7 @@ class PaywallPage extends StatefulWidget {
   State<PaywallPage> createState() => _PaywallPageState();
 }
 
-class _PaywallPageState extends State<PaywallPage>
-    with WidgetsBindingObserver {
+class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
   final _sub = SubscriptionService.instance;
 
   bool _restorePressed = false;
@@ -23,6 +22,7 @@ class _PaywallPageState extends State<PaywallPage>
   bool _wasActiveOnInit = false;
   bool _restoredDialogShowing = false;
   bool _successDialogShowing = false;
+  bool _isRestoring = false;
 
   @override
   void initState() {
@@ -55,9 +55,9 @@ class _PaywallPageState extends State<PaywallPage>
   void _onSubChanged() {
     if (!mounted) return;
     if (_sub.status == SubscriptionStatus.active) {
-      if (_wasActiveOnInit) {
-        // User was already subscribed — this is a restore confirmation.
-        // Show dialog instead of popping so camera/nav stack is undisturbed.
+      _isRestoring = false;
+      if (_wasActiveOnInit || _sub.lastActivationWasRestore) {
+        // Restored purchase (was already subscribed, or restore/re-sub flow).
         setState(() {});
         _showRestoredDialog();
       } else {
@@ -67,6 +67,14 @@ class _PaywallPageState extends State<PaywallPage>
       }
       return;
     }
+    if (_isRestoring && !_sub.purchasePending) {
+      _isRestoring = false;
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && _sub.status != SubscriptionStatus.active) {
+          _showNoRestoreFound();
+        }
+      });
+    }
     setState(() {});
     if (_sub.purchaseCancelled) {
       _sub.clearCancelled();
@@ -74,6 +82,60 @@ class _PaywallPageState extends State<PaywallPage>
       _showError(_sub.purchaseError!);
       _sub.clearError();
     }
+  }
+
+  void _showNoRestoreFound() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        Future.delayed(const Duration(seconds: 2), () {
+          if (ctx.mounted) Navigator.of(ctx).pop();
+        });
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.blue.withValues(alpha: 0.4),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                  child: const Icon(
+                    Icons.info_outline_rounded,
+                    color: Colors.blue,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No Previous Purchases Found',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _showRestoredDialog() {
@@ -108,7 +170,7 @@ class _PaywallPageState extends State<PaywallPage>
               ),
               const SizedBox(height: 16),
               Text(
-                'Purchases Restored',
+                'Purchase Restored',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   fontSize: 18,
@@ -118,7 +180,7 @@ class _PaywallPageState extends State<PaywallPage>
               ),
               const SizedBox(height: 10),
               Text(
-                'Your subscription has been restored successfully.',
+                'You\'re already subscribed!',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 14,
@@ -133,6 +195,7 @@ class _PaywallPageState extends State<PaywallPage>
                   onPressed: () {
                     _restoredDialogShowing = false;
                     Navigator.of(ctx).pop();
+                    if (mounted) Navigator.of(context).pop();
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
@@ -234,7 +297,6 @@ class _PaywallPageState extends State<PaywallPage>
     );
   }
 
-
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -314,12 +376,15 @@ class _PaywallPageState extends State<PaywallPage>
                   if (isFreeTrial && scansRemaining == 0)
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.red.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                            color: Colors.red.withValues(alpha: 0.3)),
+                          color: Colors.red.withValues(alpha: 0.3),
+                        ),
                       ),
                       child: Text(
                         "You've used all 30 free scans",
@@ -465,18 +530,19 @@ class _PaywallPageState extends State<PaywallPage>
                       width: double.infinity,
                       height: 56,
                       child: ElevatedButton(
-                        onPressed: pending ? null : _sub.buyAnnual,
+                        onPressed: (pending && !_isRestoring) ? null : _sub.buyAnnual,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF646CFF),
                           foregroundColor: Colors.white,
-                          disabledBackgroundColor:
-                              const Color(0xFF646CFF).withValues(alpha: 0.5),
+                          disabledBackgroundColor: const Color(
+                            0xFF646CFF,
+                          ).withValues(alpha: 0.5),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),
                           ),
                           elevation: 0,
                         ),
-                        child: pending
+                        child: (pending && !_isRestoring)
                             ? const SizedBox(
                                 width: 24,
                                 height: 24,
@@ -511,10 +577,16 @@ class _PaywallPageState extends State<PaywallPage>
                   // Restore purchases (iOS only)
                   if (Platform.isIOS) ...[
                     GestureDetector(
-                      onTap: pending ? null : _sub.restorePurchases,
+                      onTap: pending
+                          ? null
+                          : () {
+                              setState(() => _isRestoring = true);
+                              _sub.restorePurchases();
+                            },
                       onTapDown: (_) => setState(() => _restorePressed = true),
                       onTapUp: (_) => setState(() => _restorePressed = false),
-                      onTapCancel: () => setState(() => _restorePressed = false),
+                      onTapCancel: () =>
+                          setState(() => _restorePressed = false),
                       child: Text(
                         'Restore Purchases',
                         style: GoogleFonts.inter(
@@ -543,8 +615,7 @@ class _PaywallPageState extends State<PaywallPage>
                         ),
                         onTapDown: (_) =>
                             setState(() => _privacyPressed = true),
-                        onTapUp: (_) =>
-                            setState(() => _privacyPressed = false),
+                        onTapUp: (_) => setState(() => _privacyPressed = false),
                         onTapCancel: () =>
                             setState(() => _privacyPressed = false),
                         child: Text(
@@ -576,10 +647,8 @@ class _PaywallPageState extends State<PaywallPage>
                           Uri.parse('https://terms.sneakscan.com'),
                           mode: LaunchMode.externalApplication,
                         ),
-                        onTapDown: (_) =>
-                            setState(() => _termsPressed = true),
-                        onTapUp: (_) =>
-                            setState(() => _termsPressed = false),
+                        onTapDown: (_) => setState(() => _termsPressed = true),
+                        onTapUp: (_) => setState(() => _termsPressed = false),
                         onTapCancel: () =>
                             setState(() => _termsPressed = false),
                         child: Text(
@@ -608,7 +677,9 @@ class _PaywallPageState extends State<PaywallPage>
               top: 12,
               right: 16,
               child: IconButton(
-                onPressed: pending ? null : () => Navigator.of(context).pop(false),
+                onPressed: pending
+                    ? null
+                    : () => Navigator.of(context).pop(false),
                 icon: Icon(
                   Icons.close_rounded,
                   color: Colors.grey[600],
