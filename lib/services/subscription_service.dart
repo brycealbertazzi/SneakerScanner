@@ -38,7 +38,8 @@ class SubscriptionService extends ChangeNotifier {
 
   bool get canScan {
     if (_status == SubscriptionStatus.active) return true;
-    if (_status == SubscriptionStatus.freeTrial) return _scansUsed < _scansLimit;
+    if (_status == SubscriptionStatus.freeTrial)
+      return _scansUsed < _scansLimit;
     return false;
   }
 
@@ -77,9 +78,9 @@ class SubscriptionService extends ChangeNotifier {
     try {
       await _ensureSubscriptionExists(user.uid);
       _firebaseSubscription?.cancel();
-      _firebaseSubscription = _subRef(user.uid)
-          .onValue
-          .listen(_onFirebaseUpdate);
+      _firebaseSubscription = _subRef(
+        user.uid,
+      ).onValue.listen(_onFirebaseUpdate);
     } catch (e) {
       debugPrint('[Sub] Firebase subscription init failed: $e');
       _status = SubscriptionStatus.freeTrial;
@@ -154,15 +155,17 @@ class SubscriptionService extends ChangeNotifier {
       return;
     }
 
-    final response =
-        await InAppPurchase.instance.queryProductDetails({kAnnualProductId});
+    final response = await InAppPurchase.instance.queryProductDetails({
+      kAnnualProductId,
+    });
     if (response.notFoundIDs.isNotEmpty) {
       debugPrint('[IAP] Products not found in store: ${response.notFoundIDs}');
     }
     if (response.productDetails.isNotEmpty) {
       _annualProduct = response.productDetails.first;
       debugPrint(
-          '[IAP] Product loaded: ${_annualProduct!.id}, price: ${_annualProduct!.price}');
+        '[IAP] Product loaded: ${_annualProduct!.id}, price: ${_annualProduct!.price}',
+      );
       notifyListeners();
     } else {
       debugPrint('[IAP] No products returned from store');
@@ -216,7 +219,6 @@ class SubscriptionService extends ChangeNotifier {
 
   void _onPurchaseUpdate(List<PurchaseDetails> purchases) {
     for (final purchase in purchases) {
-
       if (purchase.status == PurchaseStatus.pending) {
         _purchasePending = true;
         notifyListeners();
@@ -246,7 +248,9 @@ class SubscriptionService extends ChangeNotifier {
           // On Android, Google Play may report this as various error codes,
           // so for any non-cancellation error on a user-initiated purchase
           // we attempt a restore rather than showing an error.
-          debugPrint('[IAP] Android purchase error — attempting restore to sync');
+          debugPrint(
+            '[IAP] Android purchase error — attempting restore to sync',
+          );
           restorePurchases();
         } else if (isCancellation) {
           _purchaseCancelled = true;
@@ -296,6 +300,9 @@ class SubscriptionService extends ChangeNotifier {
           'originalTransactionId': purchase.purchaseID,
         });
       }
+      // Clear any cancellation flag that forceCancelPending() may have set
+      // during the async Firebase write (lifecycle resumed race condition).
+      _purchaseCancelled = false;
     } catch (e) {
       debugPrint('[IAP] Failed to activate subscription: $e');
       _purchaseError = 'Failed to activate. Please try again.';
@@ -313,8 +320,9 @@ class SubscriptionService extends ChangeNotifier {
   void _validateInBackground(PurchaseDetails purchase) {
     Future(() async {
       try {
-        final callable =
-            FirebaseFunctions.instance.httpsCallable('validatePurchase');
+        final callable = FirebaseFunctions.instance.httpsCallable(
+          'validatePurchase',
+        );
         await callable.call({
           'platform': Platform.isIOS ? 'apple' : 'google',
           'productId': purchase.productID,

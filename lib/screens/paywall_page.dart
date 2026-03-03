@@ -22,6 +22,7 @@ class _PaywallPageState extends State<PaywallPage>
   bool _termsPressed = false;
   bool _wasActiveOnInit = false;
   bool _restoredDialogShowing = false;
+  bool _successDialogShowing = false;
 
   @override
   void initState() {
@@ -60,15 +61,15 @@ class _PaywallPageState extends State<PaywallPage>
         setState(() {});
         _showRestoredDialog();
       } else {
-        // New subscription (or restore on a new device) — pop with success.
-        Navigator.of(context).pop(true);
+        // New subscription — show success modal, then dismiss paywall.
+        setState(() {});
+        _showSuccessDialog();
       }
       return;
     }
     setState(() {});
     if (_sub.purchaseCancelled) {
       _sub.clearCancelled();
-      _showCancelledDialog();
     } else if (_sub.purchaseError != null) {
       _showError(_sub.purchaseError!);
       _sub.clearError();
@@ -158,9 +159,12 @@ class _PaywallPageState extends State<PaywallPage>
     );
   }
 
-  void _showCancelledDialog() {
+  void _showSuccessDialog() {
+    if (_successDialogShowing) return;
+    _successDialogShowing = true;
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => Dialog(
         backgroundColor: Colors.transparent,
         child: Container(
@@ -177,18 +181,18 @@ class _PaywallPageState extends State<PaywallPage>
                 width: 56,
                 height: 56,
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.15),
+                  color: Colors.green.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(28),
                 ),
                 child: const Icon(
-                  Icons.info_outline_rounded,
-                  color: Colors.orange,
+                  Icons.check_circle_rounded,
+                  color: Colors.green,
                   size: 28,
                 ),
               ),
               const SizedBox(height: 16),
               Text(
-                'Purchase Not Completed',
+                'Thank you for subscribing to Sneaker Scanner!',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   fontSize: 18,
@@ -196,23 +200,17 @@ class _PaywallPageState extends State<PaywallPage>
                   color: Colors.white,
                 ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                'Your purchase was not completed. You can try again whenever you\'re ready.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: Colors.grey[400],
-                  height: 1.5,
-                ),
-              ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
+                  onPressed: () {
+                    _successDialogShowing = false;
+                    Navigator.of(ctx).pop();
+                    if (mounted) Navigator.of(context).pop();
+                  },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF646CFF),
+                    backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -221,7 +219,7 @@ class _PaywallPageState extends State<PaywallPage>
                     elevation: 0,
                   ),
                   child: Text(
-                    'OK',
+                    'Close',
                     style: GoogleFonts.inter(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -235,6 +233,7 @@ class _PaywallPageState extends State<PaywallPage>
       ),
     );
   }
+
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
