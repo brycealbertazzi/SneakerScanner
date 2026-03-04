@@ -52,7 +52,7 @@ class _SplashScreenState extends State<SplashScreen>
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (context, animation, _) => const LoginScreen(),
-            transitionsBuilder: (_, animation, __, child) =>
+            transitionsBuilder: (_, animation, a2, child) =>
                 FadeTransition(opacity: animation, child: child),
             transitionDuration: const Duration(milliseconds: 500),
           ),
@@ -60,12 +60,10 @@ class _SplashScreenState extends State<SplashScreen>
         return;
       }
 
-      // Initialize subscription service and wait briefly for Firebase status.
+      // Initialize subscription service and wait for the StoreKit check to resolve.
       await SubscriptionService.instance.initialize();
       final sub = SubscriptionService.instance;
-      if (sub.status == SubscriptionStatus.loading) {
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
+      await sub.awaitLaunchCheck();
 
       if (!mounted) return;
 
@@ -77,7 +75,7 @@ class _SplashScreenState extends State<SplashScreen>
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
           pageBuilder: (context, animation, _) => destination,
-          transitionsBuilder: (_, animation, __, child) =>
+          transitionsBuilder: (_, animation, a2, child) =>
               FadeTransition(opacity: animation, child: child),
           transitionDuration: const Duration(milliseconds: 500),
         ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -18,7 +19,7 @@ class PaywallPage extends StatefulWidget {
   State<PaywallPage> createState() => _PaywallPageState();
 }
 
-class _PaywallPageState extends State<PaywallPage> {
+class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
   final _sub = SubscriptionService.instance;
 
   bool _restorePressed = false;
@@ -28,22 +29,45 @@ class _PaywallPageState extends State<PaywallPage> {
   bool _restoredDialogShowing = false;
   bool _successDialogShowing = false;
   bool _isRestoring = false;
+  Timer? _cancelFallbackTimer;
 
   @override
   void initState() {
     super.initState();
     _wasActiveOnInit = _sub.isSubscribed;
     _sub.addListener(_onSubChanged);
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
+    _cancelFallbackTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _sub.removeListener(_onSubChanged);
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed &&
+        _sub.purchasePending &&
+        !_isRestoring) {
+      // Start a short fallback timer. If the purchase stream delivers any event
+      // (cancel or confirm), _onSubChanged cancels this before it fires —
+      // meaning cancels clear immediately via the stream, and confirmed purchases
+      // keep the spinner until the success dialog. The timer only fires when
+      // StoreKit silently drops the cancellation event (known iOS issue).
+      _cancelFallbackTimer?.cancel();
+      _cancelFallbackTimer = Timer(const Duration(milliseconds: 1500), () {
+        if (mounted) _sub.forceCancelPending();
+      });
+    }
+  }
+
   void _onSubChanged() {
     if (!mounted) return;
+    _cancelFallbackTimer?.cancel();
+    _cancelFallbackTimer = null;
     if (_sub.status == SubscriptionStatus.active) {
       _isRestoring = false;
       if (_wasActiveOnInit || _sub.lastActivationWasRestore) {
@@ -503,7 +527,9 @@ class _PaywallPageState extends State<PaywallPage> {
                       width: double.infinity,
                       height: 56,
                       child: ElevatedButton(
-                        onPressed: (pending && !_isRestoring) ? null : _sub.buyAnnual,
+                        onPressed: (pending && !_isRestoring)
+                            ? null
+                            : _sub.buyAnnual,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF646CFF),
                           foregroundColor: Colors.white,

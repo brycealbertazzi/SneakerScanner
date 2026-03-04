@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const String kAnnualProductId = 'sneakerscanner_annual_4999';
 
@@ -23,8 +24,14 @@ class SubscriptionService extends ChangeNotifier {
   bool _lastActivationWasRestore = false;
   bool _initialized = false;
 
+  bool _hasEverSubscribed = false;
+
+  // Launch check state — resolves once StoreKit confirms status on startup.
+  bool _isLaunchCheck = false;
+  Timer? _launchCheckTimer;
+  Completer<void>? _launchCheckCompleter;
+
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
-  StreamSubscription<DatabaseEvent>? _firebaseSubscription;
 
   SubscriptionStatus get status => _status;
   bool get purchasePending => _purchasePending;
@@ -38,21 +45,16 @@ class SubscriptionService extends ChangeNotifier {
   bool get isSubscribed => _status == SubscriptionStatus.active;
   bool get lastActivationWasRestore => _lastActivationWasRestore;
 
-  /// True when the user previously had a subscription that has since lapsed.
-  /// Used to show "Get Unlimited Scans" instead of "Start Free Trial".
   bool get isLapsedSubscriber =>
       _status == SubscriptionStatus.expired ||
       _status == SubscriptionStatus.cancelled;
 
-  /// Returns the platform-specific subscription node reference.
-  DatabaseReference _subRef(String uid) {
-    final platform = Platform.isIOS ? 'apple' : 'google';
-    return FirebaseDatabase.instance
-        .ref()
-        .child('users')
-        .child(uid)
-        .child('subscriptions')
-        .child(platform);
+  /// Re-queries StoreKit/Play Billing for current status.
+  /// Called when the app returns to the foreground.
+  void recheckSubscription() {
+    if (_isLaunchCheck) return; // Already checking
+    if (_purchasePending || _purchaseInitiated) return; // Purchase in flight — let it resolve naturally
+    _startLaunchCheck();
   }
 
   /// Safe to call multiple times — subsequent calls are no-ops.
@@ -60,93 +62,81 @@ class SubscriptionService extends ChangeNotifier {
     if (_initialized) return;
     _initialized = true;
 
+    final prefs = await SharedPreferences.getInstance();
+    _hasEverSubscribed = prefs.getBool('has_ever_subscribed') ?? false;
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    // Set up purchase stream listener FIRST — must never be missed regardless
-    // of whether Firebase setup succeeds.
+    // Set up purchase stream listener FIRST.
     _purchaseSubscription?.cancel();
     _purchaseSubscription = InAppPurchase.instance.purchaseStream.listen(
       _onPurchaseUpdate,
       onError: (error) {
         _purchaseError = error.toString();
+        _completeLaunchCheck(SubscriptionStatus.freeTrial);
         notifyListeners();
       },
     );
 
-    // Load IAP products
+    // Load IAP products.
     await _loadProducts();
 
-    // Firebase subscription setup — wrapped so a failure here never blocks IAP.
-    try {
-      await _ensureSubscriptionExists(user.uid);
-      _firebaseSubscription?.cancel();
-      _firebaseSubscription = _subRef(
-        user.uid,
-      ).onValue.listen(_onFirebaseUpdate);
-    } catch (e) {
-      debugPrint('[Sub] Firebase subscription init failed: $e');
-      _status = SubscriptionStatus.freeTrial;
-      notifyListeners();
-    }
+    // Silently query StoreKit/Play Billing for current subscription status.
+    // Results arrive via the purchase stream. _startLaunchCheck is non-blocking;
+    // call awaitLaunchCheck() to wait for resolution.
+    _startLaunchCheck();
   }
 
-  Future<void> _ensureSubscriptionExists(String uid) async {
-    final ref = _subRef(uid);
-    final snapshot = await ref.get();
-    if (snapshot.exists) return;
+  /// Awaitable by splash / login screens. Resolves once the launch subscription
+  /// check completes (restored event or 1.5 s timeout), with a 3 s safety cap.
+  Future<void> awaitLaunchCheck() async {
+    final completer = _launchCheckCompleter;
+    if (completer == null || completer.isCompleted) return;
+    await completer.future.timeout(
+      const Duration(seconds: 3),
+      onTimeout: () {},
+    );
+  }
 
-    // Migrate existing users from the old single-node path (iOS only).
-    if (Platform.isIOS) {
-      final oldRef = FirebaseDatabase.instance
-          .ref()
-          .child('users')
-          .child(uid)
-          .child('subscription');
-      final oldSnapshot = await oldRef.get();
-      if (oldSnapshot.exists) {
-        await ref.set(oldSnapshot.value);
-        return;
-      }
-    }
+  void _startLaunchCheck() {
+    _isLaunchCheck = true;
+    _launchCheckCompleter = Completer<void>();
 
-    // New user — no status set; they must start a trial/subscribe to access.
-    await ref.set({
-      'status': null,
-      'platform': Platform.isIOS ? 'apple' : 'google',
-      'productId': null,
-      'originalTransactionId': null,
-      'purchaseToken': null,
-      'expiresAt': null,
+    // Fallback: if StoreKit delivers no events within 1.5 s, no active subscription.
+    _launchCheckTimer = Timer(const Duration(milliseconds: 1500), () {
+      _completeLaunchCheck(SubscriptionStatus.freeTrial);
+    });
+
+    InAppPurchase.instance.restorePurchases().catchError((e) {
+      debugPrint('[Sub] Launch check restore error: $e');
+      _completeLaunchCheck(SubscriptionStatus.freeTrial);
     });
   }
 
-  void _onFirebaseUpdate(DatabaseEvent event) {
-    final data = event.snapshot.value as Map<dynamic, dynamic>?;
-    if (data == null) {
-      _status = SubscriptionStatus.freeTrial;
-      notifyListeners();
-      return;
+  void _completeLaunchCheck(SubscriptionStatus resolvedStatus) {
+    if (!_isLaunchCheck) return;
+    _isLaunchCheck = false;
+    _launchCheckTimer?.cancel();
+    _launchCheckTimer = null;
+    // If no active subscription found but user has subscribed before, treat as lapsed.
+    if (resolvedStatus == SubscriptionStatus.freeTrial && _hasEverSubscribed) {
+      _status = SubscriptionStatus.cancelled;
+    } else {
+      _status = resolvedStatus;
     }
-
-    final statusStr = data['status'] as String?;
-
-    switch (statusStr) {
-      case 'active':
-        _status = SubscriptionStatus.active;
-        break;
-      case 'expired':
-        _status = SubscriptionStatus.expired;
-        break;
-      case 'cancelled':
-        _status = SubscriptionStatus.cancelled;
-        break;
-      default:
-        // null, 'free_trial', or anything unknown → no access
-        _status = SubscriptionStatus.freeTrial;
+    // Persist flag when active subscription confirmed via silent launch check.
+    if (resolvedStatus == SubscriptionStatus.active && !_hasEverSubscribed) {
+      _hasEverSubscribed = true;
+      SharedPreferences.getInstance().then(
+        (prefs) => prefs.setBool('has_ever_subscribed', true),
+      );
     }
-
     notifyListeners();
+    if (!(_launchCheckCompleter?.isCompleted ?? true)) {
+      _launchCheckCompleter!.complete();
+    }
+    _launchCheckCompleter = null;
   }
 
   Future<void> _loadProducts() async {
@@ -174,7 +164,6 @@ class SubscriptionService extends ChangeNotifier {
   }
 
   Future<void> buyAnnual() async {
-    // Retry product load if it wasn't available at startup
     if (_annualProduct == null) {
       await _loadProducts();
     }
@@ -211,8 +200,7 @@ class SubscriptionService extends ChangeNotifier {
     } finally {
       // restorePurchases() only INITIATES the restore — results arrive via
       // purchaseStream. If there's nothing to restore the stream never fires,
-      // so we must clear pending here. If purchases do come through, the stream
-      // handler (_validateAndFinish) will manage pending state for each one.
+      // so we must clear pending here.
       _purchasePending = false;
       notifyListeners();
     }
@@ -233,28 +221,39 @@ class SubscriptionService extends ChangeNotifier {
           InAppPurchase.instance.completePurchase(purchase);
         }
       } else if (purchase.status == PurchaseStatus.restored) {
-        // Always process restores — comes from restorePurchases() or the
-        // platform silently restoring an existing subscription.
-        _validateAndFinish(purchase);
-      } else if (purchase.status == PurchaseStatus.error) {
-        final wasPurchaseInitiated = _purchaseInitiated;
-        _purchasePending = false;
-        _purchaseInitiated = false;
-        InAppPurchase.instance.completePurchase(purchase);
-        final isCancellation = _isCancellationError(purchase.error);
-        final isAlreadyOwned = _isAlreadyOwnedError(purchase.error);
-        if (isAlreadyOwned ||
-            (Platform.isAndroid && wasPurchaseInitiated && !isCancellation)) {
-          debugPrint(
-            '[IAP] Android purchase error — attempting restore to sync',
-          );
-          restorePurchases();
-        } else if (isCancellation) {
-          _purchaseCancelled = true;
-          notifyListeners();
+        if (_isLaunchCheck) {
+          // Silent launch check — active subscription confirmed. No dialog.
+          _completeLaunchCheck(SubscriptionStatus.active);
+          InAppPurchase.instance.completePurchase(purchase);
         } else {
-          _purchaseError = purchase.error?.message ?? 'Purchase failed.';
-          notifyListeners();
+          // User-initiated restore from the Restore Purchases button.
+          _validateAndFinish(purchase);
+        }
+      } else if (purchase.status == PurchaseStatus.error) {
+        if (_isLaunchCheck) {
+          // Error during silent check — treat as no active subscription.
+          _completeLaunchCheck(SubscriptionStatus.freeTrial);
+          InAppPurchase.instance.completePurchase(purchase);
+        } else {
+          final wasPurchaseInitiated = _purchaseInitiated;
+          _purchasePending = false;
+          _purchaseInitiated = false;
+          InAppPurchase.instance.completePurchase(purchase);
+          final isCancellation = _isCancellationError(purchase.error);
+          final isAlreadyOwned = _isAlreadyOwnedError(purchase.error);
+          if (isAlreadyOwned ||
+              (Platform.isAndroid && wasPurchaseInitiated && !isCancellation)) {
+            debugPrint(
+              '[IAP] Android purchase error — attempting restore to sync',
+            );
+            restorePurchases();
+          } else if (isCancellation) {
+            _purchaseCancelled = true;
+            notifyListeners();
+          } else {
+            _purchaseError = purchase.error?.message ?? 'Purchase failed.';
+            notifyListeners();
+          }
         }
       } else if (purchase.status == PurchaseStatus.canceled) {
         _purchasePending = false;
@@ -285,28 +284,19 @@ class SubscriptionService extends ChangeNotifier {
 
   Future<void> _validateAndFinish(PurchaseDetails purchase) async {
     _lastActivationWasRestore = purchase.status == PurchaseStatus.restored;
-    final user = FirebaseAuth.instance.currentUser;
-    try {
-      // Optimistically activate — trust the platform confirmation immediately.
-      if (user != null) {
-        await _subRef(user.uid).update({
-          'status': 'active',
-          'platform': Platform.isIOS ? 'apple' : 'google',
-          'productId': purchase.productID,
-          'originalTransactionId': purchase.purchaseID,
-        });
-      }
-      _purchaseCancelled = false;
-    } catch (e) {
-      debugPrint('[IAP] Failed to activate subscription: $e');
-      _purchaseError = 'Failed to activate. Please try again.';
-    } finally {
-      _purchasePending = false;
-      _purchaseInitiated = false;
-      notifyListeners();
-      await InAppPurchase.instance.completePurchase(purchase);
+    // Set status directly in memory — StoreKit/Play Billing is the source of truth.
+    _status = SubscriptionStatus.active;
+    _purchaseCancelled = false;
+    _purchasePending = false;
+    _purchaseInitiated = false;
+    if (!_hasEverSubscribed) {
+      _hasEverSubscribed = true;
+      SharedPreferences.getInstance().then(
+        (prefs) => prefs.setBool('has_ever_subscribed', true),
+      );
     }
-
+    notifyListeners();
+    await InAppPurchase.instance.completePurchase(purchase);
     _validateInBackground(purchase);
   }
 
@@ -344,6 +334,8 @@ class SubscriptionService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clears a stuck pending state when StoreKit silently drops a cancellation
+  /// event. Only clears if still pending — no-op for successful purchases.
   void forceCancelPending() {
     if (!_purchasePending) return;
     _purchasePending = false;
@@ -356,9 +348,6 @@ class SubscriptionService extends ChangeNotifier {
     if (user == null) return;
     final uid = user.uid;
 
-    _firebaseSubscription?.cancel();
-    _firebaseSubscription = null;
-
     final db = FirebaseDatabase.instance.ref();
     await Future.wait([
       db.child('users').child(uid).remove(),
@@ -366,13 +355,22 @@ class SubscriptionService extends ChangeNotifier {
       db.child('scans').child(uid).remove(),
     ]);
 
+    SharedPreferences.getInstance().then(
+      (prefs) => prefs.remove('has_ever_subscribed'),
+    );
     reset();
   }
 
   void reset() {
     _initialized = false;
+    _isLaunchCheck = false;
+    _launchCheckTimer?.cancel();
+    _launchCheckTimer = null;
+    if (!(_launchCheckCompleter?.isCompleted ?? true)) {
+      _launchCheckCompleter!.complete();
+    }
+    _launchCheckCompleter = null;
     _purchaseSubscription?.cancel();
-    _firebaseSubscription?.cancel();
     _status = SubscriptionStatus.loading;
     _annualProduct = null;
     _purchasePending = false;
@@ -382,8 +380,8 @@ class SubscriptionService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _launchCheckTimer?.cancel();
     _purchaseSubscription?.cancel();
-    _firebaseSubscription?.cancel();
     super.dispose();
   }
 }

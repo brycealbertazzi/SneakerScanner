@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../api_keys.dart';
 import '../services/stockx_auth_service.dart';
 import '../services/subscription_service.dart';
+import 'paywall_page.dart';
 import 'scanner_page.dart';
 import 'history_page.dart';
 import 'settings_page.dart';
@@ -19,11 +20,12 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => MainScreenState();
 }
 
-class MainScreenState extends State<MainScreen> {
+class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
   late AppLinks _appLinks;
   final ValueNotifier<bool> _scannerActive = ValueNotifier(true);
   late final StreamSubscription<User?> _userSub;
+  bool _wasSubscribed = false;
 
   @override
   void initState() {
@@ -32,6 +34,9 @@ class MainScreenState extends State<MainScreen> {
     _userSub = FirebaseAuth.instance.userChanges().listen((_) {
       if (mounted) setState(() {});
     });
+    _wasSubscribed = SubscriptionService.instance.canScan;
+    SubscriptionService.instance.addListener(_onSubChanged);
+    WidgetsBinding.instance.addObserver(this);
     _loadApiKeys();
     SubscriptionService.instance.initialize();
     _appLinks = AppLinks();
@@ -74,7 +79,30 @@ class MainScreenState extends State<MainScreen> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      SubscriptionService.instance.recheckSubscription();
+    }
+  }
+
+  void _onSubChanged() {
+    if (!mounted) return;
+    final canScan = SubscriptionService.instance.canScan;
+    if (_wasSubscribed && !canScan) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => const PaywallPage(isCloseable: false),
+        ),
+        (route) => false,
+      );
+    }
+    _wasSubscribed = canScan;
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    SubscriptionService.instance.removeListener(_onSubChanged);
     _userSub.cancel();
     _scannerActive.dispose();
     super.dispose();

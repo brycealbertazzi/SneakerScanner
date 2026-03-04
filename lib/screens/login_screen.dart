@@ -45,9 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _navigateAfterSignIn() async {
     await SubscriptionService.instance.initialize();
     final sub = SubscriptionService.instance;
-    if (sub.status == SubscriptionStatus.loading) {
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
+    await sub.awaitLaunchCheck();
     if (!mounted) return;
     final Widget destination = sub.canScan
         ? const MainScreen()
