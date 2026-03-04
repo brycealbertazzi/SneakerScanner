@@ -35,6 +35,10 @@ class MarketPriceSection extends StatefulWidget {
   /// Scanned shoe size (US, e.g. "10", "10.5") — appended to GOAT URLs.
   final String? scannedSize;
 
+  /// True when the displayed price is the lowest available ask (size not found),
+  /// rather than the exact price for the scanned size.
+  final bool isLowestAsk;
+
   const MarketPriceSection({
     super.key,
     required this.label,
@@ -54,6 +58,7 @@ class MarketPriceSection extends StatefulWidget {
     this.sellerFlatFee,
     this.commissionFeeRate,
     this.scannedSize,
+    this.isLowestAsk = false,
   });
 
   @override
@@ -275,13 +280,28 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                   ),
                 )
               else if (price != null)
-                Text(
-                  '\$${price.toStringAsFixed(2)}',
-                  style: GoogleFonts.inter(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '\$${price.toStringAsFixed(2)}',
+                      style: GoogleFonts.inter(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                    if (widget.isLowestAsk)
+                      Text(
+                        'lowest ask',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          color: Colors.grey[500],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                  ],
                 )
               else if (!widget.productFound)
                 Text(

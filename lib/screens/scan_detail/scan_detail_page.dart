@@ -58,11 +58,13 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   bool _isLoadingStockXPrice = true;
   double? _stockXPrice;
   String? _stockXSlug;
+  bool _stockXPriceIsLowest = false;
 
   // GOAT price state (via KicksDB)
   bool _isLoadingGoatPrice = true;
   double? _goatPrice;
   String? _goatSlug;
+  bool _goatPriceIsLowest = false;
 
   // Colorway variants (Nike/Jordan fallback)
   List<ColorwayVariant>? _stockXColorways;
@@ -404,8 +406,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         // GTIN items have `price` as a direct number.
         final pricesRaw = item['prices'];
         final double? price;
+        bool isLowest = false;
         if (pricesRaw is Map<String, dynamic>) {
-          price = _extractPriceFromMap(pricesRaw, size);
+          final extracted = _extractPriceFromMap(pricesRaw, size);
+          price = extracted.price;
+          isLowest = extracted.isLowest;
         } else {
           price = double.tryParse((item['price'] ?? '').toString());
         }
@@ -419,12 +424,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           );
           _stockXPrice = price;
           _stockXSlug = slug;
+          _stockXPriceIsLowest = isLowest;
         } else if (shopName == 'goat' && _goatPrice == null) {
           debugPrint(
             '[Unified] GOAT price: \$${price.toStringAsFixed(2)} (${stopwatch.elapsedMilliseconds}ms)',
           );
           _goatPrice = price;
           _goatSlug = slug;
+          _goatPriceIsLowest = isLowest;
         }
       }
 
@@ -1217,16 +1224,19 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   /// Extract a price from the `prices` size-map.
   /// If [size] matches a key, use that; otherwise return the median price
   /// (lower-middle element when the count is even).
-  double? _extractPriceFromMap(Map<String, dynamic> prices, String? size) {
-    if (prices.isEmpty) return null;
+  ({double? price, bool isLowest}) _extractPriceFromMap(
+    Map<String, dynamic> prices,
+    String? size,
+  ) {
+    if (prices.isEmpty) return (price: null, isLowest: false);
 
     // Try exact size match
     if (size != null && prices.containsKey(size)) {
       final p = double.tryParse(prices[size].toString());
-      if (p != null && p > 0) return p;
+      if (p != null && p > 0) return (price: p, isLowest: false);
     }
 
-    // Fallback: median price (lower-middle for even counts)
+    // Fallback: lowest available price
     final valid =
         prices.values
             .map((v) => double.tryParse(v.toString()))
@@ -1234,8 +1244,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             .where((p) => p > 0)
             .toList()
           ..sort();
-    if (valid.isEmpty) return null;
-    return valid[(valid.length - 1) ~/ 2];
+    if (valid.isEmpty) return (price: null, isLowest: false);
+    return (price: valid.first, isLowest: true);
   }
 
   List<ColorwayVariant> _parseColorwaysFromDb(List<dynamic> list) {
@@ -1752,6 +1762,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                         onOpenStockX: _openStockXSearch,
                         onOpenGoat: _openGoatSearch,
                         scannedSize: widget.scanData.size,
+                        stockXPriceIsLowest: _stockXPriceIsLowest,
+                        goatPriceIsLowest: _goatPriceIsLowest,
                         onRetailPriceChanged: (value) {
                           setState(() => _manualRetailPrice = value);
                         },

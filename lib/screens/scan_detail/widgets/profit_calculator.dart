@@ -19,6 +19,8 @@ class ProfitCalculator extends StatefulWidget {
   final VoidCallback? onOpenStockX;
   final VoidCallback? onOpenGoat;
   final String? scannedSize;
+  final bool stockXPriceIsLowest;
+  final bool goatPriceIsLowest;
   final ValueChanged<double?> onRetailPriceChanged;
   final VoidCallback onSavePrices;
 
@@ -38,6 +40,8 @@ class ProfitCalculator extends StatefulWidget {
     this.onOpenStockX,
     this.onOpenGoat,
     this.scannedSize,
+    this.stockXPriceIsLowest = false,
+    this.goatPriceIsLowest = false,
     required this.onRetailPriceChanged,
     required this.onSavePrices,
   });
@@ -339,6 +343,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             transactionFeeRate: widget.stockXPrice != null ? 0.08 : null,
             paymentProcessingFeeRate: widget.stockXPrice != null ? 0.03 : null,
             scannedSize: widget.scannedSize,
+            isLowestAsk: widget.stockXPriceIsLowest,
           ),
           const SizedBox(height: 12),
 
@@ -358,6 +363,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             sellerFlatFee: widget.goatPrice != null ? 5.0 : null,
             commissionFeeRate: widget.goatPrice != null ? 0.095 : null,
             scannedSize: widget.scannedSize,
+            isLowestAsk: widget.goatPriceIsLowest,
           ),
         ],
       ),
