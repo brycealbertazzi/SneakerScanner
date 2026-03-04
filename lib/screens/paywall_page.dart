@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../screens/login_screen.dart';
 import '../screens/main_screen.dart';
 import '../services/subscription_service.dart';
 
@@ -13,7 +14,16 @@ class PaywallPage extends StatefulWidget {
   /// MainScreen instead of popping. Used for the hard launch paywall.
   final bool isCloseable;
 
-  const PaywallPage({super.key, this.isCloseable = true});
+  /// When true, successful subscription navigates to LoginScreen instead of
+  /// MainScreen. Used when paywall appears before the user has signed in
+  /// (i.e. the onboarding flow).
+  final bool isPreLogin;
+
+  const PaywallPage({
+    super.key,
+    this.isCloseable = true,
+    this.isPreLogin = false,
+  });
 
   @override
   State<PaywallPage> createState() => _PaywallPageState();
@@ -311,15 +321,23 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     );
   }
 
-  /// Dismisses the paywall correctly depending on context.
-  /// Hard paywall (isCloseable: false) → replace entire stack with MainScreen.
-  /// Settings paywall (isCloseable: true) → simply pop.
+  /// Dismisses the paywall correctly depending on context:
+  /// - Pre-login hard paywall → LoginScreen (user subscribed before creating account)
+  /// - Hard paywall (in-app) → MainScreen
+  /// - Settings paywall (closeable) → pop
   void _dismissPaywall() {
     if (!widget.isCloseable) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MainScreen()),
-        (route) => false,
-      );
+      if (widget.isPreLogin) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      } else {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MainScreen()),
+          (route) => false,
+        );
+      }
     } else {
       Navigator.of(context).pop();
     }

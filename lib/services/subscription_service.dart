@@ -65,9 +65,6 @@ class SubscriptionService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _hasEverSubscribed = prefs.getBool('has_ever_subscribed') ?? false;
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
     // Set up purchase stream listener FIRST.
     _purchaseSubscription?.cancel();
     _purchaseSubscription = InAppPurchase.instance.purchaseStream.listen(
@@ -302,6 +299,8 @@ class SubscriptionService extends ChangeNotifier {
 
   void _validateInBackground(PurchaseDetails purchase) {
     Future(() async {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return; // No Firebase user yet — skip server validation.
       try {
         final callable = FirebaseFunctions.instance.httpsCallable(
           'validatePurchase',

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/subscription_service.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
+import 'onboarding_flow.dart';
 import 'paywall_page.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -46,9 +48,27 @@ class _SplashScreenState extends State<SplashScreen>
 
     Future.delayed(const Duration(milliseconds: 2500), () async {
       if (!mounted) return;
+
+      // First launch: show onboarding before anything else.
+      final prefs = await SharedPreferences.getInstance();
+      final hasSeenOnboarding = prefs.getBool('has_seen_onboarding') ?? false;
+      if (!hasSeenOnboarding) {
+        if (!mounted) return;
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (context, animation, _) => const OnboardingFlow(),
+            transitionsBuilder: (_, animation, a2, child) =>
+                FadeTransition(opacity: animation, child: child),
+            transitionDuration: const Duration(milliseconds: 500),
+          ),
+        );
+        return;
+      }
+
       final user = FirebaseAuth.instance.currentUser;
 
       if (user == null) {
+        if (!mounted) return;
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (context, animation, _) => const LoginScreen(),
