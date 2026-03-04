@@ -9,7 +9,9 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
+import '../services/subscription_service.dart';
 import 'main_screen.dart';
+import 'paywall_page.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -38,6 +40,21 @@ class _LoginScreenState extends State<LoginScreen> {
     final bytes = utf8.encode(input);
     final digest = sha256.convert(bytes);
     return digest.toString();
+  }
+
+  Future<void> _navigateAfterSignIn() async {
+    await SubscriptionService.instance.initialize();
+    final sub = SubscriptionService.instance;
+    if (sub.status == SubscriptionStatus.loading) {
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+    if (!mounted) return;
+    final Widget destination = sub.canScan
+        ? const MainScreen()
+        : const PaywallPage(isCloseable: false);
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => destination),
+    );
   }
 
   Future<void> _signInWithGoogle() async {
@@ -76,9 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MainScreen()),
-        );
+        await _navigateAfterSignIn();
       }
     } catch (e) {
       setState(() => _googleLoading = false);
@@ -157,9 +172,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MainScreen()),
-        );
+        await _navigateAfterSignIn();
       }
     } on SignInWithAppleAuthorizationException catch (e) {
       debugPrint(
@@ -241,9 +254,7 @@ class _LoginScreenState extends State<LoginScreen> {
       await userCredential.user!.linkWithCredential(appleCredential);
 
       if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const MainScreen()),
-        );
+        await _navigateAfterSignIn();
       }
     } catch (e) {
       setState(() => _appleLoading = false);

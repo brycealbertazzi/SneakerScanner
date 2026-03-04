@@ -290,7 +290,7 @@ class _SettingsPageState extends State<SettingsPage> {
       case SubscriptionStatus.active:
         return 'Annual Plan';
       case SubscriptionStatus.freeTrial:
-        return 'Free Trial';
+        return 'No Active Plan';
       case SubscriptionStatus.expired:
         return 'Expired';
       case SubscriptionStatus.cancelled:
@@ -300,22 +300,11 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  String _scansLabel() {
-    if (_sub.status == SubscriptionStatus.active) {
-      return 'Unlimited';
-    }
-    if (_sub.status == SubscriptionStatus.loading) {
-      return '...';
-    }
-    return '${_sub.scansRemaining} of ${_sub.scansLimit} remaining';
-  }
-
   Color _planColor() {
     switch (_sub.status) {
       case SubscriptionStatus.active:
         return Colors.green;
       case SubscriptionStatus.freeTrial:
-        return Colors.amber;
       case SubscriptionStatus.expired:
       case SubscriptionStatus.cancelled:
         return Colors.red;
@@ -449,14 +438,6 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       );
                     },
-                  ),
-                  _buildDivider(),
-                  _buildSettingsTile(
-                    icon: Icons.qr_code_scanner,
-                    iconColor: const Color(0xFF646CFF),
-                    title: 'Scans',
-                    subtitle: _scansLabel(),
-                    onTap: null,
                   ),
                 ],
               ),

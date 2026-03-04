@@ -516,23 +516,20 @@ class _ScannerPageState extends State<ScannerPage>
     return rawCode.trim().toUpperCase();
   }
 
-  /// Returns true if the user can start a scan (has available scans or active subscription).
-  /// If not, shows the paywall and returns true only if they then subscribe.
+  /// Returns true if the user has an active subscription.
+  /// If not, shows the hard paywall (no close button) and returns false —
+  /// the paywall will navigate to MainScreen on success.
   Future<bool> _checkSubscription() async {
     final sub = SubscriptionService.instance;
-    if (sub.status == SubscriptionStatus.loading) {
-      // Brief wait for the initial Firebase snapshot
-      await Future.delayed(const Duration(milliseconds: 600));
-    }
     if (sub.canScan) return true;
     if (!mounted) return false;
-    final subscribed = await Navigator.of(context).push<bool>(
+    Navigator.of(context).push(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => const PaywallPage(),
+        builder: (_) => const PaywallPage(isCloseable: false),
       ),
     );
-    return subscribed == true;
+    return false;
   }
 
   Future<void> _captureAndProcess() async {
@@ -587,7 +584,6 @@ class _ScannerPageState extends State<ScannerPage>
         if (mounted) {
           final nav = Navigator.of(context);
           await _previewController.stop();
-          await SubscriptionService.instance.incrementScanCount();
           final result = await nav.push<String>(
             MaterialPageRoute(
               builder: (context) => ScanDetailPage(
@@ -647,7 +643,6 @@ class _ScannerPageState extends State<ScannerPage>
 
       final data = currentScanData.copyWith(gtin: gtin);
       if (mounted) {
-        await SubscriptionService.instance.incrementScanCount();
         if (!mounted) return;
         final result = await Navigator.of(context).push<String>(
           MaterialPageRoute(
@@ -765,8 +760,6 @@ class _ScannerPageState extends State<ScannerPage>
                         await _previewController.stop();
                         final data = currentScanData.copyWith(sku: sku);
                         if (mounted) {
-                          await SubscriptionService.instance
-                              .incrementScanCount();
                           if (!mounted) return;
                           final result = await Navigator.of(context)
                               .push<String>(
@@ -945,7 +938,6 @@ class _ScannerPageState extends State<ScannerPage>
                           titleSearch: title,
                         );
                         if (!mounted) return;
-                        await SubscriptionService.instance.incrementScanCount();
                         final result = await nav.push<String>(
                           MaterialPageRoute(
                             builder: (context) => ScanDetailPage(

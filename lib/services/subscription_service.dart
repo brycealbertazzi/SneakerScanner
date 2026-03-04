@@ -7,7 +7,6 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 const String kAnnualProductId = 'sneakerscanner_annual_4999';
-const int kFreeScanLimit = 30;
 
 enum SubscriptionStatus { loading, freeTrial, active, expired, cancelled }
 
@@ -16,36 +15,34 @@ class SubscriptionService extends ChangeNotifier {
   SubscriptionService._();
 
   SubscriptionStatus _status = SubscriptionStatus.loading;
-  int _scansUsed = 0;
-  int _scansLimit = kFreeScanLimit;
   ProductDetails? _annualProduct;
   bool _purchasePending = false;
   bool _purchaseCancelled = false;
   String? _purchaseError;
   bool _purchaseInitiated = false;
   bool _lastActivationWasRestore = false;
+  bool _initialized = false;
 
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
   StreamSubscription<DatabaseEvent>? _firebaseSubscription;
 
   SubscriptionStatus get status => _status;
-  int get scansUsed => _scansUsed;
-  int get scansLimit => _scansLimit;
-  int get scansRemaining => (_scansLimit - _scansUsed).clamp(0, _scansLimit);
   bool get purchasePending => _purchasePending;
   bool get purchaseCancelled => _purchaseCancelled;
   String? get purchaseError => _purchaseError;
   ProductDetails? get annualProduct => _annualProduct;
 
-  bool get canScan {
-    if (_status == SubscriptionStatus.active) return true;
-    if (_status == SubscriptionStatus.freeTrial)
-      return _scansUsed < _scansLimit;
-    return false;
-  }
+  /// True only when the subscription is currently active (including trial period).
+  bool get canScan => _status == SubscriptionStatus.active;
 
   bool get isSubscribed => _status == SubscriptionStatus.active;
   bool get lastActivationWasRestore => _lastActivationWasRestore;
+
+  /// True when the user previously had a subscription that has since lapsed.
+  /// Used to show "Get Unlimited Scans" instead of "Start Free Trial".
+  bool get isLapsedSubscriber =>
+      _status == SubscriptionStatus.expired ||
+      _status == SubscriptionStatus.cancelled;
 
   /// Returns the platform-specific subscription node reference.
   DatabaseReference _subRef(String uid) {
@@ -58,7 +55,11 @@ class SubscriptionService extends ChangeNotifier {
         .child(platform);
   }
 
+  /// Safe to call multiple times — subsequent calls are no-ops.
   Future<void> initialize() async {
+    if (_initialized) return;
+    _initialized = true;
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
@@ -109,10 +110,9 @@ class SubscriptionService extends ChangeNotifier {
       }
     }
 
+    // New user — no status set; they must start a trial/subscribe to access.
     await ref.set({
-      'status': 'free_trial',
-      'scansUsed': 0,
-      'scansLimit': kFreeScanLimit,
+      'status': null,
       'platform': Platform.isIOS ? 'apple' : 'google',
       'productId': null,
       'originalTransactionId': null,
@@ -129,9 +129,7 @@ class SubscriptionService extends ChangeNotifier {
       return;
     }
 
-    final statusStr = data['status'] as String? ?? 'free_trial';
-    _scansUsed = (data['scansUsed'] as int?) ?? 0;
-    _scansLimit = (data['scansLimit'] as int?) ?? kFreeScanLimit;
+    final statusStr = data['status'] as String?;
 
     switch (statusStr) {
       case 'active':
@@ -144,6 +142,7 @@ class SubscriptionService extends ChangeNotifier {
         _status = SubscriptionStatus.cancelled;
         break;
       default:
+        // null, 'free_trial', or anything unknown → no access
         _status = SubscriptionStatus.freeTrial;
     }
 
@@ -246,10 +245,6 @@ class SubscriptionService extends ChangeNotifier {
         final isAlreadyOwned = _isAlreadyOwnedError(purchase.error);
         if (isAlreadyOwned ||
             (Platform.isAndroid && wasPurchaseInitiated && !isCancellation)) {
-          // Subscription exists on the store but not in Firebase.
-          // On Android, Google Play may report this as various error codes,
-          // so for any non-cancellation error on a user-initiated purchase
-          // we attempt a restore rather than showing an error.
           debugPrint(
             '[IAP] Android purchase error — attempting restore to sync',
           );
@@ -293,8 +288,6 @@ class SubscriptionService extends ChangeNotifier {
     final user = FirebaseAuth.instance.currentUser;
     try {
       // Optimistically activate — trust the platform confirmation immediately.
-      // Server-side validation runs in the background and can update/revoke
-      // the subscription later if needed.
       if (user != null) {
         await _subRef(user.uid).update({
           'status': 'active',
@@ -303,8 +296,6 @@ class SubscriptionService extends ChangeNotifier {
           'originalTransactionId': purchase.purchaseID,
         });
       }
-      // Clear any cancellation flag that forceCancelPending() may have set
-      // during the async Firebase write (lifecycle resumed race condition).
       _purchaseCancelled = false;
     } catch (e) {
       debugPrint('[IAP] Failed to activate subscription: $e');
@@ -316,7 +307,6 @@ class SubscriptionService extends ChangeNotifier {
       await InAppPurchase.instance.completePurchase(purchase);
     }
 
-    // Background server validation — non-blocking, no error shown to user.
     _validateInBackground(purchase);
   }
 
@@ -344,19 +334,6 @@ class SubscriptionService extends ChangeNotifier {
     });
   }
 
-  /// Increments scan count in Firebase. Returns false if user cannot scan.
-  Future<bool> incrementScanCount() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null || !canScan) return false;
-    try {
-      final ref = _subRef(user.uid).child('scansUsed');
-      await ref.set(ServerValue.increment(1));
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
   void clearError() {
     _purchaseError = null;
     notifyListeners();
@@ -367,8 +344,6 @@ class SubscriptionService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Called when the app returns to the foreground while a purchase is still
-  /// pending. Treats the pending purchase as cancelled immediately.
   void forceCancelPending() {
     if (!_purchasePending) return;
     _purchasePending = false;
@@ -376,8 +351,6 @@ class SubscriptionService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Deletes all Firebase RTDB data for the current user and resets local
-  /// state. Auth record deletion is handled by the caller.
   Future<void> deleteAccount() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -397,11 +370,10 @@ class SubscriptionService extends ChangeNotifier {
   }
 
   void reset() {
+    _initialized = false;
     _purchaseSubscription?.cancel();
     _firebaseSubscription?.cancel();
     _status = SubscriptionStatus.loading;
-    _scansUsed = 0;
-    _scansLimit = kFreeScanLimit;
     _annualProduct = null;
     _purchasePending = false;
     _purchaseCancelled = false;

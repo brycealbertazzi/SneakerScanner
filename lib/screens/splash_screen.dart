@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/subscription_service.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
+import 'paywall_page.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -42,21 +44,44 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    Future.delayed(const Duration(milliseconds: 2500), () {
-      if (mounted) {
-        final user = FirebaseAuth.instance.currentUser;
+    Future.delayed(const Duration(milliseconds: 2500), () async {
+      if (!mounted) return;
+      final user = FirebaseAuth.instance.currentUser;
+
+      if (user == null) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                user != null ? const MainScreen() : const LoginScreen(),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
+            pageBuilder: (context, animation, _) => const LoginScreen(),
+            transitionsBuilder: (_, animation, __, child) =>
+                FadeTransition(opacity: animation, child: child),
             transitionDuration: const Duration(milliseconds: 500),
           ),
         );
+        return;
       }
+
+      // Initialize subscription service and wait briefly for Firebase status.
+      await SubscriptionService.instance.initialize();
+      final sub = SubscriptionService.instance;
+      if (sub.status == SubscriptionStatus.loading) {
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      if (!mounted) return;
+
+      // Route based on subscription status.
+      final Widget destination = sub.canScan
+          ? const MainScreen()
+          : const PaywallPage(isCloseable: false);
+
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, _) => destination,
+          transitionsBuilder: (_, animation, __, child) =>
+              FadeTransition(opacity: animation, child: child),
+          transitionDuration: const Duration(milliseconds: 500),
+        ),
+      );
     });
   }
 

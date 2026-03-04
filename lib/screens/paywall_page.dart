@@ -4,16 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../screens/main_screen.dart';
 import '../services/subscription_service.dart';
 
 class PaywallPage extends StatefulWidget {
-  const PaywallPage({super.key});
+  /// When false the close button is hidden and success/restore navigates to
+  /// MainScreen instead of popping. Used for the hard launch paywall.
+  final bool isCloseable;
+
+  const PaywallPage({super.key, this.isCloseable = true});
 
   @override
   State<PaywallPage> createState() => _PaywallPageState();
 }
 
-class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
+class _PaywallPageState extends State<PaywallPage> {
   final _sub = SubscriptionService.instance;
 
   bool _restorePressed = false;
@@ -29,27 +34,12 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     super.initState();
     _wasActiveOnInit = _sub.isSubscribed;
     _sub.addListener(_onSubChanged);
-    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _sub.removeListener(_onSubChanged);
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _sub.purchasePending) {
-      // Give StoreKit 1 second to deliver its event after the app resumes.
-      // For a successful purchase, _purchasePending will be cleared by the
-      // Firebase write well within that window, making this a no-op.
-      // For a silent cancellation (no stream event), this resets the button.
-      Future.delayed(const Duration(seconds: 1), () {
-        if (mounted) _sub.forceCancelPending();
-      });
-    }
   }
 
   void _onSubChanged() {
@@ -195,7 +185,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                   onPressed: () {
                     _restoredDialogShowing = false;
                     Navigator.of(ctx).pop();
-                    if (mounted) Navigator.of(context).pop();
+                    if (mounted) _dismissPaywall();
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
@@ -270,7 +260,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                   onPressed: () {
                     _successDialogShowing = false;
                     Navigator.of(ctx).pop();
-                    if (mounted) Navigator.of(context).pop();
+                    if (mounted) _dismissPaywall();
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
@@ -297,6 +287,20 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     );
   }
 
+  /// Dismisses the paywall correctly depending on context.
+  /// Hard paywall (isCloseable: false) → replace entire stack with MainScreen.
+  /// Settings paywall (isCloseable: true) → simply pop.
+  void _dismissPaywall() {
+    if (!widget.isCloseable) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainScreen()),
+        (route) => false,
+      );
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -315,10 +319,12 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final status = _sub.status;
-    final isFreeTrial = status == SubscriptionStatus.freeTrial;
-    final scansRemaining = _sub.scansRemaining;
     final pending = _sub.purchasePending;
+    final buttonLabel = _sub.isSubscribed
+        ? null // subscribed — shows badge instead
+        : _sub.isLapsedSubscriber
+        ? 'Get Unlimited Scans'
+        : 'Start Free Trial';
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -372,48 +378,15 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                   ),
                   const SizedBox(height: 12),
 
-                  // Trial warning or subtitle
-                  if (isFreeTrial && scansRemaining == 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: Colors.red.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Text(
-                        "You've used all 30 free scans",
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          color: Colors.red[300],
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    )
-                  else if (isFreeTrial)
-                    Text(
-                      '$scansRemaining of ${_sub.scansLimit} free scans remaining',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        color: Colors.grey[400],
-                      ),
-                    )
-                  else
-                    Text(
-                      'Unlock unlimited scans and real-time market prices',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        color: Colors.grey[400],
-                      ),
+                  // Subtitle
+                  Text(
+                    'Unlock unlimited scans and real-time market prices',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: Colors.grey[400],
                     ),
+                  ),
 
                   const SizedBox(height: 32),
 
@@ -552,7 +525,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                                 ),
                               )
                             : Text(
-                                'Start Annual Plan',
+                                buttonLabel ?? 'Start Free Trial',
                                 style: GoogleFonts.poppins(
                                   fontSize: 17,
                                   fontWeight: FontWeight.w700,
@@ -672,21 +645,22 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
               ),
             ),
 
-            // Dismiss button — last in Stack so it renders on top and receives touches
-            Positioned(
-              top: 12,
-              right: 16,
-              child: IconButton(
-                onPressed: pending
-                    ? null
-                    : () => Navigator.of(context).pop(false),
-                icon: Icon(
-                  Icons.close_rounded,
-                  color: Colors.grey[600],
-                  size: 28,
+            // Close button — only shown when paywall is dismissible
+            if (widget.isCloseable)
+              Positioned(
+                top: 12,
+                right: 16,
+                child: IconButton(
+                  onPressed: pending
+                      ? null
+                      : () => Navigator.of(context).pop(false),
+                  icon: Icon(
+                    Icons.close_rounded,
+                    color: Colors.grey[600],
+                    size: 28,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),
