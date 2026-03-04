@@ -170,6 +170,48 @@ class _ScannerPageState extends State<ScannerPage>
       }
     }
 
+    // Secondary Nike detection: product line keywords that appear on Nike boxes
+    // when "NIKE" itself is absent from the OCR text (e.g. "ZOOM VAPOR 15 ACADEMY")
+    if (foundBrand == null) {
+      const nikeProductKeywords = [
+        'ZOOM VAPOR',
+        'ZOOM PEGASUS',
+        'ZOOM FLYKNIT',
+        'ZOOM VOMERO',
+        'AIR MAX',
+        'AIR FORCE',
+        'AIR HUARACHE',
+        'AIR PRESTO',
+        'AIR ZOOM',
+        'VAPORFLY',
+        'ALPHAFLY',
+        'INVINCIBLE RUN',
+        'MERCURIAL',
+        'TIEMPO',
+        'PHANTOM GX',
+        'PHANTOM GT',
+        'STREETGATO',
+        'REACT INFINITY',
+        'REACT MILER',
+        'INFINITY RUN',
+        'BLAZER MID',
+        'BLAZER LOW',
+        'WAFFLE TRAINER',
+        'CORTEZ',
+        'KILLSHOT',
+        'DAYBREAK',
+        'TERRA KIGER',
+        'WILDHORSE',
+        'PEGASUS TRAIL',
+      ];
+      for (final keyword in nikeProductKeywords) {
+        if (normalized.contains(keyword)) {
+          foundBrand = 'NIKE';
+          break;
+        }
+      }
+    }
+
     // Split original text into lines (preserves line boundaries for context checks)
     final lines = text.split(RegExp(r'[\n\r]+'));
 
@@ -242,14 +284,46 @@ class _ScannerPageState extends State<ScannerPage>
 
     // --- Size extraction ---
     String? size;
-    final sizeMatch = RegExp(
-      r'(?:SIZE|US|UK|EU)[:\s]*(\d{1,2}(?:\.\d)?)',
-      caseSensitive: false,
-    ).firstMatch(normalized);
-    if (sizeMatch != null) {
-      final parsed = double.tryParse(sizeMatch.group(1)!);
-      if (parsed != null && parsed >= 1 && parsed <= 20) {
-        size = sizeMatch.group(1)!;
+    final isNikeOrJordan = foundBrand == 'NIKE' || foundBrand == 'JORDAN';
+    if (isNikeOrJordan) {
+      // Nike/Jordan boxes show: US size (bare number) immediately before a
+      // cluster of prefixed regional sizes (UK / BR / CM / EUR).
+      // No leading \b so "2UK" still triggers the UK proximity signal.
+      final regionalPrefixRe = RegExp(
+        r'(UK|BR|CM|EUR|KR|JP|MX)',
+        caseSensitive: false,
+      );
+      // Whole number, .5, or either with optional 'y'/'Y' youth suffix
+      final bareSizeRe = RegExp(r'^\d{1,2}(?:\.5)?[yY]?$');
+      for (int i = 0; i < lines.length; i++) {
+        final trimmed = lines[i].trim();
+        if (!bareSizeRe.hasMatch(trimmed)) continue;
+        final numStr = trimmed.replaceAll(RegExp(r'[yY]$'), '');
+        final parsed = double.tryParse(numStr);
+        // 1–18 covers youth (1y–7y) and adult US sizes
+        if (parsed == null || parsed < 1 || parsed > 18) continue;
+        bool hasNearbyPrefix = false;
+        for (int j = i + 1; j < lines.length && j <= i + 3; j++) {
+          if (regionalPrefixRe.hasMatch(lines[j])) {
+            hasNearbyPrefix = true;
+            break;
+          }
+        }
+        if (hasNearbyPrefix) {
+          size = trimmed;
+          break;
+        }
+      }
+    } else {
+      final sizeMatch = RegExp(
+        r'(?:SIZE|US|UK|EU)[:\s]*(\d{1,2}(?:\.\d)?)',
+        caseSensitive: false,
+      ).firstMatch(normalized);
+      if (sizeMatch != null) {
+        final parsed = double.tryParse(sizeMatch.group(1)!);
+        if (parsed != null && parsed >= 1 && parsed <= 20) {
+          size = sizeMatch.group(1)!;
+        }
       }
     }
 

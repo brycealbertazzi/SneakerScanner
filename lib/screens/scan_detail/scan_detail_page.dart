@@ -846,9 +846,18 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     await launchUrl(url, mode: LaunchMode.platformDefault);
   }
 
+  String _sizeQueryParam() {
+    final raw = widget.scanData.size;
+    final numStr = raw?.replaceAll(RegExp(r'[yY]$'), '');
+    final parsed = numStr != null ? double.tryParse(numStr) : null;
+    if (parsed == null || parsed < 4 || parsed > 18) return '';
+    final s = parsed % 1 == 0 ? parsed.toInt().toString() : parsed.toString();
+    return '?size=$s';
+  }
+
   Future<void> _openStockXSearch() async {
     if (_stockXSlug != null && _stockXSlug!.isNotEmpty) {
-      final url = Uri.parse('https://stockx.com/$_stockXSlug');
+      final url = Uri.parse('https://stockx.com/$_stockXSlug${_sizeQueryParam()}');
       await launchUrl(url, mode: LaunchMode.platformDefault);
     } else {
       final title = _productInfo?['title'] as String?;
@@ -1742,6 +1751,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                         onOpenEbay: _openEbaySearch,
                         onOpenStockX: _openStockXSearch,
                         onOpenGoat: _openGoatSearch,
+                        scannedSize: widget.scanData.size,
                         onRetailPriceChanged: (value) {
                           setState(() => _manualRetailPrice = value);
                         },

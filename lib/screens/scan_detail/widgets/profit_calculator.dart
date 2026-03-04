@@ -18,6 +18,7 @@ class ProfitCalculator extends StatefulWidget {
   final VoidCallback? onOpenEbay;
   final VoidCallback? onOpenStockX;
   final VoidCallback? onOpenGoat;
+  final String? scannedSize;
   final ValueChanged<double?> onRetailPriceChanged;
   final VoidCallback onSavePrices;
 
@@ -36,6 +37,7 @@ class ProfitCalculator extends StatefulWidget {
     this.onOpenEbay,
     this.onOpenStockX,
     this.onOpenGoat,
+    this.scannedSize,
     required this.onRetailPriceChanged,
     required this.onSavePrices,
   });
@@ -336,6 +338,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             onOpenMarketplace: widget.stockXPrice != null ? widget.onOpenStockX : null,
             transactionFeeRate: widget.stockXPrice != null ? 0.08 : null,
             paymentProcessingFeeRate: widget.stockXPrice != null ? 0.03 : null,
+            scannedSize: widget.scannedSize,
           ),
           const SizedBox(height: 12),
 
@@ -354,6 +357,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             onOpenMarketplace: widget.goatPrice != null ? widget.onOpenGoat : null,
             sellerFlatFee: widget.goatPrice != null ? 5.0 : null,
             commissionFeeRate: widget.goatPrice != null ? 0.095 : null,
+            scannedSize: widget.scannedSize,
           ),
         ],
       ),

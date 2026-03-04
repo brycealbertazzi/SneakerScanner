@@ -32,6 +32,9 @@ class MarketPriceSection extends StatefulWidget {
   /// GOAT: "Commission" row. Rate is a decimal (e.g. 0.095 for 9.5%).
   final double? commissionFeeRate;
 
+  /// Scanned shoe size (US, e.g. "10", "10.5") — appended to GOAT URLs.
+  final String? scannedSize;
+
   const MarketPriceSection({
     super.key,
     required this.label,
@@ -50,6 +53,7 @@ class MarketPriceSection extends StatefulWidget {
     this.paymentProcessingFeeRate,
     this.sellerFlatFee,
     this.commissionFeeRate,
+    this.scannedSize,
   });
 
   @override
@@ -182,6 +186,33 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
     );
   }
 
+  /// Small size badge shown next to the marketplace open button.
+  /// Rendered for StockX and GOAT when a scanned size is available.
+  Widget? _sizeBadge() {
+    final platform = widget.label;
+    if ((platform != 'GOAT' && platform != 'StockX') ||
+        widget.scannedSize == null) return null;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: widget.iconColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: widget.iconColor.withValues(alpha: 0.35),
+          width: 1,
+        ),
+      ),
+      child: Text(
+        'Size ${widget.scannedSize}',
+        style: GoogleFonts.inter(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: widget.iconColor,
+        ),
+      ),
+    );
+  }
+
   void _openColorwayLink() {
     if (!_hasColorways) return;
     final variant = widget.colorways![_selectedColorwayIndex];
@@ -191,7 +222,13 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
     final platform = widget.label.toLowerCase();
     String url;
     if (platform == 'stockx') {
-      url = 'https://stockx.com/$slug';
+      final raw = widget.scannedSize;
+      final numStr = raw?.replaceAll(RegExp(r'[yY]$'), '');
+      final parsed = numStr != null ? double.tryParse(numStr) : null;
+      final sizeQuery = (parsed != null && parsed >= 4 && parsed <= 18)
+          ? '?size=${parsed % 1 == 0 ? parsed.toInt().toString() : parsed.toString()}'
+          : '';
+      url = 'https://stockx.com/$slug$sizeQuery';
     } else if (platform == 'goat') {
       url = 'https://www.goat.com/sneakers/$slug';
     } else {
@@ -289,36 +326,39 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
           // Open on... button for non-colorway sections with a price
           if (!_hasColorways && price != null && widget.onOpenMarketplace != null) ...[
             const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: GestureDetector(
-                onTap: widget.onOpenMarketplace,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: widget.iconColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Open on ${widget.label}',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: widget.iconColor,
+            Row(
+              children: [
+                if (_sizeBadge() != null) _sizeBadge()!,
+                const Spacer(),
+                GestureDetector(
+                  onTap: widget.onOpenMarketplace,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: widget.iconColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Open on ${widget.label}',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: widget.iconColor,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(Icons.open_in_new, size: 12, color: widget.iconColor),
-                    ],
+                        const SizedBox(width: 4),
+                        Icon(Icons.open_in_new, size: 12, color: widget.iconColor),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ],
 
@@ -396,36 +436,39 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
           // Open on... button for colorway variants
           if (_hasColorways && price != null) ...[
             const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: GestureDetector(
-                onTap: _openColorwayLink,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: widget.iconColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Open on ${widget.label}',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: widget.iconColor,
+            Row(
+              children: [
+                if (_sizeBadge() != null) _sizeBadge()!,
+                const Spacer(),
+                GestureDetector(
+                  onTap: _openColorwayLink,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: widget.iconColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Open on ${widget.label}',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: widget.iconColor,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(Icons.open_in_new, size: 12, color: widget.iconColor),
-                    ],
+                        const SizedBox(width: 4),
+                        Icon(Icons.open_in_new, size: 12, color: widget.iconColor),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ],
 
