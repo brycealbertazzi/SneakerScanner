@@ -7,7 +7,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const String kAnnualProductId = 'sneakerscanner_annual_4999';
+const String kAnnualProductId = 'sneaker_scanner_annual';
 
 enum SubscriptionStatus { loading, freeTrial, active, expired, cancelled }
 
@@ -53,7 +53,8 @@ class SubscriptionService extends ChangeNotifier {
   /// Called when the app returns to the foreground.
   void recheckSubscription() {
     if (_isLaunchCheck) return; // Already checking
-    if (_purchasePending || _purchaseInitiated) return; // Purchase in flight — let it resolve naturally
+    if (_purchasePending || _purchaseInitiated)
+      return; // Purchase in flight — let it resolve naturally
     _startLaunchCheck();
   }
 
@@ -300,7 +301,8 @@ class SubscriptionService extends ChangeNotifier {
   void _validateInBackground(PurchaseDetails purchase) {
     Future(() async {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return; // No Firebase user yet — skip server validation.
+      if (user == null)
+        return; // No Firebase user yet — skip server validation.
       try {
         final callable = FirebaseFunctions.instance.httpsCallable(
           'validatePurchase',

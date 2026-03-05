@@ -356,7 +356,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
   String _priceLabel() {
     final product = _sub.annualProduct;
     if (product != null) return product.price;
-    return '\$49.99';
+    return '\$59.99';
   }
 
   @override
@@ -496,7 +496,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'per year — less than \$4.17/month',
+                          'per year — less than \$5.00/month',
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             color: Colors.grey[400],
