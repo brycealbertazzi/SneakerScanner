@@ -39,6 +39,16 @@ class MarketPriceSection extends StatefulWidget {
   /// rather than the exact price for the scanned size.
   final bool isLowestAsk;
 
+  /// Full size→price map from the unified API. When provided, a size dropdown
+  /// is shown (StockX/GOAT only, not for colorway variants or GTIN results).
+  final Map<String, double>? sizeMap;
+
+  /// The currently selected size (managed by parent). Null means "Select Size".
+  final String? selectedSize;
+
+  /// Called when the user picks a size from the dropdown.
+  final ValueChanged<String?>? onSizeSelected;
+
   const MarketPriceSection({
     super.key,
     required this.label,
@@ -59,6 +69,9 @@ class MarketPriceSection extends StatefulWidget {
     this.commissionFeeRate,
     this.scannedSize,
     this.isLowestAsk = false,
+    this.sizeMap,
+    this.selectedSize,
+    this.onSizeSelected,
   });
 
   @override
@@ -67,13 +80,59 @@ class MarketPriceSection extends StatefulWidget {
 
 class _MarketPriceSectionState extends State<MarketPriceSection> {
   int _selectedColorwayIndex = 0;
+  String? _selectedSize;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedSize = widget.selectedSize;
+  }
+
+  @override
+  void didUpdateWidget(covariant MarketPriceSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selectedSize != oldWidget.selectedSize) {
+      _selectedSize = widget.selectedSize;
+    }
+  }
 
   bool get _hasColorways =>
       widget.colorways != null && widget.colorways!.isNotEmpty;
 
+  bool get _hasSizeMap =>
+      widget.sizeMap != null && widget.sizeMap!.isNotEmpty && !_hasColorways;
+
+  List<String> get _sortedSizes {
+    if (widget.sizeMap == null) return [];
+    final sizes = widget.sizeMap!.keys.toList();
+    sizes.sort((a, b) {
+      final da =
+          double.tryParse(a.replaceAll(RegExp(r'[yY]$'), '')) ?? 999;
+      final db =
+          double.tryParse(b.replaceAll(RegExp(r'[yY]$'), '')) ?? 999;
+      return da.compareTo(db);
+    });
+    return sizes;
+  }
+
   double? get _displayPrice {
     if (_hasColorways) return widget.colorways![_selectedColorwayIndex].price;
+    if (_hasSizeMap) {
+      if (_selectedSize != null && widget.sizeMap!.containsKey(_selectedSize)) {
+        return widget.sizeMap![_selectedSize!];
+      }
+      // No size selected — show lowest ask
+      final sorted = widget.sizeMap!.values.where((p) => p > 0).toList()
+        ..sort();
+      return sorted.isEmpty ? null : sorted.first;
+    }
     return widget.price;
+  }
+
+  bool get _showLowestAskLabel {
+    if (_hasColorways) return false;
+    if (_hasSizeMap) return _selectedSize == null;
+    return widget.isLowestAsk;
   }
 
   double? get _sellerFeeAmount {
@@ -192,8 +251,10 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
   }
 
   /// Small size badge shown next to the marketplace open button.
-  /// Rendered for StockX and GOAT when a scanned size is available.
+  /// Rendered for StockX and GOAT when a scanned size is available and
+  /// no sizeMap dropdown is present.
   Widget? _sizeBadge() {
+    if (_hasSizeMap) return null; // dropdown replaces the badge
     final platform = widget.label;
     if ((platform != 'GOAT' && platform != 'StockX') ||
         widget.scannedSize == null) return null;
@@ -292,7 +353,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                         color: Colors.white,
                       ),
                     ),
-                    if (widget.isLowestAsk)
+                    if (_showLowestAskLabel)
                       Text(
                         'lowest ask',
                         style: GoogleFonts.inter(
@@ -342,6 +403,70 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                 ),
             ],
           ),
+
+          // Size dropdown (StockX / GOAT only, not for colorway variants or GTIN)
+          if (_hasSizeMap) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1A1A),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String?>(
+                  value: _selectedSize,
+                  isExpanded: true,
+                  dropdownColor: const Color(0xFF1A1A1A),
+                  icon: Icon(
+                    Icons.expand_more,
+                    color: Colors.grey[500],
+                    size: 20,
+                  ),
+                  items: [
+                    DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text(
+                        'Select Size',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ),
+                    ..._sortedSizes.map(
+                      (size) => DropdownMenuItem<String?>(
+                        value: size,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'US $size',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              '\$${widget.sizeMap![size]!.toStringAsFixed(2)}',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: Colors.grey[400],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  onChanged: (size) {
+                    setState(() => _selectedSize = size);
+                    widget.onSizeSelected?.call(size);
+                  },
+                ),
+              ),
+            ),
+          ],
 
           // Open on... button for non-colorway sections with a price
           if (!_hasColorways && price != null && widget.onOpenMarketplace != null) ...[

@@ -66,6 +66,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   String? _goatSlug;
   bool _goatPriceIsLowest = false;
 
+  // Size maps from unified API (size string → price)
+  Map<String, double>? _stockXSizeMap;
+  Map<String, double>? _goatSizeMap;
+
+  // User-selected size for the profit calculator
+  String? _selectedStockXSize;
+  String? _selectedGoatSize;
+
   // Colorway variants (Nike/Jordan fallback)
   List<ColorwayVariant>? _stockXColorways;
   List<ColorwayVariant>? _goatColorways;
@@ -127,8 +135,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             final savedEbayPrice = double.tryParse(
               (scanDataMap['ebayPrice'] as String?) ?? '',
             );
+            final savedStockXSlug = scanDataMap['stockxSlug'] as String?;
+            final savedGoatSlug = scanDataMap['goatSlug'] as String?;
+            final savedSelectedStockXSize = scanDataMap['selectedStockXSize'] as String?;
+            final savedSelectedGoatSize = scanDataMap['selectedGoatSize'] as String?;
             final savedStockXColorways = scanDataMap['stockxColorways'];
             final savedGoatColorways = scanDataMap['goatColorways'];
+            final savedStockXSizeMap = scanDataMap['stockxSizeMap'];
+            final savedGoatSizeMap = scanDataMap['goatSizeMap'];
             final pricingStatus = scanDataMap['pricingStatus'] as String?;
 
             setState(() {
@@ -147,12 +161,56 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 _ebayAveragePrice = savedEbayPrice;
                 _isLoadingEbayPrices = false;
               }
+              if (savedStockXSlug != null && savedStockXSlug.isNotEmpty) {
+                _stockXSlug = savedStockXSlug;
+              }
+              if (savedGoatSlug != null && savedGoatSlug.isNotEmpty) {
+                _goatSlug = savedGoatSlug;
+              }
+              if (savedSelectedStockXSize != null && savedSelectedStockXSize.isNotEmpty) {
+                _selectedStockXSize = savedSelectedStockXSize;
+              }
+              if (savedSelectedGoatSize != null && savedSelectedGoatSize.isNotEmpty) {
+                _selectedGoatSize = savedSelectedGoatSize;
+              }
               if (savedStockXColorways is List &&
                   savedStockXColorways.isNotEmpty) {
                 _stockXColorways = _parseColorwaysFromDb(savedStockXColorways);
               }
               if (savedGoatColorways is List && savedGoatColorways.isNotEmpty) {
                 _goatColorways = _parseColorwaysFromDb(savedGoatColorways);
+              }
+              if (savedStockXSizeMap is Map) {
+                final map = <String, double>{};
+                savedStockXSizeMap.forEach((k, v) {
+                  final p = double.tryParse(v.toString());
+                  if (p != null && p > 0) map[_decodeSizeKey(k.toString())] = p;
+                });
+                if (map.isNotEmpty) {
+                  _stockXSizeMap = map;
+                  // Prefer the saved selection; fall back to scanned size.
+                  final preferred = _selectedStockXSize ?? widget.scanData.size;
+                  if (preferred != null && map.containsKey(preferred)) {
+                    _selectedStockXSize = preferred;
+                    _stockXPrice = map[preferred];
+                  }
+                }
+              }
+              if (savedGoatSizeMap is Map) {
+                final map = <String, double>{};
+                savedGoatSizeMap.forEach((k, v) {
+                  final p = double.tryParse(v.toString());
+                  if (p != null && p > 0) map[_decodeSizeKey(k.toString())] = p;
+                });
+                if (map.isNotEmpty) {
+                  _goatSizeMap = map;
+                  // Prefer the saved selection; fall back to scanned size.
+                  final preferred = _selectedGoatSize ?? widget.scanData.size;
+                  if (preferred != null && map.containsKey(preferred)) {
+                    _selectedGoatSize = preferred;
+                    _goatPrice = map[preferred];
+                  }
+                }
               }
               if (pricingStatus == 'loading') _pricingInterrupted = true;
             });
@@ -407,10 +465,17 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         final pricesRaw = item['prices'];
         final double? price;
         bool isLowest = false;
+        Map<String, double>? fullSizeMap;
         if (pricesRaw is Map<String, dynamic>) {
           final extracted = _extractPriceFromMap(pricesRaw, size);
           price = extracted.price;
           isLowest = extracted.isLowest;
+          final map = <String, double>{};
+          pricesRaw.forEach((k, v) {
+            final p = double.tryParse(v.toString());
+            if (p != null && p > 0) map[k] = p;
+          });
+          if (map.isNotEmpty) fullSizeMap = map;
         } else {
           price = double.tryParse((item['price'] ?? '').toString());
         }
@@ -425,6 +490,12 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           _stockXPrice = price;
           _stockXSlug = slug;
           _stockXPriceIsLowest = isLowest;
+          if (fullSizeMap != null) {
+            _stockXSizeMap = fullSizeMap;
+            if (size != null && fullSizeMap.containsKey(size)) {
+              _selectedStockXSize = size;
+            }
+          }
         } else if (shopName == 'goat' && _goatPrice == null) {
           debugPrint(
             '[Unified] GOAT price: \$${price.toStringAsFixed(2)} (${stopwatch.elapsedMilliseconds}ms)',
@@ -432,6 +503,12 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           _goatPrice = price;
           _goatSlug = slug;
           _goatPriceIsLowest = isLowest;
+          if (fullSizeMap != null) {
+            _goatSizeMap = fullSizeMap;
+            if (size != null && fullSizeMap.containsKey(size)) {
+              _selectedGoatSize = size;
+            }
+          }
         }
       }
 
@@ -853,8 +930,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     await launchUrl(url, mode: LaunchMode.platformDefault);
   }
 
-  String _sizeQueryParam() {
-    final raw = widget.scanData.size;
+  String _sizeQueryParam({String? overrideSize}) {
+    final raw = overrideSize ?? widget.scanData.size;
     final numStr = raw?.replaceAll(RegExp(r'[yY]$'), '');
     final parsed = numStr != null ? double.tryParse(numStr) : null;
     if (parsed == null || parsed < 4 || parsed > 18) return '';
@@ -864,7 +941,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
   Future<void> _openStockXSearch() async {
     if (_stockXSlug != null && _stockXSlug!.isNotEmpty) {
-      final url = Uri.parse('https://stockx.com/$_stockXSlug${_sizeQueryParam()}');
+      final url = Uri.parse(
+        'https://stockx.com/$_stockXSlug${_sizeQueryParam(overrideSize: _selectedStockXSize)}',
+      );
       await launchUrl(url, mode: LaunchMode.platformDefault);
     } else {
       final title = _productInfo?['title'] as String?;
@@ -1208,6 +1287,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
 
   /// Check if [scannedSku]'s alphanumeric characters (in order) are a
   /// subsequence of [apiSku]'s alphanumeric characters.
+  /// Firebase keys cannot contain '.', so encode '.' as '_' for storage.
+  static String _encodeSizeKey(String key) => key.replaceAll('.', '_');
+  static String _decodeSizeKey(String key) => key.replaceAll('_', '.');
+
   bool _skuSubsequenceMatch(String scannedSku, String apiSku) {
     final scanned = scannedSku
         .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
@@ -1465,9 +1548,21 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       if (_stockXPrice != null) {
         updateData['stockxPrice'] = _stockXPrice!.toStringAsFixed(2);
       }
+      if (_stockXSlug != null && _stockXSlug!.isNotEmpty) {
+        updateData['stockxSlug'] = _stockXSlug;
+      }
+      if (_selectedStockXSize != null && _selectedStockXSize!.isNotEmpty) {
+        updateData['selectedStockXSize'] = _selectedStockXSize;
+      }
 
       if (_goatPrice != null) {
         updateData['goatPrice'] = _goatPrice!.toStringAsFixed(2);
+      }
+      if (_goatSlug != null && _goatSlug!.isNotEmpty) {
+        updateData['goatSlug'] = _goatSlug;
+      }
+      if (_selectedGoatSize != null && _selectedGoatSize!.isNotEmpty) {
+        updateData['selectedGoatSize'] = _selectedGoatSize;
       }
 
       if (_stockXColorways != null && _stockXColorways!.isNotEmpty) {
@@ -1496,6 +1591,18 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               },
             )
             .toList();
+      }
+
+      if (_stockXSizeMap != null && _stockXSizeMap!.isNotEmpty) {
+        updateData['stockxSizeMap'] = _stockXSizeMap!.map(
+          (k, v) => MapEntry(_encodeSizeKey(k), v.toStringAsFixed(2)),
+        );
+      }
+
+      if (_goatSizeMap != null && _goatSizeMap!.isNotEmpty) {
+        updateData['goatSizeMap'] = _goatSizeMap!.map(
+          (k, v) => MapEntry(_encodeSizeKey(k), v.toStringAsFixed(2)),
+        );
       }
 
       if (updateData.isNotEmpty) {
@@ -1764,6 +1871,46 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                         scannedSize: widget.scanData.size,
                         stockXPriceIsLowest: _stockXPriceIsLowest,
                         goatPriceIsLowest: _goatPriceIsLowest,
+                        stockXSizeMap: _stockXSizeMap,
+                        goatSizeMap: _goatSizeMap,
+                        selectedStockXSize: _selectedStockXSize,
+                        selectedGoatSize: _selectedGoatSize,
+                        onStockXSizeSelected: (size) {
+                          setState(() {
+                            _selectedStockXSize = size;
+                            if (size != null && _stockXSizeMap != null) {
+                              _stockXPrice = _stockXSizeMap![size];
+                              _stockXPriceIsLowest = false;
+                            } else if (_stockXSizeMap != null) {
+                              final sorted = _stockXSizeMap!.values
+                                  .where((p) => p > 0)
+                                  .toList()
+                                ..sort();
+                              _stockXPrice =
+                                  sorted.isEmpty ? null : sorted.first;
+                              _stockXPriceIsLowest = true;
+                            }
+                          });
+                          _savePricesToDatabase();
+                        },
+                        onGoatSizeSelected: (size) {
+                          setState(() {
+                            _selectedGoatSize = size;
+                            if (size != null && _goatSizeMap != null) {
+                              _goatPrice = _goatSizeMap![size];
+                              _goatPriceIsLowest = false;
+                            } else if (_goatSizeMap != null) {
+                              final sorted = _goatSizeMap!.values
+                                  .where((p) => p > 0)
+                                  .toList()
+                                ..sort();
+                              _goatPrice =
+                                  sorted.isEmpty ? null : sorted.first;
+                              _goatPriceIsLowest = true;
+                            }
+                          });
+                          _savePricesToDatabase();
+                        },
                         onRetailPriceChanged: (value) {
                           setState(() => _manualRetailPrice = value);
                         },

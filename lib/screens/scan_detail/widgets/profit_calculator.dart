@@ -21,6 +21,12 @@ class ProfitCalculator extends StatefulWidget {
   final String? scannedSize;
   final bool stockXPriceIsLowest;
   final bool goatPriceIsLowest;
+  final Map<String, double>? stockXSizeMap;
+  final Map<String, double>? goatSizeMap;
+  final String? selectedStockXSize;
+  final String? selectedGoatSize;
+  final ValueChanged<String?>? onStockXSizeSelected;
+  final ValueChanged<String?>? onGoatSizeSelected;
   final ValueChanged<double?> onRetailPriceChanged;
   final VoidCallback onSavePrices;
 
@@ -42,6 +48,12 @@ class ProfitCalculator extends StatefulWidget {
     this.scannedSize,
     this.stockXPriceIsLowest = false,
     this.goatPriceIsLowest = false,
+    this.stockXSizeMap,
+    this.goatSizeMap,
+    this.selectedStockXSize,
+    this.selectedGoatSize,
+    this.onStockXSizeSelected,
+    this.onGoatSizeSelected,
     required this.onRetailPriceChanged,
     required this.onSavePrices,
   });
@@ -344,6 +356,9 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             paymentProcessingFeeRate: widget.stockXPrice != null ? 0.03 : null,
             scannedSize: widget.scannedSize,
             isLowestAsk: widget.stockXPriceIsLowest,
+            sizeMap: widget.stockXSizeMap,
+            selectedSize: widget.selectedStockXSize,
+            onSizeSelected: widget.onStockXSizeSelected,
           ),
           const SizedBox(height: 12),
 
@@ -364,6 +379,9 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             commissionFeeRate: widget.goatPrice != null ? 0.095 : null,
             scannedSize: widget.scannedSize,
             isLowestAsk: widget.goatPriceIsLowest,
+            sizeMap: widget.goatSizeMap,
+            selectedSize: widget.selectedGoatSize,
+            onSizeSelected: widget.onGoatSizeSelected,
           ),
         ],
       ),
