@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 const String kAnnualProductId = 'sneaker_scanner_annual';
 
@@ -16,9 +15,7 @@ class SubscriptionService extends ChangeNotifier {
   static final SubscriptionService instance = SubscriptionService._();
   SubscriptionService._();
 
-  static const _secureStorage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-  );
+  static const _storeKitChannel = MethodChannel('com.sneakerscanner/storekit');
 
   SubscriptionStatus _status = SubscriptionStatus.loading;
   ProductDetails? _annualProduct;
@@ -30,7 +27,8 @@ class SubscriptionService extends ChangeNotifier {
   bool _lastActivationWasRestore = false;
   bool _initialized = false;
 
-  bool _hasEverSubscribed = false;
+  // null = unknown (not yet checked), true = eligible, false = not eligible
+  bool? _isEligibleForTrial;
 
   // Launch check state — resolves once StoreKit confirms status on startup.
   bool _isLaunchCheck = false;
@@ -69,18 +67,14 @@ class SubscriptionService extends ChangeNotifier {
     if (_initialized) return;
     _initialized = true;
 
-    final keychainValue = await _secureStorage.read(key: 'has_ever_subscribed');
-    if (keychainValue != null) {
-      _hasEverSubscribed = keychainValue == 'true';
+    // Query StoreKit for intro offer eligibility (iOS only). Fire this off
+    // concurrently — result is available before the 1.5 s launch check timeout.
+    if (Platform.isIOS) {
+      _checkTrialEligibility().then((eligible) {
+        _isEligibleForTrial = eligible;
+      });
     } else {
-      // One-time migration from SharedPreferences (used before Keychain switch).
-      final prefs = await SharedPreferences.getInstance();
-      final legacyValue = prefs.getBool('has_ever_subscribed') ?? false;
-      _hasEverSubscribed = legacyValue;
-      if (legacyValue) {
-        await _secureStorage.write(key: 'has_ever_subscribed', value: 'true');
-        await prefs.remove('has_ever_subscribed');
-      }
+      _isEligibleForTrial = true;
     }
 
     // Set up purchase stream listener FIRST.
@@ -101,6 +95,21 @@ class SubscriptionService extends ChangeNotifier {
     // Results arrive via the purchase stream. _startLaunchCheck is non-blocking;
     // call awaitLaunchCheck() to wait for resolution.
     _startLaunchCheck();
+  }
+
+  Future<bool> _checkTrialEligibility() async {
+    try {
+      final result = await _storeKitChannel.invokeMethod<bool>(
+        'checkTrialEligibility',
+        kAnnualProductId,
+      );
+      return result ?? true;
+    } catch (e) {
+      debugPrint(
+        '[IAP] Trial eligibility check failed (defaulting to eligible): $e',
+      );
+      return true;
+    }
   }
 
   /// Awaitable by splash / login screens. Resolves once the launch subscription
@@ -134,22 +143,16 @@ class SubscriptionService extends ChangeNotifier {
     _isLaunchCheck = false;
     _launchCheckTimer?.cancel();
     _launchCheckTimer = null;
-    // If no active subscription found but user has subscribed before, treat as lapsed.
-    if (resolvedStatus == SubscriptionStatus.freeTrial && _hasEverSubscribed) {
+    // If no active subscription and StoreKit says not eligible for intro offer,
+    // treat as lapsed subscriber (previously subscribed, trial already used).
+    if (resolvedStatus == SubscriptionStatus.freeTrial &&
+        _isEligibleForTrial == false) {
       _status = SubscriptionStatus.cancelled;
     } else {
       _status = resolvedStatus;
     }
-    // Clear any purchase state that may have triggered this recheck (e.g. a
-    // 'restored' event received during a user-initiated purchase attempt).
-    // This is a no-op for the normal initial launch check path.
     _purchasePending = false;
     _purchaseInitiated = false;
-    // Persist flag when active subscription confirmed via silent launch check.
-    if (resolvedStatus == SubscriptionStatus.active && !_hasEverSubscribed) {
-      _hasEverSubscribed = true;
-      _secureStorage.write(key: 'has_ever_subscribed', value: 'true');
-    }
     notifyListeners();
     if (!(_launchCheckCompleter?.isCompleted ?? true)) {
       _launchCheckCompleter!.complete();
@@ -246,7 +249,9 @@ class SubscriptionService extends ChangeNotifier {
           // genuinely active (case b), the recheck will confirm it and navigate the
           // user forward. If it was stale (case a), the recheck timer will fire and
           // the user stays on the paywall.
-          debugPrint('[IAP] Purchased event without pending — completing and rechecking status');
+          debugPrint(
+            '[IAP] Purchased event without pending — completing and rechecking status',
+          );
           _purchaseInitiated = false;
           InAppPurchase.instance.completePurchase(purchase);
           _startLaunchCheck();
@@ -270,7 +275,9 @@ class SubscriptionService extends ChangeNotifier {
           // If the sub is genuinely active the recheck will confirm it;
           // if it is expired the recheck timer will fire and leave the
           // status as cancelled/freeTrial.
-          debugPrint('[IAP] Restored event during purchase attempt — rechecking status');
+          debugPrint(
+            '[IAP] Restored event during purchase attempt — rechecking status',
+          );
           _purchaseInitiated = false;
           InAppPurchase.instance.completePurchase(purchase);
           _startLaunchCheck();
@@ -335,16 +342,11 @@ class SubscriptionService extends ChangeNotifier {
 
   Future<void> _validateAndFinish(PurchaseDetails purchase) async {
     _lastActivationWasRestore = purchase.status == PurchaseStatus.restored;
-    // Set status directly in memory — StoreKit/Play Billing is the source of truth.
     _status = SubscriptionStatus.active;
     _purchaseCancelled = false;
     _purchasePending = false;
     _purchaseInitiated = false;
     _sawPendingEvent = false;
-    if (!_hasEverSubscribed) {
-      _hasEverSubscribed = true;
-      _secureStorage.write(key: 'has_ever_subscribed', value: 'true');
-    }
     notifyListeners();
     await InAppPurchase.instance.completePurchase(purchase);
     _validateInBackground(purchase);
@@ -408,7 +410,6 @@ class SubscriptionService extends ChangeNotifier {
       db.child('scans').child(uid).remove(),
     ]);
 
-    _secureStorage.delete(key: 'has_ever_subscribed');
     reset();
   }
 
@@ -428,6 +429,7 @@ class SubscriptionService extends ChangeNotifier {
     _purchaseCancelled = false;
     _purchaseError = null;
     _sawPendingEvent = false;
+    _isEligibleForTrial = null;
   }
 
   @override
