@@ -422,7 +422,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
 
                   // Subtitle
                   Text(
-                    'Unlock unlimited scans and real-time market prices',
+                    'Scan sneakers. Find profitable flips instantly.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
                       fontSize: 14,
@@ -500,6 +500,15 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             color: Colors.grey[400],
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'One flip can pay for the whole year',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: const Color(0xFF646CFF),
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],

@@ -34,7 +34,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   }
 
   void _next() {
-    if (_currentPage < 2) {
+    if (_currentPage < 3) {
       _pageController.nextPage(
         duration: const Duration(milliseconds: 350),
         curve: Curves.easeInOut,
@@ -53,9 +53,9 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     final Widget destination = SubscriptionService.instance.canScan
         ? const LoginScreen()
         : const PaywallPage(isCloseable: false, isPreLogin: true);
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => destination),
-    );
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => destination));
   }
 
   @override
@@ -79,7 +79,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
             // Page indicator dots
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(3, (i) {
+              children: List.generate(4, (i) {
                 final active = i == _currentPage;
                 return AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
@@ -104,6 +104,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                   _Page1(onNext: _next),
                   _Page2(onNext: _next),
                   _Page3(onNext: _next),
+                  _Page4(onNext: _next),
                 ],
               ),
             ),
@@ -229,9 +230,10 @@ class _Page1State extends State<_Page1> with TickerProviderStateMixin {
         curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
       ),
     );
-    _scanPos = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _scanCtrl, curve: Curves.easeInOut),
-    );
+    _scanPos = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _scanCtrl, curve: Curves.easeInOut));
 
     Future.delayed(const Duration(milliseconds: 300), () {
       if (!mounted) return;
@@ -527,23 +529,16 @@ class _Page2State extends State<_Page2> with SingleTickerProviderStateMixin {
                 final slideStart = 0.05 + i * 0.22;
                 final slideEnd = slideStart + 0.25;
                 final t = _ctrl.value;
-                final slideP =
-                    ((t - slideStart) / (slideEnd - slideStart)).clamp(
-                      0.0,
-                      1.0,
-                    );
+                final slideP = ((t - slideStart) / (slideEnd - slideStart))
+                    .clamp(0.0, 1.0);
                 // Ease the slide progress
                 final easedSlide = Curves.easeOut.transform(slideP);
 
                 final priceStart = 0.35 + i * 0.18;
                 final priceEnd = priceStart + 0.25;
-                final priceP =
-                    ((t - priceStart) / (priceEnd - priceStart)).clamp(
-                      0.0,
-                      1.0,
-                    );
-                final displayPrice =
-                    (_kPlatforms[i].price * priceP).round();
+                final priceP = ((t - priceStart) / (priceEnd - priceStart))
+                    .clamp(0.0, 1.0);
+                final displayPrice = (_kPlatforms[i].price * priceP).round();
 
                 return Opacity(
                   opacity: easedSlide,
@@ -640,16 +635,13 @@ class _Page3State extends State<_Page3> with SingleTickerProviderStateMixin {
       vsync: this,
     );
 
-    _scale = TweenSequence([
-      TweenSequenceItem(tween: Tween(begin: 0.3, end: 1.15), weight: 60),
-      TweenSequenceItem(tween: Tween(begin: 1.15, end: 0.95), weight: 20),
-      TweenSequenceItem(tween: Tween(begin: 0.95, end: 1.0), weight: 20),
-    ]).animate(
-      CurvedAnimation(
-        parent: _ctrl,
-        curve: const Interval(0.0, 0.85),
-      ),
-    );
+    _scale = TweenSequence(
+      [
+        TweenSequenceItem(tween: Tween(begin: 0.3, end: 1.15), weight: 60),
+        TweenSequenceItem(tween: Tween(begin: 1.15, end: 0.95), weight: 20),
+        TweenSequenceItem(tween: Tween(begin: 0.95, end: 1.0), weight: 20),
+      ],
+    ).animate(CurvedAnimation(parent: _ctrl, curve: const Interval(0.0, 0.85)));
     _profitFade = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _ctrl,
@@ -770,6 +762,168 @@ class _PriceChip extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Page 4: Flip profit stats ─────────────────────────────────────────────────
+
+class _FlipCardData {
+  final String name;
+  final String profit;
+  const _FlipCardData(this.name, this.profit);
+}
+
+const _kFlipCards = [
+  _FlipCardData('Jordan 1 Retro', '+\$85'),
+  _FlipCardData('Yeezy Boost 350', '+\$110'),
+  _FlipCardData('Nike Dunk Low', '+\$47'),
+];
+
+class _Page4 extends StatefulWidget {
+  final VoidCallback onNext;
+  const _Page4({required this.onNext});
+
+  @override
+  State<_Page4> createState() => _Page4State();
+}
+
+class _Page4State extends State<_Page4> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) _ctrl.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _OnboardingPageLayout(
+      visual: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (context, _) {
+          final t = _ctrl.value;
+
+          // Stat ($40 – $120) fade-in
+          final statP = ((t - 0.62) / 0.25).clamp(0.0, 1.0);
+          final statEased = Curves.easeOut.transform(statP);
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Profit range stat with glow
+              Opacity(
+                opacity: statEased,
+                child: Text(
+                  '\$40 – \$120',
+                  style: GoogleFonts.poppins(
+                    fontSize: 52,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF22C55E),
+                    height: 1,
+                    shadows: [
+                      Shadow(
+                        color: const Color(
+                          0xFF22C55E,
+                        ).withValues(alpha: 0.55 * statEased),
+                        blurRadius: 24,
+                      ),
+                      Shadow(
+                        color: const Color(
+                          0xFF22C55E,
+                        ).withValues(alpha: 0.25 * statEased),
+                        blurRadius: 48,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Flip cards stacking up
+              ...List.generate(_kFlipCards.length, (i) {
+                final start = 0.05 + i * 0.19;
+                final end = start + 0.22;
+                final p = ((t - start) / (end - start)).clamp(0.0, 1.0);
+                final eased = Curves.easeOut.transform(p);
+                return Opacity(
+                  opacity: eased,
+                  child: Transform.translate(
+                    offset: Offset(0, 18 * (1 - eased)),
+                    child: Container(
+                      width: 280,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 11,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1A1A2E),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white10),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF22C55E,
+                              ).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.directions_run_rounded,
+                              color: Color(0xFF22C55E),
+                              size: 16,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _kFlipCards[i].name,
+                              style: GoogleFonts.inter(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            _kFlipCards[i].profit,
+                            style: GoogleFonts.poppins(
+                              color: const Color(0xFF22C55E),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ],
+          );
+        },
+      ),
+      title: 'Average sneaker\nflip profit',
+      description: '',
+      buttonLabel: 'Next',
+      onNext: widget.onNext,
     );
   }
 }

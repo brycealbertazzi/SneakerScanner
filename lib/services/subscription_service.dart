@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const String kAnnualProductId = 'sneaker_scanner_annual';
@@ -15,12 +16,17 @@ class SubscriptionService extends ChangeNotifier {
   static final SubscriptionService instance = SubscriptionService._();
   SubscriptionService._();
 
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+
   SubscriptionStatus _status = SubscriptionStatus.loading;
   ProductDetails? _annualProduct;
   bool _purchasePending = false;
   bool _purchaseCancelled = false;
   String? _purchaseError;
   bool _purchaseInitiated = false;
+  bool _sawPendingEvent = false;
   bool _lastActivationWasRestore = false;
   bool _initialized = false;
 
@@ -63,8 +69,19 @@ class SubscriptionService extends ChangeNotifier {
     if (_initialized) return;
     _initialized = true;
 
-    final prefs = await SharedPreferences.getInstance();
-    _hasEverSubscribed = prefs.getBool('has_ever_subscribed') ?? false;
+    final keychainValue = await _secureStorage.read(key: 'has_ever_subscribed');
+    if (keychainValue != null) {
+      _hasEverSubscribed = keychainValue == 'true';
+    } else {
+      // One-time migration from SharedPreferences (used before Keychain switch).
+      final prefs = await SharedPreferences.getInstance();
+      final legacyValue = prefs.getBool('has_ever_subscribed') ?? false;
+      _hasEverSubscribed = legacyValue;
+      if (legacyValue) {
+        await _secureStorage.write(key: 'has_ever_subscribed', value: 'true');
+        await prefs.remove('has_ever_subscribed');
+      }
+    }
 
     // Set up purchase stream listener FIRST.
     _purchaseSubscription?.cancel();
@@ -123,12 +140,15 @@ class SubscriptionService extends ChangeNotifier {
     } else {
       _status = resolvedStatus;
     }
+    // Clear any purchase state that may have triggered this recheck (e.g. a
+    // 'restored' event received during a user-initiated purchase attempt).
+    // This is a no-op for the normal initial launch check path.
+    _purchasePending = false;
+    _purchaseInitiated = false;
     // Persist flag when active subscription confirmed via silent launch check.
     if (resolvedStatus == SubscriptionStatus.active && !_hasEverSubscribed) {
       _hasEverSubscribed = true;
-      SharedPreferences.getInstance().then(
-        (prefs) => prefs.setBool('has_ever_subscribed', true),
-      );
+      _secureStorage.write(key: 'has_ever_subscribed', value: 'true');
     }
     notifyListeners();
     if (!(_launchCheckCompleter?.isCompleted ?? true)) {
@@ -175,6 +195,7 @@ class SubscriptionService extends ChangeNotifier {
     _purchaseCancelled = false;
     _purchasePending = true;
     _purchaseInitiated = true;
+    _sawPendingEvent = false;
     notifyListeners();
 
     final param = PurchaseParam(productDetails: _annualProduct!);
@@ -207,11 +228,28 @@ class SubscriptionService extends ChangeNotifier {
   void _onPurchaseUpdate(List<PurchaseDetails> purchases) {
     for (final purchase in purchases) {
       if (purchase.status == PurchaseStatus.pending) {
+        if (_purchaseInitiated) _sawPendingEvent = true;
         _purchasePending = true;
         notifyListeners();
       } else if (purchase.status == PurchaseStatus.purchased) {
-        if (_purchaseInitiated) {
+        if (_purchaseInitiated && _sawPendingEvent) {
+          // Real new purchase — pending always precedes purchased for genuine transactions.
           _validateAndFinish(purchase);
+        } else if (_purchaseInitiated && !_sawPendingEvent) {
+          // Received 'purchased' without a preceding 'pending'. Two possible causes:
+          // (a) Stale unfinished transaction from a prior expired subscription,
+          //     delivered immediately when buyNonConsumable() is called.
+          // (b) Free trial subscription — Apple skips the pending phase when there
+          //     is no payment to process.
+          // We can't tell them apart here, so complete the transaction to clear it
+          // from StoreKit's queue, then run a fresh status recheck. If the sub is
+          // genuinely active (case b), the recheck will confirm it and navigate the
+          // user forward. If it was stale (case a), the recheck timer will fire and
+          // the user stays on the paywall.
+          debugPrint('[IAP] Purchased event without pending — completing and rechecking status');
+          _purchaseInitiated = false;
+          InAppPurchase.instance.completePurchase(purchase);
+          _startLaunchCheck();
         } else {
           // Stale unfinished transaction from a previous session — complete it
           // to clean up StoreKit's queue without activating the subscription.
@@ -223,6 +261,19 @@ class SubscriptionService extends ChangeNotifier {
           // Silent launch check — active subscription confirmed. No dialog.
           _completeLaunchCheck(SubscriptionStatus.active);
           InAppPurchase.instance.completePurchase(purchase);
+        } else if (_purchaseInitiated) {
+          // StoreKit returned 'restored' during a buy attempt instead of
+          // 'purchased'. This happens when there is a stale unfinished
+          // transaction in the queue — most commonly with expired sandbox
+          // subscriptions. Do NOT optimistically activate: complete the
+          // stale transaction to clear it, then do a fresh status recheck.
+          // If the sub is genuinely active the recheck will confirm it;
+          // if it is expired the recheck timer will fire and leave the
+          // status as cancelled/freeTrial.
+          debugPrint('[IAP] Restored event during purchase attempt — rechecking status');
+          _purchaseInitiated = false;
+          InAppPurchase.instance.completePurchase(purchase);
+          _startLaunchCheck();
         } else {
           // User-initiated restore from the Restore Purchases button.
           _validateAndFinish(purchase);
@@ -236,6 +287,7 @@ class SubscriptionService extends ChangeNotifier {
           final wasPurchaseInitiated = _purchaseInitiated;
           _purchasePending = false;
           _purchaseInitiated = false;
+          _sawPendingEvent = false;
           InAppPurchase.instance.completePurchase(purchase);
           final isCancellation = _isCancellationError(purchase.error);
           final isAlreadyOwned = _isAlreadyOwnedError(purchase.error);
@@ -256,6 +308,7 @@ class SubscriptionService extends ChangeNotifier {
       } else if (purchase.status == PurchaseStatus.canceled) {
         _purchasePending = false;
         _purchaseInitiated = false;
+        _sawPendingEvent = false;
         _purchaseCancelled = true;
         notifyListeners();
         InAppPurchase.instance.completePurchase(purchase);
@@ -287,11 +340,10 @@ class SubscriptionService extends ChangeNotifier {
     _purchaseCancelled = false;
     _purchasePending = false;
     _purchaseInitiated = false;
+    _sawPendingEvent = false;
     if (!_hasEverSubscribed) {
       _hasEverSubscribed = true;
-      SharedPreferences.getInstance().then(
-        (prefs) => prefs.setBool('has_ever_subscribed', true),
-      );
+      _secureStorage.write(key: 'has_ever_subscribed', value: 'true');
     }
     notifyListeners();
     await InAppPurchase.instance.completePurchase(purchase);
@@ -356,9 +408,7 @@ class SubscriptionService extends ChangeNotifier {
       db.child('scans').child(uid).remove(),
     ]);
 
-    SharedPreferences.getInstance().then(
-      (prefs) => prefs.remove('has_ever_subscribed'),
-    );
+    _secureStorage.delete(key: 'has_ever_subscribed');
     reset();
   }
 
@@ -377,6 +427,7 @@ class SubscriptionService extends ChangeNotifier {
     _purchasePending = false;
     _purchaseCancelled = false;
     _purchaseError = null;
+    _sawPendingEvent = false;
   }
 
   @override

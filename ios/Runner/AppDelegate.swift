@@ -4,35 +4,29 @@ import Vision
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
+  let flutterEngine = FlutterEngine(name: "SneakerScannerEngine")
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
-    if let controller = window?.rootViewController as? FlutterViewController {
-      setupOcrChannel(on: controller)
-    }
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    flutterEngine.run()
+    GeneratedPluginRegistrant.register(with: flutterEngine)
+    return true
   }
 
-  private func setupOcrChannel(on controller: FlutterViewController) {
-    let channel = FlutterMethodChannel(
-      name: "com.sneakerscanner/ocr",
-      binaryMessenger: controller.binaryMessenger
+  override func application(
+    _ application: UIApplication,
+    configurationForConnecting connectingSceneSession: UISceneSession,
+    options: UIScene.ConnectionOptions
+  ) -> UISceneConfiguration {
+    return UISceneConfiguration(
+      name: "Default Configuration",
+      sessionRole: connectingSceneSession.role
     )
-    channel.setMethodCallHandler { call, result in
-      guard call.method == "recognizeText",
-            let args = call.arguments as? [String: Any],
-            let imagePath = args["imagePath"] as? String
-      else {
-        result(FlutterMethodNotImplemented)
-        return
-      }
-      self.recognizeText(imagePath: imagePath, result: result)
-    }
   }
 
-  private func recognizeText(imagePath: String, result: @escaping FlutterResult) {
+  func recognizeText(imagePath: String, result: @escaping FlutterResult) {
     guard let image = UIImage(contentsOfFile: imagePath),
           let cgImage = image.cgImage
     else {
@@ -52,9 +46,7 @@ import Vision
       result(text)
     }
 
-    // Highest accuracy model — critical for alphanumeric SKU codes.
     request.recognitionLevel = .accurate
-    // Disable language correction so it never "fixes" 0→O, 1→I, etc.
     request.usesLanguageCorrection = false
     request.recognitionLanguages = ["en-US"]
 
