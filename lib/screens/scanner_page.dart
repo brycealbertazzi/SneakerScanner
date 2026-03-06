@@ -1071,7 +1071,7 @@ class _ScannerPageState extends State<ScannerPage>
         child: Column(
           children: [
             Text(
-              'Sneaker Scanner',
+              'SneakScan',
               style: GoogleFonts.poppins(
                 fontSize: 28,
                 fontWeight: FontWeight.w700,

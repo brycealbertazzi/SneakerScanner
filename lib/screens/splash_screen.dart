@@ -160,7 +160,7 @@ class _SplashScreenState extends State<SplashScreen>
                       ),
                       const SizedBox(height: 32),
                       Text(
-                        'Sneaker Scanner',
+                        'SneakScan',
                         style: GoogleFonts.poppins(
                           fontSize: 32,
                           fontWeight: FontWeight.w700,

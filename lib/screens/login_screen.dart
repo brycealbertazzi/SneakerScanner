@@ -50,9 +50,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final Widget destination = sub.canScan
         ? const MainScreen()
         : const PaywallPage(isCloseable: false);
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => destination),
-    );
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => destination));
   }
 
   Future<void> _signInWithGoogle() async {
@@ -162,9 +162,10 @@ class _LoginScreenState extends State<LoginScreen> {
       final givenName = appleCredential.givenName;
       final familyName = appleCredential.familyName;
       if (givenName != null || familyName != null) {
-        final fullName = [givenName, familyName]
-            .where((s) => s != null && s.isNotEmpty)
-            .join(' ');
+        final fullName = [
+          givenName,
+          familyName,
+        ].where((s) => s != null && s.isNotEmpty).join(' ');
         if (fullName.isNotEmpty) {
           await FirebaseAuth.instance.currentUser?.updateDisplayName(fullName);
         }
@@ -297,7 +298,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 32),
                   Text(
-                    'Sneaker Scanner',
+                    'SneakScan',
                     style: GoogleFonts.poppins(
                       fontSize: 28,
                       fontWeight: FontWeight.w700,

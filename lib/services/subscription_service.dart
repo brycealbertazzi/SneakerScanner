@@ -7,7 +7,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
-const String kAnnualProductId = 'sneaker_scanner_annual';
+const String kAnnualProductId = 'sneakscan_annual';
 
 enum SubscriptionStatus { loading, freeTrial, active, expired, cancelled }
 

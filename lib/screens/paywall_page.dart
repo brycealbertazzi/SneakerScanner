@@ -279,7 +279,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 16),
               Text(
-                'Thank you for subscribing to Sneaker Scanner!',
+                'Thank you for subscribing to SneakScan!',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   fontSize: 18,
@@ -409,7 +409,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
 
                   // Headline
                   Text(
-                    'Sneaker Scanner\nUnlimited',
+                    'SneakScan\nUnlimited',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(
                       fontSize: 30,
