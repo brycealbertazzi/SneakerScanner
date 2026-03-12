@@ -128,7 +128,7 @@ class SubscriptionService extends ChangeNotifier {
     _launchCheckCompleter = Completer<void>();
 
     // Fallback: if StoreKit delivers no events within 1.5 s, no active subscription.
-    _launchCheckTimer = Timer(const Duration(milliseconds: 1500), () {
+    _launchCheckTimer = Timer(const Duration(milliseconds: 4000), () {
       _completeLaunchCheck(SubscriptionStatus.freeTrial);
     });
 

@@ -68,7 +68,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
       // keep the spinner until the success dialog. The timer only fires when
       // StoreKit silently drops the cancellation event (known iOS issue).
       _cancelFallbackTimer?.cancel();
-      _cancelFallbackTimer = Timer(const Duration(milliseconds: 1500), () {
+      _cancelFallbackTimer = Timer(const Duration(milliseconds: 4000), () {
         if (mounted) _sub.forceCancelPending();
       });
     }
