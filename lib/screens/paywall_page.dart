@@ -361,12 +361,15 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final pending = _sub.purchasePending;
-    final buttonLabel = _sub.isSubscribed
-        ? null // subscribed — shows badge instead
-        : _sub.isLapsedSubscriber
-        ? 'Get Unlimited Scans'
-        : 'Start Free Trial';
+    final isStatusLoading = _sub.status == SubscriptionStatus.loading;
+    final pending = _sub.purchasePending || isStatusLoading;
+    final buttonLabel = isStatusLoading
+        ? null // still determining status — show spinner
+        : _sub.isSubscribed
+            ? null // subscribed — shows badge instead
+            : _sub.isLapsedSubscriber
+                ? 'Get Unlimited Scans'
+                : 'Start Free Trial';
 
     return Scaffold(
       backgroundColor: Colors.black,

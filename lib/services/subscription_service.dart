@@ -24,6 +24,7 @@ class SubscriptionService extends ChangeNotifier {
   String? _purchaseError;
   bool _purchaseInitiated = false;
   bool _sawPendingEvent = false;
+  bool _staleTxCleared = false; // true after first stale-tx clear during a purchase attempt
   bool _lastActivationWasRestore = false;
   bool _initialized = false;
 
@@ -72,6 +73,13 @@ class SubscriptionService extends ChangeNotifier {
     if (Platform.isIOS) {
       _checkTrialEligibility().then((eligible) {
         _isEligibleForTrial = eligible;
+        // If the user is not eligible for a trial, they are a lapsed subscriber.
+        // We know this as soon as eligibility resolves — don't wait for the full
+        // launch check to update the UI.
+        if (!eligible && _status == SubscriptionStatus.loading) {
+          _status = SubscriptionStatus.cancelled;
+          notifyListeners();
+        }
       });
     } else {
       _isEligibleForTrial = true;
@@ -143,6 +151,13 @@ class SubscriptionService extends ChangeNotifier {
     _isLaunchCheck = false;
     _launchCheckTimer?.cancel();
     _launchCheckTimer = null;
+    if (!(_launchCheckCompleter?.isCompleted ?? true)) {
+      _launchCheckCompleter!.complete();
+    }
+    _launchCheckCompleter = null;
+    // A purchase is in flight — don't touch status or purchase flags.
+    // _validateAndFinish / error handlers will resolve the outcome.
+    if (_purchaseInitiated) return;
     // If no active subscription and StoreKit says not eligible for intro offer,
     // treat as lapsed subscriber (previously subscribed, trial already used).
     if (resolvedStatus == SubscriptionStatus.freeTrial &&
@@ -152,12 +167,7 @@ class SubscriptionService extends ChangeNotifier {
       _status = resolvedStatus;
     }
     _purchasePending = false;
-    _purchaseInitiated = false;
     notifyListeners();
-    if (!(_launchCheckCompleter?.isCompleted ?? true)) {
-      _launchCheckCompleter!.complete();
-    }
-    _launchCheckCompleter = null;
   }
 
   Future<void> _loadProducts() async {
@@ -199,6 +209,7 @@ class SubscriptionService extends ChangeNotifier {
     _purchasePending = true;
     _purchaseInitiated = true;
     _sawPendingEvent = false;
+    _staleTxCleared = false;
     notifyListeners();
 
     final param = PurchaseParam(productDetails: _annualProduct!);
@@ -244,17 +255,53 @@ class SubscriptionService extends ChangeNotifier {
           //     delivered immediately when buyNonConsumable() is called.
           // (b) Free trial subscription — Apple skips the pending phase when there
           //     is no payment to process.
-          // We can't tell them apart here, so complete the transaction to clear it
-          // from StoreKit's queue, then run a fresh status recheck. If the sub is
-          // genuinely active (case b), the recheck will confirm it and navigate the
-          // user forward. If it was stale (case a), the recheck timer will fire and
-          // the user stays on the paywall.
+          // If the user is not eligible for a trial they cannot be in case (b),
+          // so treat it as a stale transaction: clear it and retry the purchase
+          // so the Apple payment sheet actually appears. Otherwise recheck status
+          // — if the sub is genuinely active (free trial, case b) the recheck
+          // will confirm it; if stale (case a) the timer fires and user retries.
           debugPrint(
-            '[IAP] Purchased event without pending — completing and rechecking status',
+            '[IAP] Purchased event without pending — isEligibleForTrial=$_isEligibleForTrial',
           );
-          _purchaseInitiated = false;
-          InAppPurchase.instance.completePurchase(purchase);
-          _startLaunchCheck();
+          if (_isEligibleForTrial == false) {
+            if (_staleTxCleared) {
+              // Already cleared a stale tx — this purchased event is the real
+              // new subscription. Validate it.
+              debugPrint(
+                '[IAP] Purchased (no pending) after stale-tx retry — activating subscription',
+              );
+              _staleTxCleared = false;
+              _validateAndFinish(purchase);
+            } else if (_annualProduct != null) {
+              // Lapsed subscriber: stale transaction — clear and retry.
+              debugPrint('[IAP] Lapsed subscriber stale tx — retrying purchase');
+              _staleTxCleared = true;
+              _sawPendingEvent = false;
+              InAppPurchase.instance.completePurchase(purchase);
+              final param = PurchaseParam(productDetails: _annualProduct!);
+              Future.microtask(() async {
+                try {
+                  await InAppPurchase.instance.buyNonConsumable(
+                    purchaseParam: param,
+                  );
+                } catch (e) {
+                  _purchaseError = e.toString();
+                  _purchasePending = false;
+                  _purchaseInitiated = false;
+                  _staleTxCleared = false;
+                  notifyListeners();
+                }
+              });
+            } else {
+              InAppPurchase.instance.completePurchase(purchase);
+              _purchaseInitiated = false;
+              _startLaunchCheck();
+            }
+          } else {
+            InAppPurchase.instance.completePurchase(purchase);
+            _purchaseInitiated = false;
+            _startLaunchCheck();
+          }
         } else {
           // Stale unfinished transaction from a previous session — complete it
           // to clean up StoreKit's queue without activating the subscription.
@@ -267,20 +314,49 @@ class SubscriptionService extends ChangeNotifier {
           _completeLaunchCheck(SubscriptionStatus.active);
           InAppPurchase.instance.completePurchase(purchase);
         } else if (_purchaseInitiated) {
-          // StoreKit returned 'restored' during a buy attempt instead of
-          // 'purchased'. This happens when there is a stale unfinished
-          // transaction in the queue — most commonly with expired sandbox
-          // subscriptions. Do NOT optimistically activate: complete the
-          // stale transaction to clear it, then do a fresh status recheck.
-          // If the sub is genuinely active the recheck will confirm it;
-          // if it is expired the recheck timer will fire and leave the
-          // status as cancelled/freeTrial.
-          debugPrint(
-            '[IAP] Restored event during purchase attempt — rechecking status',
-          );
-          _purchaseInitiated = false;
-          InAppPurchase.instance.completePurchase(purchase);
-          _startLaunchCheck();
+          if (_staleTxCleared) {
+            // Already cleared a stale tx this attempt — this 'restored' is the
+            // real newly-activated subscription (Apple delivers restored for
+            // re-subscriptions to previously-owned products). Validate it.
+            debugPrint(
+              '[IAP] Restored event after stale-tx retry — activating subscription',
+            );
+            _staleTxCleared = false;
+            _validateAndFinish(purchase);
+          } else {
+            // First restored event during purchase — stale unfinished transaction
+            // from a prior expired subscription delivered before the payment sheet.
+            // Clear it and retry so the Apple payment sheet actually appears.
+            debugPrint(
+              '[IAP] Restored event during purchase attempt — clearing stale transaction and retrying purchase',
+            );
+            _staleTxCleared = true;
+            _sawPendingEvent = false;
+            InAppPurchase.instance.completePurchase(purchase);
+            if (_annualProduct != null) {
+              final param = PurchaseParam(productDetails: _annualProduct!);
+              Future.microtask(() async {
+                try {
+                  await InAppPurchase.instance.buyNonConsumable(
+                    purchaseParam: param,
+                  );
+                } catch (e) {
+                  _purchaseError = e.toString();
+                  _purchasePending = false;
+                  _purchaseInitiated = false;
+                  _staleTxCleared = false;
+                  notifyListeners();
+                }
+              });
+            } else {
+              _purchaseInitiated = false;
+              _purchasePending = false;
+              _staleTxCleared = false;
+              _purchaseError =
+                  'Product not available. Check your App Store connection and try again.';
+              notifyListeners();
+            }
+          }
         } else {
           // User-initiated restore from the Restore Purchases button.
           _validateAndFinish(purchase);
@@ -295,6 +371,7 @@ class SubscriptionService extends ChangeNotifier {
           _purchasePending = false;
           _purchaseInitiated = false;
           _sawPendingEvent = false;
+          _staleTxCleared = false;
           InAppPurchase.instance.completePurchase(purchase);
           final isCancellation = _isCancellationError(purchase.error);
           final isAlreadyOwned = _isAlreadyOwnedError(purchase.error);
@@ -316,6 +393,7 @@ class SubscriptionService extends ChangeNotifier {
         _purchasePending = false;
         _purchaseInitiated = false;
         _sawPendingEvent = false;
+        _staleTxCleared = false;
         _purchaseCancelled = true;
         notifyListeners();
         InAppPurchase.instance.completePurchase(purchase);
@@ -429,6 +507,7 @@ class SubscriptionService extends ChangeNotifier {
     _purchaseCancelled = false;
     _purchaseError = null;
     _sawPendingEvent = false;
+    _staleTxCleared = false;
     _isEligibleForTrial = null;
   }
 
