@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:in_app_review/in_app_review.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart' show routeObserver;
 import '../models/scan_data.dart';
@@ -532,6 +534,23 @@ class _ScannerPageState extends State<ScannerPage>
     return false;
   }
 
+  /// Increments the lifetime scan count and, on the 3rd scan, requests an
+  /// App Store review via the native StoreKit prompt. Apple's own throttle
+  /// (max 3 prompts per year) prevents over-asking — we just call it and let
+  /// the OS decide whether to display the sheet.
+  Future<void> _maybeRequestReview() async {
+    if (!Platform.isIOS) return;
+    final prefs = await SharedPreferences.getInstance();
+    final count = (prefs.getInt('sneakscan_scan_count') ?? 0) + 1;
+    await prefs.setInt('sneakscan_scan_count', count);
+    if (count == 3) {
+      final review = InAppReview.instance;
+      if (await review.isAvailable()) {
+        await review.requestReview();
+      }
+    }
+  }
+
   Future<void> _captureAndProcess() async {
     try {
       final XFile? photo = await _imagePicker.pickImage(
@@ -593,6 +612,7 @@ class _ScannerPageState extends State<ScannerPage>
               ),
             ),
           );
+          await _maybeRequestReview();
           if (mounted && result == 'noResults') {
             _showNoResultsModal(
               scanData,
@@ -653,6 +673,7 @@ class _ScannerPageState extends State<ScannerPage>
             ),
           ),
         );
+        await _maybeRequestReview();
         if (mounted && result == 'noResults') {
           _showNoResultsModal(data);
         } else if (mounted && result == 'scanAnother') {
@@ -772,6 +793,7 @@ class _ScannerPageState extends State<ScannerPage>
                                   ),
                                 ),
                               );
+                          await _maybeRequestReview();
                           if (mounted && result == 'noResults') {
                             _showNoResultsModal(data);
                           } else if (mounted && result == 'scanAnother') {
@@ -947,6 +969,7 @@ class _ScannerPageState extends State<ScannerPage>
                             ),
                           ),
                         );
+                        await _maybeRequestReview();
                         if (mounted && result == 'noResults') {
                           _showNoResultsModal(data);
                         } else if (mounted && result == 'scanAnother') {
