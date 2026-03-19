@@ -369,9 +369,9 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
         ? null // still determining status — show spinner
         : _sub.isSubscribed
             ? null // subscribed — shows badge instead
-            : _sub.isLapsedSubscriber
-                ? 'Get Unlimited Scans'
-                : 'Start Free Trial';
+            : Platform.isIOS
+                ? (_sub.isLapsedSubscriber ? 'Get Unlimited Scans' : 'Start Free Trial')
+                : 'Get Unlimited Scans';
 
     return Scaffold(
       backgroundColor: Colors.black,

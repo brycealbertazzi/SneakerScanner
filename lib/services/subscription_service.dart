@@ -67,14 +67,10 @@ class SubscriptionService extends ChangeNotifier {
     if (_initialized) return;
     _initialized = true;
 
-    // Query StoreKit for intro offer eligibility (iOS only). Fire this off
-    // concurrently — result is available before the launch check timeout.
+    // iOS only: query StoreKit intro offer eligibility to detect lapsed subscribers.
     if (Platform.isIOS) {
       _checkTrialEligibility().then((eligible) {
         _isEligibleForTrial = eligible;
-        // If the user is not eligible for a trial, they are a lapsed subscriber.
-        // We know this as soon as eligibility resolves — don't wait for the full
-        // launch check to update the UI.
         if (!eligible && _status == SubscriptionStatus.loading) {
           _status = SubscriptionStatus.cancelled;
           notifyListeners();
@@ -118,6 +114,7 @@ class SubscriptionService extends ChangeNotifier {
       return true;
     }
   }
+
 
   /// Awaitable by splash / login screens. Resolves once the launch subscription
   /// check completes (restored event or timeout), with a 3 s safety cap.
