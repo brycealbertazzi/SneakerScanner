@@ -279,14 +279,6 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
                     else
                       Row(
                         children: [
-                          Text(
-                            'Not Found',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
                           GestureDetector(
                             onTap: () =>
                                 setState(() => _showRetailEntry = true),

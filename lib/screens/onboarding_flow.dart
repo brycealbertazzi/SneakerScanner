@@ -123,6 +123,7 @@ class _OnboardingPageLayout extends StatelessWidget {
   final String description;
   final String buttonLabel;
   final VoidCallback onNext;
+  final double visualHeight;
 
   const _OnboardingPageLayout({
     required this.visual,
@@ -130,6 +131,7 @@ class _OnboardingPageLayout extends StatelessWidget {
     required this.description,
     required this.buttonLabel,
     required this.onNext,
+    this.visualHeight = 210,
   });
 
   @override
@@ -139,7 +141,7 @@ class _OnboardingPageLayout extends StatelessWidget {
       child: Column(
         children: [
           const Spacer(flex: 2),
-          SizedBox(height: 210, child: Center(child: visual)),
+          SizedBox(height: visualHeight, child: Center(child: visual)),
           const Spacer(flex: 2),
           Text(
             title,
@@ -545,10 +547,10 @@ class _Page2State extends State<_Page2> with SingleTickerProviderStateMixin {
                   child: Transform.translate(
                     offset: Offset(-28 * (1 - easedSlide), 0),
                     child: Container(
-                      margin: const EdgeInsets.only(bottom: 10),
+                      margin: const EdgeInsets.only(bottom: 8),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 14,
-                        vertical: 12,
+                        vertical: 10,
                       ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF1A1A2E),
@@ -920,6 +922,7 @@ class _Page4State extends State<_Page4> with SingleTickerProviderStateMixin {
           );
         },
       ),
+      visualHeight: 270,
       title: 'Average sneaker\nflip profit',
       description: '',
       buttonLabel: 'Next',

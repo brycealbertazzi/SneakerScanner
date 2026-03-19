@@ -1,3 +1,4 @@
+
 {
   "project_info": {
     "project_number": "773179554972",
@@ -8,34 +9,18 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:773179554972:android:c0a1af11e94628663e0159",
+        "mobilesdk_app_id": "1:773179554972:android:4c6162bb333066103e0159",
         "android_client_info": {
-          "package_name": "com.brycealbertazzi.sneaker_scanner"
+          "package_name": "com.albertazzilabs.sneakscan"
         }
       },
       "oauth_client": [
         {
-          "client_id": "773179554972-258jj6voffri32kvvh385b20b7m51t55.apps.googleusercontent.com",
+          "client_id": "773179554972-s6ovkpulluqs86qk17682ljtejiiku16.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.brycealbertazzi.sneaker_scanner",
-            "certificate_hash": "a7a10ddf456639d511775e371166cc99e76f9510"
-          }
-        },
-        {
-          "client_id": "773179554972-6t4m6rlt8ndsj7hccfahg9serju1a68j.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.brycealbertazzi.sneaker_scanner",
+            "package_name": "com.albertazzilabs.sneakscan",
             "certificate_hash": "56f2f79be02f381323056784c04e9812ff1619e3"
-          }
-        },
-        {
-          "client_id": "773179554972-nlhggn3168p0qv3b3p8sgfm3073pcel0.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.brycealbertazzi.sneaker_scanner",
-            "certificate_hash": "e6f7d8f176f6667e014057b4c30ffff61f4af1c7"
           }
         },
         {

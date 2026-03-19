@@ -355,7 +355,9 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
 
   String _priceLabel() {
     final product = _sub.annualProduct;
-    if (product != null) return product.price;
+    if (product != null && product.price.toLowerCase() != 'free') {
+      return product.price;
+    }
     return '\$59.99';
   }
 
