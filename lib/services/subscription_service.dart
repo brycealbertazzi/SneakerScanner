@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 const String kAnnualProductId = 'sneakscan_annual';
@@ -17,6 +16,7 @@ class SubscriptionService extends ChangeNotifier {
   SubscriptionService._();
 
   static const _storeKitChannel = MethodChannel('com.sneakerscanner/storekit');
+  static const _androidIdChannel = MethodChannel('com.sneakerscanner/androidid');
 
   SubscriptionStatus _status = SubscriptionStatus.loading;
   ProductDetails? _annualProduct;
@@ -70,7 +70,7 @@ class SubscriptionService extends ChangeNotifier {
 
     // Detect lapsed subscribers to show correct button label.
     // iOS: query StoreKit intro offer eligibility (from Apple).
-    // Android: check local SharedPreferences flag set on first purchase.
+    // Android: query Firebase androidTrialIds table by ANDROID_ID.
     if (Platform.isIOS) {
       _checkTrialEligibility().then((eligible) {
         _isEligibleForTrial = eligible;
@@ -80,10 +80,9 @@ class SubscriptionService extends ChangeNotifier {
         }
       });
     } else if (Platform.isAndroid) {
-      SharedPreferences.getInstance().then((prefs) {
-        final hadSub = prefs.getBool(_kHadSubscriptionKey) ?? false;
-        _isEligibleForTrial = !hadSub;
-        if (hadSub && _status == SubscriptionStatus.loading) {
+      _checkAndroidTrialEligibility().then((eligible) {
+        _isEligibleForTrial = eligible;
+        if (!eligible && _status == SubscriptionStatus.loading) {
           _status = SubscriptionStatus.cancelled;
           notifyListeners();
         }
@@ -112,7 +111,42 @@ class SubscriptionService extends ChangeNotifier {
     _startLaunchCheck();
   }
 
-  static const _kHadSubscriptionKey = 'sneakscan_had_subscription';
+  Future<String?> _getAndroidId() async {
+    try {
+      return await _androidIdChannel.invokeMethod<String>('getAndroidId');
+    } catch (e) {
+      debugPrint('[Android] Failed to get ANDROID_ID: $e');
+      return null;
+    }
+  }
+
+  Future<bool> _checkAndroidTrialEligibility() async {
+    final androidId = await _getAndroidId();
+    if (androidId == null) return true;
+    try {
+      final snapshot = await FirebaseDatabase.instance
+          .ref('androidTrialIds/$androidId')
+          .get();
+      return !snapshot.exists;
+    } catch (e) {
+      debugPrint('[Android] Failed to check trial eligibility (defaulting to eligible): $e');
+      return true;
+    }
+  }
+
+  Future<void> _recordAndroidSubscription() async {
+    final androidId = await _getAndroidId();
+    if (androidId == null) return;
+    try {
+      final ref = FirebaseDatabase.instance.ref('androidTrialIds/$androidId');
+      final snapshot = await ref.get();
+      if (snapshot.exists) return;
+      await ref.set({'startedAt': DateTime.now().toUtc().toIso8601String()});
+      debugPrint('[Android] Recorded subscription for ANDROID_ID: $androidId');
+    } catch (e) {
+      debugPrint('[Android] Failed to record subscription: $e');
+    }
+  }
 
   Future<bool> _checkTrialEligibility() async {
     try {
@@ -264,6 +298,7 @@ class SubscriptionService extends ChangeNotifier {
           // resolve status if no restored event follows.
           if (purchase.status == PurchaseStatus.restored) {
             debugPrint('[IAP] Launch check: active subscription confirmed');
+            if (Platform.isAndroid) _recordAndroidSubscription();
             _completeLaunchCheck(SubscriptionStatus.active);
           } else {
             debugPrint('[IAP] Launch check: draining stale transaction');
@@ -275,11 +310,7 @@ class SubscriptionService extends ChangeNotifier {
               purchase.status == PurchaseStatus.restored;
           _purchaseInitiated = false;
           _validateInBackground(purchase);
-          if (Platform.isAndroid) {
-            SharedPreferences.getInstance().then(
-              (prefs) => prefs.setBool(_kHadSubscriptionKey, true),
-            );
-          }
+          if (Platform.isAndroid) _recordAndroidSubscription();
           _startLaunchCheck();
         }
       } else if (purchase.status == PurchaseStatus.error) {
@@ -341,6 +372,10 @@ class SubscriptionService extends ChangeNotifier {
         return; // No Firebase user yet — skip server validation.
       }
       try {
+        String? androidId;
+        if (Platform.isAndroid) {
+          androidId = await _getAndroidId();
+        }
         final callable = FirebaseFunctions.instance.httpsCallable(
           'validatePurchase',
         );
@@ -354,6 +389,7 @@ class SubscriptionService extends ChangeNotifier {
               ? purchase.verificationData.serverVerificationData
               : null,
           'transactionId': purchase.purchaseID,
+          if (Platform.isAndroid && androidId != null) 'androidId': androidId,
         });
         debugPrint('[IAP] Background server validation successful');
       } catch (e) {

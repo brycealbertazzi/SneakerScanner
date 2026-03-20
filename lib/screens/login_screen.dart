@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
@@ -40,6 +41,18 @@ class _LoginScreenState extends State<LoginScreen> {
     final bytes = utf8.encode(input);
     final digest = sha256.convert(bytes);
     return digest.toString();
+  }
+
+  Future<void> _ensureUserRecord(String uid) async {
+    try {
+      final ref = FirebaseDatabase.instance.ref('users/$uid');
+      final snapshot = await ref.get();
+      if (!snapshot.exists) {
+        await ref.set({'createdAt': DateTime.now().toUtc().toIso8601String()});
+      }
+    } catch (e) {
+      debugPrint('[Auth] Failed to create user record: $e');
+    }
   }
 
   Future<void> _navigateAfterSignIn() async {
@@ -80,6 +93,7 @@ class _LoginScreenState extends State<LoginScreen> {
       // the correct Google avatar and display name.
       final fbUser = FirebaseAuth.instance.currentUser;
       if (fbUser != null) {
+        await _ensureUserRecord(fbUser.uid);
         final googleDisplayName = googleUser.displayName;
         final googlePhotoUrl = googleUser.photoUrl;
         if (googleDisplayName != null && googleDisplayName.isNotEmpty) {
@@ -158,6 +172,8 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('[Apple] Calling Firebase signInWithCredential...');
       await FirebaseAuth.instance.signInWithCredential(oauthCredential);
       debugPrint('[Apple] Firebase sign-in succeeded');
+      final appleUser = FirebaseAuth.instance.currentUser;
+      if (appleUser != null) await _ensureUserRecord(appleUser.uid);
       // Apple only provides name on the very first sign-in — capture and persist it
       final givenName = appleCredential.givenName;
       final familyName = appleCredential.familyName;
@@ -251,6 +267,7 @@ class _LoginScreenState extends State<LoginScreen> {
         googleCredential,
       );
       await userCredential.user!.linkWithCredential(appleCredential);
+      await _ensureUserRecord(userCredential.user!.uid);
 
       if (mounted) {
         await _navigateAfterSignIn();

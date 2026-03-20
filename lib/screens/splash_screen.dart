@@ -65,10 +65,32 @@ class _SplashScreenState extends State<SplashScreen>
         return;
       }
 
+      // Initialize subscription and wait for billing check to resolve.
+      await SubscriptionService.instance.initialize();
+      final sub = SubscriptionService.instance;
+      await sub.awaitLaunchCheck();
+
+      if (!mounted) return;
+
       final user = FirebaseAuth.instance.currentUser;
 
+      // Paywall before sign-in: if no active subscription, show hard paywall.
+      // isPreLogin = true when not signed in so after subscribing → Login → App.
+      if (!sub.canScan) {
+        Navigator.of(context).pushReplacement(
+          PageRouteBuilder(
+            pageBuilder: (context, animation, _) =>
+                PaywallPage(isCloseable: false, isPreLogin: user == null),
+            transitionsBuilder: (_, animation, a2, child) =>
+                FadeTransition(opacity: animation, child: child),
+            transitionDuration: const Duration(milliseconds: 500),
+          ),
+        );
+        return;
+      }
+
+      // Has active subscription — ensure signed in before reaching the app.
       if (user == null) {
-        if (!mounted) return;
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (context, animation, _) => const LoginScreen(),
@@ -80,21 +102,9 @@ class _SplashScreenState extends State<SplashScreen>
         return;
       }
 
-      // Initialize subscription service and wait for the StoreKit check to resolve.
-      await SubscriptionService.instance.initialize();
-      final sub = SubscriptionService.instance;
-      await sub.awaitLaunchCheck();
-
-      if (!mounted) return;
-
-      // Route based on subscription status.
-      final Widget destination = sub.canScan
-          ? const MainScreen()
-          : const PaywallPage(isCloseable: false);
-
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (context, animation, _) => destination,
+          pageBuilder: (context, animation, _) => const MainScreen(),
           transitionsBuilder: (_, animation, a2, child) =>
               FadeTransition(opacity: animation, child: child),
           transitionDuration: const Duration(milliseconds: 500),

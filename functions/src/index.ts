@@ -64,13 +64,14 @@ export const validatePurchase = onCall(
       throw new HttpsError("unauthenticated", "Must be signed in.");
     }
     const uid = request.auth.uid;
-    const {platform, productId, receiptData, purchaseToken, transactionId} =
+    const {platform, productId, receiptData, purchaseToken, transactionId, androidId} =
       request.data as {
         platform: string;
         productId: string;
         receiptData?: string;
         purchaseToken?: string;
         transactionId?: string;
+        androidId?: string;
       };
 
     if (!platform || !productId) {
@@ -88,14 +89,6 @@ export const validatePurchase = onCall(
       if (!result.valid) {
         throw new HttpsError("failed-precondition", "Apple receipt invalid.");
       }
-      await admin.database().ref(`users/${uid}/subscriptions/apple`).update({
-        status: "active",
-        platform: "apple",
-        productId,
-        originalTransactionId: result.originalTransactionId ?? transactionId ?? null,
-        expiresAt: result.expiresAt ?? null,
-        purchaseToken: null,
-      });
       return {success: true};
     }
 
@@ -117,14 +110,15 @@ export const validatePurchase = onCall(
           "Google purchase invalid."
         );
       }
-      await admin.database().ref(`users/${uid}/subscriptions/google`).update({
-        status: "active",
-        platform: "google",
-        productId,
-        purchaseToken,
-        originalTransactionId: null,
-        expiresAt: result.expiresAt ?? null,
-      });
+      // Upsert androidTrialIds so the device is marked as having had a trial,
+      // even if the client-side write failed.
+      if (androidId) {
+        const androidRef = admin.database().ref(`androidTrialIds/${androidId}`);
+        const snapshot = await androidRef.get();
+        if (!snapshot.exists()) {
+          await androidRef.set({startedAt: new Date().toISOString()});
+        }
+      }
       return {success: true};
     }
 
@@ -384,7 +378,7 @@ async function verifyGooglePurchase(
       serviceAccount.private_key
     );
 
-    const packageName = "com.brycealbertazzi.sneaker_scanner";
+    const packageName = "com.albertazzilabs.sneakscan";
     const url =
       `/androidpublisher/v3/applications/${packageName}/purchases/subscriptions/${productId}/tokens/${purchaseToken}`;
 

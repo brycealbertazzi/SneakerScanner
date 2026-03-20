@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/subscription_service.dart';
 import 'login_screen.dart';
+import 'main_screen.dart';
 import 'paywall_page.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -48,11 +50,15 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('has_seen_onboarding', true);
     if (!mounted) return;
-    // If the user already has an active subscription (e.g. restored a previous
-    // purchase during the analysis screen), skip the paywall entirely.
-    final Widget destination = SubscriptionService.instance.canScan
-        ? const LoginScreen()
-        : const PaywallPage(isCloseable: false, isPreLogin: true);
+    final user = FirebaseAuth.instance.currentUser;
+    final Widget destination;
+    if (SubscriptionService.instance.canScan) {
+      // Already subscribed — skip paywall, ensure signed in before app.
+      destination = user != null ? const MainScreen() : const LoginScreen();
+    } else {
+      // Not subscribed — paywall first, then sign in if needed.
+      destination = PaywallPage(isCloseable: false, isPreLogin: user == null);
+    }
     Navigator.of(
       context,
     ).pushReplacement(MaterialPageRoute(builder: (_) => destination));
