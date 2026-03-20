@@ -79,15 +79,18 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     _cancelFallbackTimer?.cancel();
     _cancelFallbackTimer = null;
     if (_sub.status == SubscriptionStatus.active) {
-      _isRestoring = false;
-      if (_wasActiveOnInit || _sub.lastActivationWasRestore) {
-        // Restored purchase (was already subscribed, or restore/re-sub flow).
+      if (_isRestoring) {
+        // User explicitly tapped Restore Purchases — show confirmation (iOS only).
+        _isRestoring = false;
         setState(() {});
         _showRestoredDialog();
-      } else {
+      } else if (!_wasActiveOnInit) {
         // New subscription — show success modal, then dismiss paywall.
         setState(() {});
         _showSuccessDialog();
+      } else {
+        // Already subscribed when paywall opened (e.g. background recheck) — do nothing.
+        setState(() {});
       }
       return;
     }
