@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 const String kAnnualProductId = 'sneakscan_annual';
@@ -67,11 +68,22 @@ class SubscriptionService extends ChangeNotifier {
     if (_initialized) return;
     _initialized = true;
 
-    // iOS only: query StoreKit intro offer eligibility to detect lapsed subscribers.
+    // Detect lapsed subscribers to show correct button label.
+    // iOS: query StoreKit intro offer eligibility (from Apple).
+    // Android: check local SharedPreferences flag set on first purchase.
     if (Platform.isIOS) {
       _checkTrialEligibility().then((eligible) {
         _isEligibleForTrial = eligible;
         if (!eligible && _status == SubscriptionStatus.loading) {
+          _status = SubscriptionStatus.cancelled;
+          notifyListeners();
+        }
+      });
+    } else if (Platform.isAndroid) {
+      SharedPreferences.getInstance().then((prefs) {
+        final hadSub = prefs.getBool(_kHadSubscriptionKey) ?? false;
+        _isEligibleForTrial = !hadSub;
+        if (hadSub && _status == SubscriptionStatus.loading) {
           _status = SubscriptionStatus.cancelled;
           notifyListeners();
         }
@@ -99,6 +111,8 @@ class SubscriptionService extends ChangeNotifier {
     // call awaitLaunchCheck() to wait for resolution.
     _startLaunchCheck();
   }
+
+  static const _kHadSubscriptionKey = 'sneakscan_had_subscription';
 
   Future<bool> _checkTrialEligibility() async {
     try {
@@ -261,6 +275,11 @@ class SubscriptionService extends ChangeNotifier {
               purchase.status == PurchaseStatus.restored;
           _purchaseInitiated = false;
           _validateInBackground(purchase);
+          if (Platform.isAndroid) {
+            SharedPreferences.getInstance().then(
+              (prefs) => prefs.setBool(_kHadSubscriptionKey, true),
+            );
+          }
           _startLaunchCheck();
         }
       } else if (purchase.status == PurchaseStatus.error) {

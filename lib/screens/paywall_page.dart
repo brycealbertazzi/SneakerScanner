@@ -371,336 +371,395 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     final buttonLabel = isStatusLoading
         ? null // still determining status — show spinner
         : _sub.isSubscribed
-            ? null // subscribed — shows badge instead
-            : Platform.isIOS
-                ? (_sub.isLapsedSubscriber ? 'Get Unlimited Scans' : 'Start Free Trial')
-                : 'Get Unlimited Scans';
+        ? null // subscribed — shows badge instead
+        : _sub.isLapsedSubscriber
+        ? 'Get Unlimited Scans'
+        : 'Start Free Trial';
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Stack(
           children: [
-            // Main content
-            SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28),
-              child: Column(
-                children: [
-                  const SizedBox(height: 60),
-
-                  // Icon
-                  Container(
-                    width: 88,
-                    height: 88,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(22),
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color(0xFF646CFF), Color(0xFF9B59B6)],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF646CFF).withValues(alpha: 0.4),
-                          blurRadius: 24,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.camera_enhance_rounded,
-                      color: Colors.white,
-                      size: 44,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Headline
-                  Text(
-                    'SneakScan\nUnlimited',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      height: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Subtitle
-                  Text(
-                    'Scan sneakers. Find profitable flips instantly.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      color: Colors.grey[400],
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Feature list
-                  _FeatureRow(
-                    icon: Icons.all_inclusive_rounded,
-                    iconColor: const Color(0xFF646CFF),
-                    text: 'Unlimited scans',
-                  ),
-                  const SizedBox(height: 14),
-                  _FeatureRow(
-                    icon: Icons.trending_up_rounded,
-                    iconColor: Colors.green,
-                    text: 'Live StockX & GOAT market prices',
-                  ),
-                  const SizedBox(height: 14),
-                  _FeatureRow(
-                    icon: Icons.sell_rounded,
-                    iconColor: Colors.orange,
-                    text: 'eBay sold listings with fees',
-                  ),
-                  const SizedBox(height: 14),
-                  _FeatureRow(
-                    icon: Icons.camera_alt_rounded,
-                    iconColor: Colors.blue,
-                    text: 'OCR label & barcode scanning',
-                  ),
-                  const SizedBox(height: 40),
-
-                  // Price card
-                  // Price container
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A2E),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0xFF646CFF).withValues(alpha: 0.2),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+            Column(
+              children: [
+                // Scrollable content
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 28),
+                    child: Column(
                       children: [
-                        Text(
-                          _priceLabel(),
-                          style: GoogleFonts.poppins(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white70,
-                            height: 1,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '/ year',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                        const SizedBox(height: 60),
 
-                  // CTA button or subscribed badge
-                  if (_sub.isSubscribed)
-                    Container(
-                      width: double.infinity,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: Colors.green.withValues(alpha: 0.4),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.check_circle_rounded,
-                            color: Colors.green,
-                            size: 22,
+                        // Icon
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(22),
+                          child: Image.asset(
+                            'assets/app_icon.png',
+                            width: 88,
+                            height: 88,
                           ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'You\'re subscribed',
-                            style: GoogleFonts.poppins(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.green,
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Headline
+                        Text(
+                          'SneakScan\nUnlimited',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(
+                            fontSize: 30,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Subtitle
+                        Text(
+                          'Scan sneakers. Know the profit before you buy.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: Colors.grey[400],
+                          ),
+                        ),
+
+                        const SizedBox(height: 32),
+
+                        // Feature list
+                        _FeatureRow(
+                          icon: Icons.all_inclusive_rounded,
+                          iconColor: const Color(0xFF646CFF),
+                          text: 'Unlimited scans',
+                        ),
+                        const SizedBox(height: 14),
+                        _FeatureRow(
+                          icon: Icons.show_chart_rounded,
+                          iconColor: Colors.green,
+                          text: 'Live StockX & GOAT market prices',
+                        ),
+                        const SizedBox(height: 14),
+                        _FeatureRow(
+                          icon: Icons.sell_rounded,
+                          iconColor: Colors.orange,
+                          text: 'eBay sold listings with fees',
+                        ),
+                        const SizedBox(height: 14),
+                        _FeatureRow(
+                          icon: Icons.camera_alt_rounded,
+                          iconColor: Colors.blue,
+                          text: 'OCR label & barcode scanning',
+                        ),
+                        const SizedBox(height: 40),
+
+                        // Value prop card
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0D0D0D),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFF1E1E1E),
+                              width: 1,
                             ),
                           ),
-                        ],
-                      ),
-                    )
-                  else
-                    Container(
-                      width: double.infinity,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF646CFF), Color(0xFF8B5CF6)],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF646CFF).withValues(alpha: 0.45),
-                            blurRadius: 18,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: ElevatedButton(
-                        onPressed: (pending && !_isRestoring)
-                            ? null
-                            : _sub.buyAnnual,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: const Color(
-                            0xFF646CFF,
-                          ).withValues(alpha: 0.5),
-                          shadowColor: Colors.transparent,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: (pending && !_isRestoring)
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : Text(
-                                buttonLabel ?? 'Get Unlimited Scans',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.attach_money_rounded,
+                                    color: Colors.green,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    '\$40–\$120 avg. profit per flip',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey[400],
+                                    ),
+                                  ),
+                                ],
                               ),
-                      ),
-                    ),
-                  const SizedBox(height: 22),
-
-                  // Cancel subscription hint
-                  Text(
-                    Platform.isIOS
-                        ? 'Cancel subscription anytime in Settings'
-                        : 'Cancel subscription anytime in your Google Settings',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      color: Colors.grey[500],
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.access_time_rounded,
+                                    color: Colors.white,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Stop wasting time looking up resale prices. Remember time is money',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey[400],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.explore_rounded,
+                                    color: Color(0xFF646CFF),
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Discover 2x-3x flips other sellers miss',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey[400],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 40),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                ),
 
-                  // Restore purchases (iOS only)
-                  if (Platform.isIOS) ...[
-                    GestureDetector(
-                      onTap: pending
-                          ? null
-                          : () {
-                              setState(() => _isRestoring = true);
-                              _sub.restorePurchases();
-                            },
-                      onTapDown: (_) => setState(() => _restorePressed = true),
-                      onTapUp: (_) => setState(() => _restorePressed = false),
-                      onTapCancel: () =>
-                          setState(() => _restorePressed = false),
-                      child: Text(
-                        'Restore Purchases',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          color: _restorePressed
-                              ? Colors.white
-                              : Colors.grey[500],
-                          decoration: TextDecoration.underline,
-                          decorationColor: _restorePressed
-                              ? Colors.white
-                              : Colors.grey[500],
-                        ),
-                      ),
+                // Pinned bottom section
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    border: Border(
+                      top: BorderSide(color: const Color(0xFF333333), width: 1),
                     ),
-                    const SizedBox(height: 16),
-                  ],
-
-                  // Privacy & Terms links
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  ),
+                  padding: const EdgeInsets.fromLTRB(28, 14, 28, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      GestureDetector(
-                        onTap: () => launchUrl(
-                          Uri.parse('https://privacy.sneakscan.com'),
-                          mode: LaunchMode.externalApplication,
-                        ),
-                        onTapDown: (_) =>
-                            setState(() => _privacyPressed = true),
-                        onTapUp: (_) => setState(() => _privacyPressed = false),
-                        onTapCancel: () =>
-                            setState(() => _privacyPressed = false),
-                        child: Text(
-                          'Privacy',
+                      // No payment hint — only for free trial eligible users
+                      if (!_sub.isSubscribed && !_sub.isLapsedSubscriber) ...[
+                        Text(
+                          'No Payment Due Now. Cancel Anytime.',
                           style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: _privacyPressed
-                                ? Colors.white
-                                : Colors.grey[500],
-                            decoration: TextDecoration.underline,
-                            decorationColor: _privacyPressed
-                                ? Colors.white
-                                : Colors.grey[500],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey[400],
                           ),
                         ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: Text(
-                          '·',
+                        const SizedBox(height: 12),
+                      ],
+
+                      // CTA button or subscribed badge
+                      if (_sub.isSubscribed)
+                        Container(
+                          width: double.infinity,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: Colors.green.withValues(alpha: 0.4),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.check_circle_rounded,
+                                color: Colors.green,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                'You\'re subscribed',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Container(
+                          width: double.infinity,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF646CFF), Color(0xFF8B5CF6)],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(
+                                  0xFF646CFF,
+                                ).withValues(alpha: 0.45),
+                                blurRadius: 18,
+                                offset: const Offset(0, 6),
+                              ),
+                            ],
+                          ),
+                          child: ElevatedButton(
+                            onPressed: (pending && !_isRestoring)
+                                ? null
+                                : _sub.buyAnnual,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: const Color(
+                                0xFF646CFF,
+                              ).withValues(alpha: 0.5),
+                              shadowColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: (pending && !_isRestoring)
+                                ? const SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Text(
+                                    buttonLabel ?? 'Get Unlimited Scans',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      const SizedBox(height: 12),
+
+                      // Trial pricing note — only for free trial eligible users
+                      if (!_sub.isSubscribed && !_sub.isLapsedSubscriber) ...[
+                        Text(
+                          '7 day free trial then ${_priceLabel()}/year',
                           style: GoogleFonts.inter(
-                            fontSize: 13,
+                            fontSize: 12,
                             color: Colors.grey[600],
                           ),
                         ),
-                      ),
-                      GestureDetector(
-                        onTap: () => launchUrl(
-                          Uri.parse('https://terms.sneakscan.com'),
-                          mode: LaunchMode.externalApplication,
+                        const SizedBox(height: 12),
+                      ] else
+                        const SizedBox(height: 4),
+
+                      // Links row
+                      if (Platform.isIOS)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _LinkText(
+                              label: 'Terms',
+                              pressed: _termsPressed,
+                              onTap: () => launchUrl(
+                                Uri.parse('https://terms.sneakscan.com'),
+                                mode: LaunchMode.externalApplication,
+                              ),
+                              onTapDown: () =>
+                                  setState(() => _termsPressed = true),
+                              onTapUp: () =>
+                                  setState(() => _termsPressed = false),
+                            ),
+                            _Dot(),
+                            GestureDetector(
+                              onTap: pending
+                                  ? null
+                                  : () {
+                                      setState(() => _isRestoring = true);
+                                      _sub.restorePurchases();
+                                    },
+                              onTapDown: (_) =>
+                                  setState(() => _restorePressed = true),
+                              onTapUp: (_) =>
+                                  setState(() => _restorePressed = false),
+                              onTapCancel: () =>
+                                  setState(() => _restorePressed = false),
+                              child: Text(
+                                'Restore Purchases',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: _restorePressed
+                                      ? Colors.white
+                                      : Colors.grey[500],
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: _restorePressed
+                                      ? Colors.white
+                                      : Colors.grey[500],
+                                ),
+                              ),
+                            ),
+                            _Dot(),
+                            _LinkText(
+                              label: 'Privacy',
+                              pressed: _privacyPressed,
+                              onTap: () => launchUrl(
+                                Uri.parse('https://privacy.sneakscan.com'),
+                                mode: LaunchMode.externalApplication,
+                              ),
+                              onTapDown: () =>
+                                  setState(() => _privacyPressed = true),
+                              onTapUp: () =>
+                                  setState(() => _privacyPressed = false),
+                            ),
+                          ],
+                        )
+                      else
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _LinkText(
+                              label: 'Terms',
+                              pressed: _termsPressed,
+                              onTap: () => launchUrl(
+                                Uri.parse('https://terms.sneakscan.com'),
+                                mode: LaunchMode.externalApplication,
+                              ),
+                              onTapDown: () =>
+                                  setState(() => _termsPressed = true),
+                              onTapUp: () =>
+                                  setState(() => _termsPressed = false),
+                            ),
+                            _Dot(),
+                            _LinkText(
+                              label: 'Privacy',
+                              pressed: _privacyPressed,
+                              onTap: () => launchUrl(
+                                Uri.parse('https://privacy.sneakscan.com'),
+                                mode: LaunchMode.externalApplication,
+                              ),
+                              onTapDown: () =>
+                                  setState(() => _privacyPressed = true),
+                              onTapUp: () =>
+                                  setState(() => _privacyPressed = false),
+                            ),
+                          ],
                         ),
-                        onTapDown: (_) => setState(() => _termsPressed = true),
-                        onTapUp: (_) => setState(() => _termsPressed = false),
-                        onTapCancel: () =>
-                            setState(() => _termsPressed = false),
-                        child: Text(
-                          'Terms',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: _termsPressed
-                                ? Colors.white
-                                : Colors.grey[500],
-                            decoration: TextDecoration.underline,
-                            decorationColor: _termsPressed
-                                ? Colors.white
-                                : Colors.grey[500],
-                          ),
-                        ),
-                      ),
                     ],
                   ),
-                  const SizedBox(height: 32),
-                ],
-              ),
+                ),
+              ],
             ),
 
             // Close button — only shown when paywall is dismissible
@@ -760,6 +819,56 @@ class _FeatureRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _LinkText extends StatelessWidget {
+  final String label;
+  final bool pressed;
+  final VoidCallback onTap;
+  final VoidCallback onTapDown;
+  final VoidCallback onTapUp;
+
+  const _LinkText({
+    required this.label,
+    required this.pressed,
+    required this.onTap,
+    required this.onTapDown,
+    required this.onTapUp,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      onTapDown: (_) => onTapDown(),
+      onTapUp: (_) => onTapUp(),
+      onTapCancel: onTapUp,
+      child: Text(
+        label,
+        style: GoogleFonts.inter(
+          fontSize: 13,
+          color: pressed ? Colors.white : Colors.grey[500],
+          decoration: TextDecoration.underline,
+          decorationColor: pressed ? Colors.white : Colors.grey[500],
+        ),
+      ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Text(
+        '·',
+        style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[600]),
+      ),
     );
   }
 }
