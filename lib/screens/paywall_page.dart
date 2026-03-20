@@ -467,56 +467,39 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                   const SizedBox(height: 40),
 
                   // Price card
+                  // Price container
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          const Color(0xFF1E1B4B),
-                          const Color(0xFF1A1A2E),
-                        ],
-                      ),
+                      color: const Color(0xFF1A1A2E),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: const Color(0xFF646CFF).withValues(alpha: 0.4),
-                        width: 1.5,
+                        color: const Color(0xFF646CFF).withValues(alpha: 0.2),
+                        width: 1,
                       ),
                     ),
-                    child: Column(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _priceLabel(),
-                              style: GoogleFonts.poppins(
-                                fontSize: 38,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                                height: 1,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
                         Text(
-                          'per year — less than \$5.00/month',
-                          style: GoogleFonts.inter(
-                            fontSize: 13,
-                            color: Colors.grey[400],
+                          _priceLabel(),
+                          style: GoogleFonts.poppins(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white70,
+                            height: 1,
                           ),
                         ),
-                        const SizedBox(height: 10),
+                        const SizedBox(width: 8),
                         Text(
-                          'One flip can pay for the whole year',
+                          '/ year',
                           style: GoogleFonts.inter(
                             fontSize: 13,
-                            color: const Color(0xFF646CFF),
-                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[600],
                           ),
                         ),
                       ],
@@ -558,21 +541,35 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                       ),
                     )
                   else
-                    SizedBox(
+                    Container(
                       width: double.infinity,
-                      height: 56,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF646CFF), Color(0xFF8B5CF6)],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF646CFF).withValues(alpha: 0.45),
+                            blurRadius: 18,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                      ),
                       child: ElevatedButton(
                         onPressed: (pending && !_isRestoring)
                             ? null
                             : _sub.buyAnnual,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF646CFF),
+                          backgroundColor: Colors.transparent,
                           foregroundColor: Colors.white,
                           disabledBackgroundColor: const Color(
                             0xFF646CFF,
                           ).withValues(alpha: 0.5),
+                          shadowColor: Colors.transparent,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                            borderRadius: BorderRadius.circular(16),
                           ),
                           elevation: 0,
                         ),
@@ -586,9 +583,9 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                                 ),
                               )
                             : Text(
-                                buttonLabel ?? 'Start Free Trial',
+                                buttonLabel ?? 'Get Unlimited Scans',
                                 style: GoogleFonts.poppins(
-                                  fontSize: 17,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
