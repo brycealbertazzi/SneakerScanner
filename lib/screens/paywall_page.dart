@@ -652,6 +652,18 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                         ),
                       const SizedBox(height: 12),
 
+                      // Pricing note for lapsed subscribers
+                      if (_sub.isLapsedSubscriber) ...[
+                        Text(
+                          '${_priceLabel()}/year - Cancel Anytime',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
                       // Trial pricing note — only for free trial eligible users
                       if (!_sub.isSubscribed && !_sub.isLapsedSubscriber) ...[
                         Text(
