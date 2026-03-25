@@ -377,22 +377,27 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
         : 'Start Free Trial';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0A1E),
+      backgroundColor: Colors.black,
       body: SafeArea(
         child: Stack(
           children: [
-            // Radial gradient: dark indigo center fading to black at edges
-            Positioned.fill(
+            // Top-center brand glow
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
               child: Container(
-                decoration: const BoxDecoration(
+                height: 280,
+                decoration: BoxDecoration(
                   gradient: RadialGradient(
-                    center: Alignment.center,
-                    radius: 1.2,
+                    center: Alignment.topCenter,
+                    radius: 1.0,
                     colors: [
-                      Color(0xFF0D0A1E),
-                      Colors.black,
+                      const Color(0xFF646CFF).withValues(alpha: 0.18),
+                      const Color(0xFF646CFF).withValues(alpha: 0.07),
+                      Colors.transparent,
                     ],
-                    stops: [0.0, 1.0],
+                    stops: const [0.0, 0.45, 1.0],
                   ),
                 ),
               ),
