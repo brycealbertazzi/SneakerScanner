@@ -377,10 +377,26 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
         : 'Start Free Trial';
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF0D0A1E),
       body: SafeArea(
         child: Stack(
           children: [
+            // Radial gradient: dark indigo center fading to black at edges
+            Positioned.fill(
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: RadialGradient(
+                    center: Alignment.center,
+                    radius: 1.2,
+                    colors: [
+                      Color(0xFF0D0A1E),
+                      Colors.black,
+                    ],
+                    stops: [0.0, 1.0],
+                  ),
+                ),
+              ),
+            ),
             Column(
               children: [
                 // Scrollable content
@@ -531,19 +547,6 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Android-only required subscription notice
-                      if (Platform.isAndroid) ...[
-                        Text(
-                          'A subscription is required to use the app',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: Colors.grey[400],
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-
                       // No payment hint — only for free trial eligible users
                       if (!_sub.isSubscribed && !_sub.isLapsedSubscriber) ...[
                         Text(
@@ -673,6 +676,19 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                         ],
                       ] else
                         const SizedBox(height: 4),
+
+                      // Android-only required subscription notice
+                      if (Platform.isAndroid) ...[
+                        Text(
+                          'A subscription is required to use the app',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
                       // Links row
                       if (Platform.isIOS)
