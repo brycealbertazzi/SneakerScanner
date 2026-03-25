@@ -414,7 +414,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
 
                         // Headline
                         Text(
-                          'Get SneakScan and never miss a flip',
+                          'Spot profits instantly with SneakScan',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.poppins(
                             fontSize: 30,
@@ -1015,15 +1015,13 @@ class _ScanSceneState extends State<_ScanScene>
         curve: const Interval(0.0, 0.28, curve: Curves.easeOut),
       ),
     );
-    _flash = TweenSequence([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: 0.55), weight: 40),
-      TweenSequenceItem(tween: Tween(begin: 0.55, end: 0.0), weight: 60),
-    ]).animate(
-      CurvedAnimation(
-        parent: _ctrl,
-        curve: const Interval(0.26, 0.44),
-      ),
-    );
+    _flash =
+        TweenSequence([
+          TweenSequenceItem(tween: Tween(begin: 0.0, end: 0.55), weight: 40),
+          TweenSequenceItem(tween: Tween(begin: 0.55, end: 0.0), weight: 60),
+        ]).animate(
+          CurvedAnimation(parent: _ctrl, curve: const Interval(0.26, 0.44)),
+        );
     _line1 = _lineFade(0.40, 0.56);
     _line2 = _lineFade(0.50, 0.65);
     _line3 = _lineFade(0.59, 0.74);
@@ -1187,8 +1185,7 @@ class _ScanSceneState extends State<_ScanScene>
                 Positioned.fill(
                   child: Container(
                     decoration: BoxDecoration(
-                      color:
-                          Colors.white.withValues(alpha: _flash.value),
+                      color: Colors.white.withValues(alpha: _flash.value),
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),
@@ -1314,8 +1311,7 @@ class _PricesSceneState extends State<_PricesScene>
               return AnimatedBuilder(
                 animation: _ctrl,
                 builder: (ctx, child) {
-                  final p = ((_ctrl.value - startFrac) /
-                          (endFrac - startFrac))
+                  final p = ((_ctrl.value - startFrac) / (endFrac - startFrac))
                       .clamp(0.0, 1.0);
                   final eased = Curves.easeOut.transform(p);
                   return Opacity(
@@ -1337,8 +1333,7 @@ class _PricesSceneState extends State<_PricesScene>
                                 _rows[i].$1,
                                 style: GoogleFonts.inter(
                                   fontSize: 13,
-                                  color:
-                                      Colors.white.withValues(alpha: 0.45),
+                                  color: Colors.white.withValues(alpha: 0.45),
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
@@ -1437,7 +1432,9 @@ class _ProfitSceneState extends State<_ProfitScene>
                   children: [
                     Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       child: Row(
                         children: [
                           Text(
@@ -1466,7 +1463,9 @@ class _ProfitSceneState extends State<_ProfitScene>
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       child: Row(
                         children: [
                           Text(
@@ -1498,7 +1497,9 @@ class _ProfitSceneState extends State<_ProfitScene>
               opacity: _badgeFade.value,
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 6),
+                  horizontal: 14,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   border: Border.all(
                     color: const Color(0xFF4D9A6A).withValues(alpha: 0.35),
