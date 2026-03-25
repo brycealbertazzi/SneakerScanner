@@ -356,12 +356,12 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     );
   }
 
-  String _priceLabel() {
+  String? _priceLabel() {
     final product = _sub.annualProduct;
     if (product != null && product.price.toLowerCase() != 'free') {
       return product.price;
     }
-    return '\$59.99';
+    return null;
   }
 
   @override
@@ -551,6 +551,19 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Android-only required subscription notice
+                      if (Platform.isAndroid) ...[
+                        Text(
+                          'A subscription is required to use the app',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.grey[400],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
                       // No payment hint — only for free trial eligible users
                       if (!_sub.isSubscribed && !_sub.isLapsedSubscriber) ...[
                         Text(
@@ -654,26 +667,30 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
 
                       // Pricing note for lapsed subscribers
                       if (_sub.isLapsedSubscriber) ...[
-                        Text(
-                          '${_priceLabel()}/year - Cancel Anytime',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: Colors.grey[600],
+                        if (_priceLabel() != null) ...[
+                          Text(
+                            '${_priceLabel()}/year - Cancel Anytime',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
+                          const SizedBox(height: 12),
+                        ],
                       ],
 
                       // Trial pricing note — only for free trial eligible users
                       if (!_sub.isSubscribed && !_sub.isLapsedSubscriber) ...[
-                        Text(
-                          '7 day free trial then ${_priceLabel()}/year',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: Colors.grey[600],
+                        if (_priceLabel() != null) ...[
+                          Text(
+                            '7 day free trial then ${_priceLabel()}/year',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: Colors.grey[600],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
+                          const SizedBox(height: 12),
+                        ],
                       ] else
                         const SizedBox(height: 4),
 
