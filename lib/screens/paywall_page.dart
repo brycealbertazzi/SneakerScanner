@@ -391,37 +391,15 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                       children: [
                         const SizedBox(height: 60),
 
-                        // Icon
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(22),
-                          child: Image.asset(
-                            'assets/app_icon.png',
-                            width: 88,
-                            height: 88,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-
                         // Headline
                         Text(
-                          'SneakScan\nUnlimited',
+                          'Get SneakScan and never miss a flip',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.poppins(
                             fontSize: 30,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
                             height: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Subtitle
-                        Text(
-                          'Scan sneakers. Know the profit before you buy.',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: Colors.grey[400],
                           ),
                         ),
 
@@ -533,7 +511,9 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 40),
+                        const SizedBox(height: 24),
+                        const _PaywallAnimationCarousel(),
+                        const SizedBox(height: 16),
                       ],
                     ),
                   ),
@@ -897,6 +877,626 @@ class _Dot extends StatelessWidget {
       child: Text(
         '·',
         style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[600]),
+      ),
+    );
+  }
+}
+
+// ── Paywall animation carousel ────────────────────────────────────────────────
+
+class _PaywallAnimationCarousel extends StatefulWidget {
+  const _PaywallAnimationCarousel();
+
+  @override
+  State<_PaywallAnimationCarousel> createState() =>
+      _PaywallAnimationCarouselState();
+}
+
+class _PaywallAnimationCarouselState extends State<_PaywallAnimationCarousel>
+    with SingleTickerProviderStateMixin {
+  int _current = 0;
+  final _visitCounts = [0, 0, 0];
+  late final AnimationController _fadeCtrl;
+  late final Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    // 400ms fade-in · 3000ms hold · 400ms fade-out = 3800ms per scene
+    _fadeCtrl = AnimationController(
+      duration: const Duration(milliseconds: 3800),
+      vsync: this,
+    );
+    _opacity = TweenSequence([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 400),
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 3000),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 400),
+    ]).animate(_fadeCtrl);
+    _startCycle();
+  }
+
+  void _startCycle() {
+    _fadeCtrl.forward(from: 0).then((_) {
+      if (!mounted) return;
+      final next = (_current + 1) % 3;
+      setState(() {
+        _current = next;
+        _visitCounts[next]++;
+      });
+      _startCycle();
+    });
+  }
+
+  Widget _buildScene(int idx) {
+    final key = ValueKey((idx, _visitCounts[idx]));
+    switch (idx) {
+      case 0:
+        return _ScanScene(key: key);
+      case 1:
+        return _PricesScene(key: key);
+      default:
+        return _ProfitScene(key: key);
+    }
+  }
+
+  @override
+  void dispose() {
+    _fadeCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 148,
+      child: AnimatedBuilder(
+        animation: _opacity,
+        builder: (context, child) =>
+            Opacity(opacity: _opacity.value, child: child),
+        child: _buildScene(_current),
+      ),
+    );
+  }
+}
+
+// ── Scene 1: OCR label scan with photo snap ───────────────────────────────────
+
+class _ScanScene extends StatefulWidget {
+  const _ScanScene({super.key});
+
+  @override
+  State<_ScanScene> createState() => _ScanSceneState();
+}
+
+class _ScanSceneState extends State<_ScanScene>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  // brackets: 0.0 → 0.28
+  late final Animation<double> _bracketProgress;
+  // photo flash: 0.26 → 0.42 (spike up then back down)
+  late final Animation<double> _flash;
+  // label lines fade in sequentially after snap
+  late final Animation<double> _line1;
+  late final Animation<double> _line2;
+  late final Animation<double> _line3;
+  late final Animation<double> _line4;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      duration: const Duration(milliseconds: 1800),
+      vsync: this,
+    );
+    _bracketProgress = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.0, 0.28, curve: Curves.easeOut),
+      ),
+    );
+    _flash = TweenSequence([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 0.55), weight: 40),
+      TweenSequenceItem(tween: Tween(begin: 0.55, end: 0.0), weight: 60),
+    ]).animate(
+      CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.26, 0.44),
+      ),
+    );
+    _line1 = _lineFade(0.40, 0.56);
+    _line2 = _lineFade(0.50, 0.65);
+    _line3 = _lineFade(0.59, 0.74);
+    _line4 = _lineFade(0.68, 0.82);
+
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) _ctrl.forward();
+    });
+  }
+
+  Animation<double> _lineFade(double start, double end) =>
+      Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: _ctrl,
+          curve: Interval(start, end, curve: Curves.easeOut),
+        ),
+      );
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const w = 190.0;
+    const h = 116.0;
+    return Center(
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (context, _) => SizedBox(
+          width: w,
+          height: h,
+          child: Stack(
+            children: [
+              // Label card — revealed after snap
+              Opacity(
+                opacity: _line1.value,
+                child: Container(
+                  width: w,
+                  height: h,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      width: 1,
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Brand + model
+                      Opacity(
+                        opacity: _line1.value,
+                        child: Text(
+                          'NIKE  ·  AIR JORDAN 1 RETRO HIGH OG',
+                          style: GoogleFonts.inter(
+                            fontSize: 8,
+                            color: Colors.white.withValues(alpha: 0.5),
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // SKU line
+                      Opacity(
+                        opacity: _line2.value,
+                        child: Row(
+                          children: [
+                            Text(
+                              'STYLE',
+                              style: GoogleFonts.inter(
+                                fontSize: 8,
+                                color: Colors.white.withValues(alpha: 0.25),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '553558-174',
+                              style: GoogleFonts.inter(
+                                fontSize: 9,
+                                color: Colors.white.withValues(alpha: 0.55),
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      // Color line
+                      Opacity(
+                        opacity: _line3.value,
+                        child: Row(
+                          children: [
+                            Text(
+                              'COLOR',
+                              style: GoogleFonts.inter(
+                                fontSize: 8,
+                                color: Colors.white.withValues(alpha: 0.25),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'WHITE / BLACK-VARSITY RED',
+                              style: GoogleFonts.inter(
+                                fontSize: 8,
+                                color: Colors.white.withValues(alpha: 0.4),
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      // Size line
+                      Opacity(
+                        opacity: _line4.value,
+                        child: Row(
+                          children: [
+                            Text(
+                              'SIZE',
+                              style: GoogleFonts.inter(
+                                fontSize: 8,
+                                color: Colors.white.withValues(alpha: 0.25),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '10.5 US  /  44.5 EUR',
+                              style: GoogleFonts.inter(
+                                fontSize: 8,
+                                color: Colors.white.withValues(alpha: 0.4),
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Corner brackets
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _PaywallBracketPainter(
+                    progress: _bracketProgress.value,
+                    color: Colors.white.withValues(alpha: 0.45),
+                  ),
+                ),
+              ),
+              // Photo flash overlay
+              if (_flash.value > 0)
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color:
+                          Colors.white.withValues(alpha: _flash.value),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaywallBracketPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  const _PaywallBracketPainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress == 0) return;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    const pad = 4.0;
+    const len = 16.0;
+    final l = pad, r = size.width - pad;
+    final t = pad, b = size.height - pad;
+
+    final s = 1.0 + (1 - progress) * 0.25;
+    canvas.save();
+    canvas.translate(size.width / 2, size.height / 2);
+    canvas.scale(s);
+    canvas.translate(-size.width / 2, -size.height / 2);
+
+    canvas.drawLine(Offset(l, t + len), Offset(l, t), paint);
+    canvas.drawLine(Offset(l, t), Offset(l + len, t), paint);
+    canvas.drawLine(Offset(r - len, t), Offset(r, t), paint);
+    canvas.drawLine(Offset(r, t), Offset(r, t + len), paint);
+    canvas.drawLine(Offset(l, b - len), Offset(l, b), paint);
+    canvas.drawLine(Offset(l, b), Offset(l + len, b), paint);
+    canvas.drawLine(Offset(r - len, b), Offset(r, b), paint);
+    canvas.drawLine(Offset(r, b), Offset(r, b - len), paint);
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_PaywallBracketPainter old) =>
+      old.progress != progress || old.color != color;
+}
+
+// ── Scene 2: Resale prices (minimal text rows, no filled chips) ───────────────
+
+class _PricesScene extends StatefulWidget {
+  const _PricesScene({super.key});
+
+  @override
+  State<_PricesScene> createState() => _PricesSceneState();
+}
+
+class _PricesSceneState extends State<_PricesScene>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  // name · price · subtle accent (only StockX gets a hint of green)
+  static const _rows = [
+    ('StockX', '\$247', Color(0xFF4D9A6A)),
+    ('GOAT', '\$215', Color(0xFFAAAAAA)),
+    ('eBay', '\$189', Color(0xFFAAAAAA)),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) _ctrl.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SizedBox(
+        width: 210,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Shoe name header
+            AnimatedBuilder(
+              animation: _ctrl,
+              builder: (ctx, child) => Opacity(
+                opacity: (_ctrl.value / 0.2).clamp(0.0, 1.0),
+                child: Text(
+                  'Air Jordan 1 Retro High OG',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.35),
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            // Price rows
+            ...List.generate(_rows.length, (i) {
+              final startFrac = 0.2 + i * 0.22;
+              final endFrac = startFrac + 0.28;
+              return AnimatedBuilder(
+                animation: _ctrl,
+                builder: (ctx, child) {
+                  final p = ((_ctrl.value - startFrac) /
+                          (endFrac - startFrac))
+                      .clamp(0.0, 1.0);
+                  final eased = Curves.easeOut.transform(p);
+                  return Opacity(
+                    opacity: eased,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (i > 0)
+                          Divider(
+                            height: 1,
+                            thickness: 0.5,
+                            color: Colors.white.withValues(alpha: 0.07),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 9),
+                          child: Row(
+                            children: [
+                              Text(
+                                _rows[i].$1,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color:
+                                      Colors.white.withValues(alpha: 0.45),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                _rows[i].$2,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  color: _rows[i].$3,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Scene 3: Profit summary (outline card, muted) ─────────────────────────────
+
+class _ProfitScene extends StatefulWidget {
+  const _ProfitScene({super.key});
+
+  @override
+  State<_ProfitScene> createState() => _ProfitSceneState();
+}
+
+class _ProfitSceneState extends State<_ProfitScene>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _cardFade;
+  late final Animation<double> _badgeFade;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      duration: const Duration(milliseconds: 900),
+      vsync: this,
+    );
+    _cardFade = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.0, 0.45, curve: Curves.easeOut),
+      ),
+    );
+    _badgeFade = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.5, 0.9, curve: Curves.easeOut),
+      ),
+    );
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) _ctrl.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (context, _) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Outline card with retail / resale rows
+            Opacity(
+              opacity: _cardFade.value,
+              child: Container(
+                width: 200,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Retail',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '\$120',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: Colors.white.withValues(alpha: 0.45),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(
+                      height: 1,
+                      thickness: 0.5,
+                      color: Colors.white.withValues(alpha: 0.08),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Resale',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '\$247',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: Colors.white.withValues(alpha: 0.65),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Profit badge — outline, subtle green
+            Opacity(
+              opacity: _badgeFade.value,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: const Color(0xFF4D9A6A).withValues(alpha: 0.35),
+                    width: 1,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '+\$127 est. profit',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    color: const Color(0xFF4D9A6A).withValues(alpha: 0.7),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
