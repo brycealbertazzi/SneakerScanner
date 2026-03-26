@@ -214,7 +214,10 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       decoration: BoxDecoration(
         color: const Color(0xFF0D0D1A),
         border: Border(
-          top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.5),
+          top: BorderSide(
+            color: Colors.white.withValues(alpha: 0.08),
+            width: 0.5,
+          ),
         ),
       ),
       child: _PressableButton(
@@ -487,9 +490,9 @@ const _kQuestions = [
     'Keeping track of inventory',
   ]),
   _OnboardingQuestion('What\'s your main goal with SneakScan?', [
-    'Quickly price shoes at thrift stores',
-    'Authenticate before buying',
-    'Maximize profit on every flip',
+    'Just want to find good deals when I shop',
+    'Occasionally flip sneakers as a hobby',
+    'Maximize my profit on every flip',
     'Build a full-time reselling business',
   ]),
   _OnboardingQuestion(
