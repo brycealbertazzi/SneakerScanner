@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,9 +20,31 @@ class OnboardingFlow extends StatefulWidget {
 }
 
 class _OnboardingFlowState extends State<OnboardingFlow> {
+  // ── Intro phase ──
+  bool _inIntro = true;
+
+  // ── Question phase ──
+  bool _inQuestions = true;
+  int _currentQuestion = 0;
+  PageController _questionPageCtrl = PageController();
+
+  // ── Pages phase ──
   final _pageController = PageController();
   int _currentPage = 0;
   bool _showAnalysis = false;
+
+  // Starts at 1 so the bar opens at one step in; incremented on each action
+  int _stepsCompleted = 1;
+
+  // Stored question answers (question index → answer index)
+  final Map<int, int> _questionAnswers = {};
+
+  // Currently highlighted answer on the active question screen
+  int? _currentSelectedAnswer;
+
+  // Multi-select state for Q2 ("Where do you primarily sell?")
+  Set<int> _currentMultiAnswers = {};
+  final Map<int, Set<int>> _multiQuestionAnswers = {};
 
   @override
   void initState() {
@@ -35,14 +58,123 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     SubscriptionService.instance.initialize();
   }
 
-  void _next() {
-    if (_currentPage < 3) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeInOut,
+  static const _multiSelectQuestion = 2; // Q3: "Where do you primarily sell?"
+
+  // Called by single-select _QuestionScreen on tap
+  void _onAnswerSelected(int questionIndex, int answerIndex) {
+    _questionAnswers[questionIndex] = answerIndex;
+    setState(() => _currentSelectedAnswer = answerIndex);
+  }
+
+  // Called by multi-select _QuestionScreen on each tap
+  void _onMultiAnswerSelected(Set<int> selected) {
+    _multiQuestionAnswers[_multiSelectQuestion] = Set.from(selected);
+    setState(() => _currentMultiAnswers = Set.from(selected));
+  }
+
+  void _restoreSelectionForQuestion(int questionIndex) {
+    if (questionIndex == _multiSelectQuestion) {
+      _currentMultiAnswers = Set.from(
+        _multiQuestionAnswers[questionIndex] ?? {},
       );
+      _currentSelectedAnswer = null;
     } else {
-      setState(() => _showAnalysis = true);
+      _currentSelectedAnswer = _questionAnswers[questionIndex];
+      _currentMultiAnswers = {};
+    }
+  }
+
+  void _startOnboarding() {
+    setState(() {
+      _inIntro = false;
+      _restoreSelectionForQuestion(0);
+    });
+  }
+
+  bool get _canContinue {
+    if (!_inQuestions) return true;
+    if (_currentQuestion == _multiSelectQuestion) {
+      return _currentMultiAnswers.isNotEmpty;
+    }
+    return _currentSelectedAnswer != null;
+  }
+
+  void _onContinue() {
+    if (!_canContinue) return;
+    if (_inQuestions) {
+      setState(() => _stepsCompleted++);
+      if (_currentQuestion < _kQuestions.length - 1) {
+        final nextQ = _currentQuestion + 1;
+        setState(() {
+          _currentQuestion = nextQ;
+          _restoreSelectionForQuestion(nextQ);
+        });
+        _questionPageCtrl.nextPage(
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeInOut,
+        );
+      } else {
+        setState(() {
+          _inQuestions = false;
+          _currentSelectedAnswer = null;
+        });
+      }
+    } else {
+      // Pages phase
+      setState(() => _stepsCompleted++);
+      if (_currentPage < 3) {
+        _pageController.nextPage(
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeInOut,
+        );
+      } else {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) setState(() => _showAnalysis = true);
+        });
+      }
+    }
+  }
+
+  // Back is available on all question/page screens (Q1 back → intro)
+  bool get _canGoBack => !_inIntro;
+
+  void _goBack() {
+    if (!_canGoBack) return;
+    setState(() {
+      if (_stepsCompleted > 1) _stepsCompleted--;
+    });
+    if (!_inQuestions) {
+      if (_currentPage > 0) {
+        _pageController.previousPage(
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeInOut,
+        );
+      } else {
+        // Back from Page1 → Q5: recreate controller at the last question
+        _questionPageCtrl.dispose();
+        final lastQ = _kQuestions.length - 1;
+        _questionPageCtrl = PageController(initialPage: lastQ);
+        setState(() {
+          _inQuestions = true;
+          _currentQuestion = lastQ;
+          _restoreSelectionForQuestion(lastQ);
+        });
+      }
+    } else {
+      if (_currentQuestion > 0) {
+        final prevQ = _currentQuestion - 1;
+        _questionPageCtrl.previousPage(
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeInOut,
+        );
+        setState(() {
+          _currentQuestion = prevQ;
+          _restoreSelectionForQuestion(prevQ);
+        });
+      } else {
+        // Q1 back → intro screen
+        setState(() => _inIntro = true);
+      }
     }
   }
 
@@ -66,56 +198,459 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
 
   @override
   void dispose() {
+    _questionPageCtrl.dispose();
     _pageController.dispose();
     super.dispose();
   }
 
+  // 8 questions + 4 animation pages = 12 total steps, each ~8.3%
+  static const _totalSteps = 12;
+
+  double get _progressValue => _stepsCompleted / _totalSteps;
+
+  Widget _buildFooter() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 24),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D0D1A),
+        border: Border(
+          top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 0.5),
+        ),
+      ),
+      child: _PressableButton(
+        label: 'Continue',
+        enabled: _canContinue,
+        onPressed: _onContinue,
+      ),
+    );
+  }
+
+  Widget _buildTopBar() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 12, right: 24),
+      child: Row(
+        children: [
+          // Back button — always takes up space to keep bar width consistent
+          SizedBox(
+            width: 40,
+            height: 40,
+            child: _canGoBack
+                ? GestureDetector(
+                    onTap: () {
+                      HapticFeedback.heavyImpact();
+                      _goBack();
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.10),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_rounded,
+                        color: Colors.white.withValues(alpha: 0.75),
+                        size: 20,
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 12),
+          // Progress bar
+          Expanded(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0.0, end: _progressValue),
+              duration: const Duration(milliseconds: 450),
+              curve: Curves.easeInOut,
+              builder: (context, value, _) => ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: value,
+                  minHeight: 3,
+                  backgroundColor: Colors.white.withValues(alpha: 0.08),
+                  valueColor: const AlwaysStoppedAnimation(Color(0xFF646CFF)),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Analysis screen stands alone — no progress bar
     if (_showAnalysis) {
       return _AnalysisScreen(onComplete: _completeOnboarding);
     }
 
+    // Intro screen — no top bar
+    if (_inIntro) {
+      return _IntroScreen(onGetStarted: _startOnboarding);
+    }
+
+    // Single persistent scaffold so the TweenAnimationBuilder keeps its state
+    // across the questions→pages phase transition (no reset to 0%).
     return Scaffold(
       backgroundColor: const Color(0xFF0D0D1A),
       body: SafeArea(
         child: Column(
           children: [
-            const SizedBox(height: 20),
-            // Page indicator dots
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(4, (i) {
-                final active = i == _currentPage;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: active ? 24 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: active
-                        ? const Color(0xFF646CFF)
-                        : const Color(0xFF646CFF).withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                );
-              }),
-            ),
+            const SizedBox(height: 16),
+            _buildTopBar(),
             Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics: const NeverScrollableScrollPhysics(),
-                onPageChanged: (i) => setState(() => _currentPage = i),
-                children: [
-                  _Page1(onNext: _next),
-                  _Page2(onNext: _next),
-                  _Page3(onNext: _next),
-                  _Page4(onNext: _next),
-                ],
-              ),
+              child: _inQuestions
+                  ? PageView(
+                      key: const ValueKey('questions'),
+                      controller: _questionPageCtrl,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: List.generate(
+                        _kQuestions.length,
+                        (i) => i == _multiSelectQuestion
+                            ? _QuestionScreen(
+                                key: ValueKey(i),
+                                question: _kQuestions[i],
+                                multiSelect: true,
+                                initialMultiSelection: _multiQuestionAnswers[i],
+                                onMultiAnswered: _onMultiAnswerSelected,
+                              )
+                            : _QuestionScreen(
+                                key: ValueKey(i),
+                                question: _kQuestions[i],
+                                initialSelection: _questionAnswers[i],
+                                onAnswered: (answerIdx) {
+                                  _onAnswerSelected(i, answerIdx);
+                                },
+                              ),
+                      ),
+                    )
+                  : PageView(
+                      key: const ValueKey('pages'),
+                      controller: _pageController,
+                      physics: const NeverScrollableScrollPhysics(),
+                      onPageChanged: (i) => setState(() => _currentPage = i),
+                      children: const [_Page1(), _Page2(), _Page3(), _Page4()],
+                    ),
             ),
+            _buildFooter(),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Intro screen ─────────────────────────────────────────────────────────────
+
+class _IntroScreen extends StatefulWidget {
+  final VoidCallback onGetStarted;
+  const _IntroScreen({required this.onGetStarted});
+
+  @override
+  State<_IntroScreen> createState() => _IntroScreenState();
+}
+
+class _IntroScreenState extends State<_IntroScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    _scale = Tween<double>(
+      begin: 0.92,
+      end: 1.05,
+    ).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0D0D1A),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Column(
+            children: [
+              const Spacer(flex: 3),
+              // Logo with pulse animation
+              ScaleTransition(
+                scale: _scale,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(28),
+                  child: Image.asset(
+                    'assets/app_icon.png',
+                    width: 140,
+                    height: 140,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 36),
+              Text(
+                'SneakScan',
+                style: GoogleFonts.poppins(
+                  fontSize: 40,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Flip sneakers like a pro',
+                style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.white.withValues(alpha: 0.55),
+                ),
+              ),
+              const Spacer(flex: 4),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: () {
+                    HapticFeedback.heavyImpact();
+                    widget.onGetStarted();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF646CFF),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'Get Started',
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Onboarding questions ──────────────────────────────────────────────────────
+
+class _OnboardingQuestion {
+  final String question;
+  final List<String> answers;
+  const _OnboardingQuestion(this.question, this.answers);
+}
+
+const _kQuestions = [
+  _OnboardingQuestion('How long have you been reselling sneakers?', [
+    'Just getting started',
+    'Less than a year',
+    '1–3 years',
+    '3+ years',
+  ]),
+  _OnboardingQuestion('How many pairs do you flip per month?', [
+    '1–5',
+    '6–15',
+    '16–30',
+    '30+',
+  ]),
+  _OnboardingQuestion('Where do you primarily sell?', [
+    'StockX',
+    'GOAT',
+    'eBay',
+    'Facebook Marketplace',
+    'Depop',
+    'Mercari',
+    'Other',
+  ]),
+  _OnboardingQuestion('What\'s your biggest challenge when reselling?', [
+    'Finding the right sell price',
+    'Knowing which shoes to buy',
+    'Identifying fakes',
+    'Keeping track of inventory',
+  ]),
+  _OnboardingQuestion('What\'s your main goal with SneakScan?', [
+    'Quickly price shoes at thrift stores',
+    'Authenticate before buying',
+    'Maximize profit on every flip',
+    'Build a full-time reselling business',
+  ]),
+  _OnboardingQuestion(
+    'How quickly do you need to decide if a shoe is worth buying?',
+    ['On the spot (seconds)', 'A few minutes', 'I take my time', 'It varies'],
+  ),
+  _OnboardingQuestion(
+    'How much time per week do you spend researching prices?',
+    ['Less than 1 hour', '1–3 hours', '3–5 hours', '5+ hours'],
+  ),
+  _OnboardingQuestion('What type of sneakers do you mostly flip?', [
+    'Nike / Jordan',
+    'Adidas / Yeezy',
+    'New Balance',
+    'Whatever I find',
+  ]),
+];
+
+class _QuestionScreen extends StatefulWidget {
+  final _OnboardingQuestion question;
+  final void Function(int answerIndex)? onAnswered;
+  final void Function(Set<int> answerIndices)? onMultiAnswered;
+  final int? initialSelection;
+  final Set<int>? initialMultiSelection;
+  final bool multiSelect;
+
+  const _QuestionScreen({
+    super.key,
+    required this.question,
+    this.onAnswered,
+    this.onMultiAnswered,
+    this.initialSelection,
+    this.initialMultiSelection,
+    this.multiSelect = false,
+  });
+
+  @override
+  State<_QuestionScreen> createState() => _QuestionScreenState();
+}
+
+class _QuestionScreenState extends State<_QuestionScreen> {
+  int? _selected;
+  late Set<int> _selectedSet;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.initialSelection;
+    _selectedSet = Set.from(widget.initialMultiSelection ?? {});
+  }
+
+  @override
+  void didUpdateWidget(_QuestionScreen old) {
+    super.didUpdateWidget(old);
+    if (!widget.multiSelect &&
+        old.initialSelection != widget.initialSelection) {
+      _selected = widget.initialSelection;
+    }
+    if (widget.multiSelect &&
+        old.initialMultiSelection != widget.initialMultiSelection) {
+      _selectedSet = Set.from(widget.initialMultiSelection ?? {});
+    }
+  }
+
+  void _onTap(int index) {
+    HapticFeedback.heavyImpact();
+    if (widget.multiSelect) {
+      setState(() {
+        if (_selectedSet.contains(index)) {
+          _selectedSet.remove(index);
+        } else {
+          _selectedSet.add(index);
+        }
+      });
+      widget.onMultiAnswered?.call(Set.from(_selectedSet));
+    } else {
+      setState(() => _selected = index);
+      widget.onAnswered?.call(index);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 48),
+          Text(
+            widget.question.question,
+            style: GoogleFonts.poppins(
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              height: 1.25,
+            ),
+          ),
+          const SizedBox(height: 32),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: List.generate(widget.question.answers.length, (i) {
+                  final isSelected = widget.multiSelect
+                      ? _selectedSet.contains(i)
+                      : _selected == i;
+                  return GestureDetector(
+                    onTap: () => _onTap(i),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOut,
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 16,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFF646CFF)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isSelected
+                              ? const Color(0xFF646CFF)
+                              : Colors.white.withValues(alpha: 0.15),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              widget.question.answers[i],
+                              style: GoogleFonts.inter(
+                                fontSize: 15,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.75),
+                              ),
+                            ),
+                          ),
+                          if (isSelected)
+                            const Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
       ),
     );
   }
@@ -127,28 +662,27 @@ class _OnboardingPageLayout extends StatelessWidget {
   final Widget visual;
   final String title;
   final String description;
-  final String buttonLabel;
-  final VoidCallback onNext;
   final double visualHeight;
 
   const _OnboardingPageLayout({
     required this.visual,
     required this.title,
     required this.description,
-    required this.buttonLabel,
-    required this.onNext,
     this.visualHeight = 210,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 28),
       child: Column(
         children: [
-          const Spacer(flex: 2),
-          SizedBox(height: visualHeight, child: Center(child: visual)),
-          const Spacer(flex: 2),
+          const SizedBox(height: 32),
+          SizedBox(
+            height: visualHeight,
+            child: Center(child: visual),
+          ),
+          const SizedBox(height: 32),
           Text(
             title,
             textAlign: TextAlign.center,
@@ -169,30 +703,7 @@ class _OnboardingPageLayout extends StatelessWidget {
               height: 1.6,
             ),
           ),
-          const Spacer(flex: 3),
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton(
-              onPressed: onNext,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF646CFF),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                elevation: 0,
-              ),
-              child: Text(
-                buttonLabel,
-                style: GoogleFonts.poppins(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 36),
+          const SizedBox(height: 24),
         ],
       ),
     );
@@ -202,8 +713,7 @@ class _OnboardingPageLayout extends StatelessWidget {
 // ── Page 1: Camera viewfinder ─────────────────────────────────────────────────
 
 class _Page1 extends StatefulWidget {
-  final VoidCallback onNext;
-  const _Page1({required this.onNext});
+  const _Page1();
 
   @override
   State<_Page1> createState() => _Page1State();
@@ -273,8 +783,6 @@ class _Page1State extends State<_Page1> with TickerProviderStateMixin {
       description:
           'Point your camera at a sneaker box label. '
           'The app instantly identifies the shoe and retrieves current resale data.',
-      buttonLabel: 'Continue',
-      onNext: widget.onNext,
     );
   }
 }
@@ -495,8 +1003,7 @@ const _kPlatforms = [
 ];
 
 class _Page2 extends StatefulWidget {
-  final VoidCallback onNext;
-  const _Page2({required this.onNext});
+  const _Page2();
 
   @override
   State<_Page2> createState() => _Page2State();
@@ -613,8 +1120,6 @@ class _Page2State extends State<_Page2> with SingleTickerProviderStateMixin {
       description:
           'Compare what sneakers are selling for across StockX, GOAT, '
           'and eBay in seconds. All in one place.',
-      buttonLabel: 'Next',
-      onNext: widget.onNext,
     );
   }
 }
@@ -622,8 +1127,7 @@ class _Page2State extends State<_Page2> with SingleTickerProviderStateMixin {
 // ── Page 3: Profit pop ────────────────────────────────────────────────────────
 
 class _Page3 extends StatefulWidget {
-  final VoidCallback onNext;
-  const _Page3({required this.onNext});
+  const _Page3();
 
   @override
   State<_Page3> createState() => _Page3State();
@@ -734,8 +1238,6 @@ class _Page3State extends State<_Page3> with SingleTickerProviderStateMixin {
       description:
           'See the potential profit instantly based on current resale prices. '
           'Know if a flip is worth it before you spend a dollar.',
-      buttonLabel: 'Get Started',
-      onNext: widget.onNext,
     );
   }
 }
@@ -789,8 +1291,7 @@ const _kFlipCards = [
 ];
 
 class _Page4 extends StatefulWidget {
-  final VoidCallback onNext;
-  const _Page4({required this.onNext});
+  const _Page4();
 
   @override
   State<_Page4> createState() => _Page4State();
@@ -931,8 +1432,72 @@ class _Page4State extends State<_Page4> with SingleTickerProviderStateMixin {
       visualHeight: 270,
       title: 'Average sneaker\nflip profit',
       description: '',
-      buttonLabel: 'Next',
-      onNext: widget.onNext,
+    );
+  }
+}
+
+// ── Pressable button ──────────────────────────────────────────────────────────
+
+class _PressableButton extends StatefulWidget {
+  final String label;
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  const _PressableButton({
+    required this.label,
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  @override
+  State<_PressableButton> createState() => _PressableButtonState();
+}
+
+class _PressableButtonState extends State<_PressableButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bgColor = widget.enabled
+        ? const Color(0xFF646CFF)
+        : const Color(0xFF646CFF).withValues(alpha: 0.30);
+    final textColor = widget.enabled
+        ? Colors.white
+        : Colors.white.withValues(alpha: 0.40);
+
+    return GestureDetector(
+      onTapDown: widget.enabled ? (_) => setState(() => _pressed = true) : null,
+      onTapUp: widget.enabled
+          ? (_) {
+              setState(() => _pressed = false);
+              HapticFeedback.heavyImpact();
+              widget.onPressed();
+            }
+          : null,
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: (_pressed && widget.enabled) ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 80),
+        curve: Curves.easeInOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: double.infinity,
+          height: 56,
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            widget.label,
+            style: GoogleFonts.poppins(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: textColor,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
