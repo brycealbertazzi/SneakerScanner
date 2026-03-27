@@ -16,6 +16,7 @@ import '../services/subscription_service.dart';
 import 'main_screen.dart';
 import 'paywall_page.dart';
 import 'scan_detail/scan_detail_page.dart';
+import 'sku_formats_sheet.dart';
 
 class ScannerPage extends StatefulWidget {
   const ScannerPage({super.key, this.activeNotifier});
@@ -751,6 +752,14 @@ class _ScannerPageState extends State<ScannerPage>
                       color: Color(0xFF646CFF),
                       width: 1,
                     ),
+                  ),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      Icons.info_outline_rounded,
+                      color: Colors.grey[500],
+                      size: 26,
+                    ),
+                    onPressed: () => showSkuFormatsSheet(context),
                   ),
                 ),
               ),

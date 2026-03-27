@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:app_links/app_links.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_keys.dart';
 import '../services/stockx_auth_service.dart';
@@ -12,6 +13,7 @@ import 'paywall_page.dart';
 import 'scanner_page.dart';
 import 'history_page.dart';
 import 'settings_page.dart';
+import 'tutorial_sheet.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -39,6 +41,7 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _loadApiKeys();
     SubscriptionService.instance.initialize();
+    _maybeShowTutorial();
     _appLinks = AppLinks();
     _appLinks.uriLinkStream.listen((Uri uri) {
       debugPrint('[StockX OAuth] Deep link received: $uri');
@@ -50,6 +53,16 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         }
       }
     });
+  }
+
+  Future<void> _maybeShowTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getBool('has_seen_tutorial') ?? false;
+    if (seen || !mounted) return;
+    await prefs.setBool('has_seen_tutorial', true);
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (!mounted) return;
+    await showTutorialSheet(context);
   }
 
   Future<void> _loadApiKeys() async {
