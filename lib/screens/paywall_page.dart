@@ -375,7 +375,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
         : _sub.isLapsedSubscriber
         ? 'Get Unlimited Scans'
         : 'Start Free Trial';
-    final headline = _sub.isLapsedSubscriber
+    final headline = (_sub.isLapsedSubscriber || _sub.isSubscribed)
         ? 'Spot profits instantly with SneakScan'
         : 'Try SneakScan free for 7 days';
 
@@ -427,17 +427,18 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           ),
                         ),
 
-                        const SizedBox(height: 24),
-
-                        Text(
-                          'We\'ll remind you 1 day before your free trial ends',
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white.withValues(alpha: 0.75),
+                        if (!_sub.isLapsedSubscriber && !_sub.isSubscribed) ...[
+                          const SizedBox(height: 24),
+                          Text(
+                            'We\'ll remind you 1 day before your free trial ends',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.inter(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white.withValues(alpha: 0.75),
+                            ),
                           ),
-                        ),
+                        ],
 
                         const SizedBox(height: 32),
 
