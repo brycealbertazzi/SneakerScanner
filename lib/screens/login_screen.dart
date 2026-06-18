@@ -10,6 +10,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
+import '../services/mixpanel_service.dart';
 import '../services/subscription_service.dart';
 import 'main_screen.dart';
 import 'paywall_page.dart';
@@ -102,6 +103,11 @@ class _LoginScreenState extends State<LoginScreen> {
         if (googlePhotoUrl != null && googlePhotoUrl.isNotEmpty) {
           await fbUser.updatePhotoURL(googlePhotoUrl);
         }
+        MixpanelService.instance.identify(
+          fbUser.uid,
+          email: fbUser.email,
+          name: googleDisplayName,
+        );
       }
 
       if (mounted) {
@@ -185,6 +191,13 @@ class _LoginScreenState extends State<LoginScreen> {
         if (fullName.isNotEmpty) {
           await FirebaseAuth.instance.currentUser?.updateDisplayName(fullName);
         }
+      }
+      if (appleUser != null) {
+        MixpanelService.instance.identify(
+          appleUser.uid,
+          email: appleUser.email,
+          name: appleUser.displayName,
+        );
       }
       if (mounted) {
         await _navigateAfterSignIn();

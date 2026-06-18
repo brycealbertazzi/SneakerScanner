@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../services/mixpanel_service.dart';
 import '../services/subscription_service.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
@@ -46,6 +47,16 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   Set<int> _currentMultiAnswers = {};
   final Map<int, Set<int>> _multiQuestionAnswers = {};
 
+  // Keys of Mixpanel events already fired this session — prevents double-firing
+  // when the user navigates back and then forward again.
+  final Set<String> _trackedEvents = {};
+
+  void _trackOnce(String key, String eventName, {Map<String, dynamic>? properties}) {
+    if (_trackedEvents.contains(key)) return;
+    _trackedEvents.add(key);
+    MixpanelService.instance.track(eventName, properties: properties);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -85,6 +96,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   }
 
   void _startOnboarding() {
+    _trackOnce('started', 'Onboarding Started');
     setState(() {
       _inIntro = false;
       _restoreSelectionForQuestion(0);
@@ -99,9 +111,32 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     return _currentSelectedAnswer != null;
   }
 
+  static const _kPageTitles = [
+    'Scan any sneaker instantly',
+    'See resale prices across platforms',
+    'Know the profit before you buy',
+    'Average sneaker flip profit',
+  ];
+
   void _onContinue() {
     if (!_canContinue) return;
     if (_inQuestions) {
+      // Track the completed question with the selected answer(s)
+      final question = _kQuestions[_currentQuestion];
+      final String answerText;
+      if (_currentQuestion == _multiSelectQuestion) {
+        final indices = _multiQuestionAnswers[_multiSelectQuestion] ?? {};
+        answerText = indices.map((i) => question.answers[i]).join(', ');
+      } else {
+        final idx = _questionAnswers[_currentQuestion];
+        answerText = idx != null ? question.answers[idx] : '';
+      }
+      _trackOnce('question_${_currentQuestion + 1}', 'Onboarding Question Answered', properties: {
+        'question_number': _currentQuestion + 1,
+        'question': question.question,
+        'answer': answerText,
+      });
+
       setState(() => _stepsCompleted++);
       if (_currentQuestion < _kQuestions.length - 1) {
         final nextQ = _currentQuestion + 1;
@@ -114,6 +149,11 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           curve: Curves.easeInOut,
         );
       } else {
+        // Last question done — transitioning to feature pages
+        _trackOnce('page_1', 'Onboarding Feature Page Viewed', properties: {
+          'page_number': 1,
+          'page_title': _kPageTitles[0],
+        });
         setState(() {
           _inQuestions = false;
           _currentSelectedAnswer = null;
@@ -123,11 +163,16 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       // Pages phase
       setState(() => _stepsCompleted++);
       if (_currentPage < 3) {
+        _trackOnce('page_${_currentPage + 2}', 'Onboarding Feature Page Viewed', properties: {
+          'page_number': _currentPage + 2,
+          'page_title': _kPageTitles[_currentPage + 1],
+        });
         _pageController.nextPage(
           duration: const Duration(milliseconds: 350),
           curve: Curves.easeInOut,
         );
       } else {
+        _trackOnce('analysis', 'Onboarding Analysis Viewed');
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) setState(() => _showAnalysis = true);
         });
@@ -179,6 +224,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   }
 
   Future<void> _completeOnboarding() async {
+    _trackOnce('completed', 'Onboarding Completed');
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('has_seen_onboarding', true);
     if (!mounted) return;

@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../screens/login_screen.dart';
 import '../screens/main_screen.dart';
+import '../services/mixpanel_service.dart';
 import '../services/subscription_service.dart';
 
 class PaywallPage extends StatefulWidget {
@@ -47,6 +48,9 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     _wasActiveOnInit = _sub.isSubscribed;
     _sub.addListener(_onSubChanged);
     WidgetsBinding.instance.addObserver(this);
+    MixpanelService.instance.track('Paywall Viewed', properties: {
+      'is_closeable': widget.isCloseable,
+    });
   }
 
   @override
@@ -252,6 +256,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
   void _showSuccessDialog() {
     if (_successDialogShowing) return;
     _successDialogShowing = true;
+    MixpanelService.instance.track('Purchase Completed');
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -552,7 +557,10 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           child: ElevatedButton(
                             onPressed: (pending && !_isRestoring)
                                 ? null
-                                : _sub.buyAnnual,
+                                : () {
+                                    MixpanelService.instance.track('Subscribe Button Tapped');
+                                    _sub.buyAnnual();
+                                  },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.transparent,
                               foregroundColor: Colors.white,

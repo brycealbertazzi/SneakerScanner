@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart' show routeObserver;
 import '../models/scan_data.dart';
 import '../services/gtin_utils.dart';
+import '../services/mixpanel_service.dart';
 import '../services/subscription_service.dart';
 import 'main_screen.dart';
 import 'paywall_page.dart';
@@ -587,6 +588,11 @@ class _ScannerPageState extends State<ScannerPage>
       // Parse OCR text into ScanData
       final scanData = _parseLabelInfo(fullText);
 
+      MixpanelService.instance.track('OCR Scan Completed', properties: {
+        'sku_found': scanData.sku != null,
+        if (scanData.brand != null) 'brand': scanData.brand!,
+      });
+
       debugPrint('═══ SCAN RESULT ═══');
       if (scanData.sku != null) {
         debugPrint('SKU found: ${scanData.sku}');
@@ -786,6 +792,7 @@ class _ScannerPageState extends State<ScannerPage>
                       onPressed: () async {
                         final sku = controller.text.trim().toUpperCase();
                         if (sku.isEmpty) return;
+                        MixpanelService.instance.track('Manual SKU Submitted', properties: {'sku': sku});
                         Navigator.of(dialogContext).pop();
                         await _previewController.stop();
                         final data = currentScanData.copyWith(sku: sku);
@@ -1073,6 +1080,7 @@ class _ScannerPageState extends State<ScannerPage>
                   width: double.infinity,
                   child: OutlinedButton(
                     onPressed: () {
+                      MixpanelService.instance.track('Enter SKU Manually Tapped', properties: {'source': 'no_results_modal'});
                       Navigator.of(dialogContext).pop();
                       onEnterManually();
                     },
@@ -1164,7 +1172,10 @@ class _ScannerPageState extends State<ScannerPage>
                 onPressed: _isProcessing
                     ? null
                     : () async {
-                        if (await _checkSubscription()) _captureAndProcess();
+                        if (await _checkSubscription()) {
+                          MixpanelService.instance.track('Scan Label Tapped');
+                          _captureAndProcess();
+                        }
                       },
                 icon: const Icon(Icons.camera_alt),
                 label: const Text('Scan Label'),
@@ -1189,6 +1200,7 @@ class _ScannerPageState extends State<ScannerPage>
                     ? null
                     : () async {
                         if (await _checkSubscription()) {
+                          MixpanelService.instance.track('Enter SKU Manually Tapped', properties: {'source': 'scanner'});
                           _showManualSkuDialog('', const ScanData());
                         }
                       },

@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
+import 'services/mixpanel_service.dart';
 
 final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
@@ -15,6 +16,7 @@ void main() async {
     await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   }
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await MixpanelService.instance.initialize();
   runApp(const SneakerScannerApp());
 }
 
