@@ -124,7 +124,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             children: [
               Icon(
                 Icons.calculate_rounded,
-                color: const Color(0xFF646CFF),
+                color: const Color(0xFFBA6A37),
                 size: 20,
               ),
               const SizedBox(width: 8),

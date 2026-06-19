@@ -27,10 +27,10 @@ class InfoCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: const Color(0xFF646CFF).withValues(alpha: 0.15),
+              color: const Color(0xFFBA6A37).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: const Color(0xFF646CFF), size: 20),
+            child: Icon(icon, color: const Color(0xFFBA6A37), size: 20),
           ),
           const SizedBox(width: 16),
           Expanded(

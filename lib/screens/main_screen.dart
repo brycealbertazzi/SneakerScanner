@@ -156,7 +156,7 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border:
-                        Border.all(color: const Color(0xFF646CFF), width: 2),
+                        Border.all(color: const Color(0xFFBA6A37), width: 2),
                   ),
                   child: ClipOval(
                     child: photoUrl != null
@@ -189,7 +189,7 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           setState(() => _currentIndex = index);
         },
         backgroundColor: const Color(0xFF1A1A1A),
-        selectedItemColor: const Color(0xFF646CFF),
+        selectedItemColor: const Color(0xFFBA6A37),
         unselectedItemColor: Colors.grey[600],
         items: const [
           BottomNavigationBarItem(
@@ -207,7 +207,7 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         ? displayName![0].toUpperCase()
         : '?';
     return Container(
-      color: const Color(0xFF646CFF),
+      color: const Color(0xFFBA6A37),
       child: Center(
         child: Text(
           initial,

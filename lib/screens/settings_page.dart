@@ -361,7 +361,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: const Color(0xFF646CFF),
+                        color: const Color(0xFFBA6A37),
                         width: 3,
                       ),
                     ),
@@ -491,7 +491,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildLargeDefaultAvatar(String displayName) {
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
     return Container(
-      color: const Color(0xFF646CFF),
+      color: const Color(0xFFBA6A37),
       child: Center(
         child: Text(
           initial,

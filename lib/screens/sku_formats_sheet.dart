@@ -214,7 +214,7 @@ class _BrandRow extends StatelessWidget {
               brand.example,
               style: GoogleFonts.robotoMono(
                 fontSize: 13,
-                color: const Color(0xFF646CFF),
+                color: const Color(0xFFBA6A37),
                 fontWeight: FontWeight.w600,
               ),
             ),

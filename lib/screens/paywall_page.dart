@@ -401,8 +401,8 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                     center: Alignment.topCenter,
                     radius: 1.0,
                     colors: [
-                      const Color(0xFF646CFF).withValues(alpha: 0.18),
-                      const Color(0xFF646CFF).withValues(alpha: 0.07),
+                      const Color(0xFFBA6A37).withValues(alpha: 0.18),
+                      const Color(0xFFBA6A37).withValues(alpha: 0.07),
                       Colors.transparent,
                     ],
                     stops: const [0.0, 0.45, 1.0],
@@ -450,7 +450,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                         // Feature list
                         _FeatureRow(
                           icon: Icons.all_inclusive_rounded,
-                          iconColor: const Color(0xFF646CFF),
+                          iconColor: const Color(0xFFBA6A37),
                           text: 'Unlimited scans',
                         ),
                         const SizedBox(height: 22),
@@ -542,12 +542,12 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(16),
                             gradient: const LinearGradient(
-                              colors: [Color(0xFF646CFF), Color(0xFF8B5CF6)],
+                              colors: [Color(0xFFBA6A37), Color(0xFF8B5CF6)],
                             ),
                             boxShadow: [
                               BoxShadow(
                                 color: const Color(
-                                  0xFF646CFF,
+                                  0xFFBA6A37,
                                 ).withValues(alpha: 0.45),
                                 blurRadius: 18,
                                 offset: const Offset(0, 6),
@@ -565,7 +565,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                               backgroundColor: Colors.transparent,
                               foregroundColor: Colors.white,
                               disabledBackgroundColor: const Color(
-                                0xFF646CFF,
+                                0xFFBA6A37,
                               ).withValues(alpha: 0.5),
                               shadowColor: Colors.transparent,
                               shape: RoundedRectangleBorder(

@@ -141,7 +141,7 @@ class _TutorialSheetState extends State<_TutorialSheet> {
                   height: 6,
                   decoration: BoxDecoration(
                     color: active
-                        ? const Color(0xFF646CFF)
+                        ? const Color(0xFFBA6A37)
                         : Colors.white.withValues(alpha: 0.20),
                     borderRadius: BorderRadius.circular(3),
                   ),
@@ -313,7 +313,7 @@ class _TrophyVisual extends StatelessWidget {
                 height: 72,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF646CFF).withValues(alpha: glow.value),
+                  color: const Color(0xFFBA6A37).withValues(alpha: glow.value),
                 ),
               ),
             ),
@@ -323,12 +323,12 @@ class _TrophyVisual extends StatelessWidget {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF646CFF).withValues(alpha: 0.15),
+                  color: const Color(0xFFBA6A37).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(22),
                 ),
                 child: const Icon(
                   Icons.emoji_events_rounded,
-                  color: Color(0xFF646CFF),
+                  color: Color(0xFFBA6A37),
                   size: 40,
                 ),
               ),
@@ -678,7 +678,7 @@ class _PressableButtonState extends State<_PressableButton> {
           width: double.infinity,
           height: 56,
           decoration: BoxDecoration(
-            color: const Color(0xFF646CFF),
+            color: const Color(0xFFBA6A37),
             borderRadius: BorderRadius.circular(14),
           ),
           alignment: Alignment.center,

@@ -70,7 +70,7 @@ class SimilarResultsSection extends StatelessWidget {
             children: [
               Icon(
                 Icons.search_rounded,
-                color: const Color(0xFF646CFF),
+                color: const Color(0xFFBA6A37),
                 size: 20,
               ),
               const SizedBox(width: 8),
@@ -118,7 +118,7 @@ class SimilarResultsSection extends StatelessWidget {
             children: [
               Icon(
                 Icons.search_rounded,
-                color: const Color(0xFF646CFF),
+                color: const Color(0xFFBA6A37),
                 size: 20,
               ),
               const SizedBox(width: 8),
@@ -137,7 +137,7 @@ class SimilarResultsSection extends StatelessWidget {
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
               child: CircularProgressIndicator(
-                color: Color(0xFF646CFF),
+                color: Color(0xFFBA6A37),
               ),
             ),
           ),
@@ -172,7 +172,7 @@ class SimilarResultsSection extends StatelessWidget {
             children: [
               Icon(
                 Icons.search_rounded,
-                color: const Color(0xFF646CFF),
+                color: const Color(0xFFBA6A37),
                 size: 20,
               ),
               const SizedBox(width: 8),

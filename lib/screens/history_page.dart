@@ -187,7 +187,7 @@ class _HistoryPageState extends State<HistoryPage> {
         return Theme(
           data: ThemeData.dark().copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF646CFF),
+              primary: Color(0xFFBA6A37),
               onPrimary: Colors.white,
               surface: Color(0xFF1A1A1A),
               onSurface: Colors.white,
@@ -301,7 +301,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
                         child: CircularProgressIndicator(
-                          color: Color(0xFF646CFF),
+                          color: Color(0xFFBA6A37),
                         ),
                       );
                     }
@@ -385,18 +385,18 @@ class _HistoryPageState extends State<HistoryPage> {
       child: InkWell(
         onTap: () => setState(() => _dateFilter = filter),
         borderRadius: BorderRadius.circular(20),
-        splashColor: const Color(0xFF646CFF).withValues(alpha: 0.3),
-        highlightColor: const Color(0xFF646CFF).withValues(alpha: 0.1),
+        splashColor: const Color(0xFFBA6A37).withValues(alpha: 0.3),
+        highlightColor: const Color(0xFFBA6A37).withValues(alpha: 0.1),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: isSelected
-                ? const Color(0xFF646CFF)
+                ? const Color(0xFFBA6A37)
                 : const Color(0xFF1A1A1A),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isSelected
-                  ? const Color(0xFF646CFF)
+                  ? const Color(0xFFBA6A37)
                   : const Color(0xFF2A2A2A),
               width: 1,
             ),
@@ -428,18 +428,18 @@ class _HistoryPageState extends State<HistoryPage> {
       child: InkWell(
         onTap: _showDateRangePicker,
         borderRadius: BorderRadius.circular(20),
-        splashColor: const Color(0xFF646CFF).withValues(alpha: 0.3),
-        highlightColor: const Color(0xFF646CFF).withValues(alpha: 0.1),
+        splashColor: const Color(0xFFBA6A37).withValues(alpha: 0.3),
+        highlightColor: const Color(0xFFBA6A37).withValues(alpha: 0.1),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: isSelected
-                ? const Color(0xFF646CFF)
+                ? const Color(0xFFBA6A37)
                 : const Color(0xFF1A1A1A),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: isSelected
-                  ? const Color(0xFF646CFF)
+                  ? const Color(0xFFBA6A37)
                   : const Color(0xFF2A2A2A),
               width: 1,
             ),
@@ -477,7 +477,7 @@ class _HistoryPageState extends State<HistoryPage> {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: const Color(0xFF646CFF).withValues(alpha: 0.1),
+              color: const Color(0xFFBA6A37).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(
@@ -514,7 +514,7 @@ class _HistoryPageState extends State<HistoryPage> {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: const Color(0xFF646CFF).withValues(alpha: 0.1),
+              color: const Color(0xFFBA6A37).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(Icons.search_off, size: 40, color: Colors.grey[600]),
@@ -549,7 +549,7 @@ class _HistoryPageState extends State<HistoryPage> {
               style: GoogleFonts.inter(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFF646CFF),
+                color: const Color(0xFFBA6A37),
               ),
             ),
           ),
@@ -625,7 +625,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 height: 52,
                 decoration: BoxDecoration(
                   color: hasProductInfo
-                      ? const Color(0xFF646CFF).withValues(alpha: 0.15)
+                      ? const Color(0xFFBA6A37).withValues(alpha: 0.15)
                       : const Color(0xFF333333),
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -639,7 +639,7 @@ class _HistoryPageState extends State<HistoryPage> {
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) => Icon(
                             Icons.directions_run,
-                            color: const Color(0xFF646CFF),
+                            color: const Color(0xFFBA6A37),
                             size: 26,
                           ),
                         ),
@@ -649,7 +649,7 @@ class _HistoryPageState extends State<HistoryPage> {
                             ? Icons.directions_run
                             : Icons.help_outline_rounded,
                         color: hasProductInfo
-                            ? const Color(0xFF646CFF)
+                            ? const Color(0xFFBA6A37)
                             : Colors.grey[500],
                         size: 26,
                       ),
@@ -712,12 +712,12 @@ class _HistoryPageState extends State<HistoryPage> {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF646CFF).withValues(alpha: 0.1),
+                  color: const Color(0xFFBA6A37).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
                   Icons.arrow_forward_ios,
-                  color: Color(0xFF646CFF),
+                  color: Color(0xFFBA6A37),
                   size: 14,
                 ),
               ),

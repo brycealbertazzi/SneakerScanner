@@ -122,14 +122,8 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF121212),
       body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1A1A2E), Color(0xFF242424)],
-          ),
-        ),
         child: Center(
           child: AnimatedBuilder(
             animation: _controller,
@@ -146,7 +140,7 @@ class _SplashScreenState extends State<SplashScreen>
                         height: 120,
                         decoration: BoxDecoration(
                           color: const Color(
-                            0xFF646CFF,
+                            0xFFBA6A37,
                           ).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(30),
                         ),
@@ -157,13 +151,13 @@ class _SplashScreenState extends State<SplashScreen>
                               Icons.qr_code_scanner_rounded,
                               size: 64,
                               color: const Color(
-                                0xFF646CFF,
+                                0xFFBA6A37,
                               ).withValues(alpha: 0.3),
                             ),
                             const Icon(
                               Icons.directions_run_rounded,
                               size: 48,
-                              color: Color(0xFF646CFF),
+                              color: Color(0xFFBA6A37),
                             ),
                           ],
                         ),
@@ -195,7 +189,7 @@ class _SplashScreenState extends State<SplashScreen>
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            const Color(0xFF646CFF).withValues(alpha: 0.7),
+                            const Color(0xFFBA6A37).withValues(alpha: 0.7),
                           ),
                         ),
                       ),

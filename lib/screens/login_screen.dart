@@ -253,7 +253,7 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text(
               'Sign in with Google',
-              style: TextStyle(color: Color(0xFF646CFF)),
+              style: TextStyle(color: Color(0xFFBA6A37)),
             ),
           ),
         ],
@@ -317,13 +317,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 100,
                     height: 100,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF646CFF).withValues(alpha: 0.15),
+                      color: const Color(0xFFBA6A37).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(25),
                     ),
                     child: const Icon(
                       Icons.directions_run_rounded,
                       size: 48,
-                      color: Color(0xFF646CFF),
+                      color: Color(0xFFBA6A37),
                     ),
                   ),
                   const SizedBox(height: 32),

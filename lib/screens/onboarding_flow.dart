@@ -316,7 +316,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                   value: value,
                   minHeight: 3,
                   backgroundColor: Colors.white.withValues(alpha: 0.08),
-                  valueColor: const AlwaysStoppedAnimation(Color(0xFF646CFF)),
+                  valueColor: const AlwaysStoppedAnimation(Color(0xFFBA6A37)),
                 ),
               ),
             ),
@@ -474,7 +474,7 @@ class _IntroScreenState extends State<_IntroScreen>
                     widget.onGetStarted();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF646CFF),
+                    backgroundColor: const Color(0xFFBA6A37),
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -658,12 +658,12 @@ class _QuestionScreenState extends State<_QuestionScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? const Color(0xFF646CFF)
+                            ? const Color(0xFFBA6A37)
                             : Colors.transparent,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: isSelected
-                              ? const Color(0xFF646CFF)
+                              ? const Color(0xFFBA6A37)
                               : Colors.white.withValues(alpha: 0.15),
                           width: 1.5,
                         ),
@@ -875,7 +875,7 @@ class _ViewfinderWidget extends StatelessWidget {
                     children: [
                       const Icon(
                         Icons.directions_run_rounded,
-                        color: Color(0xFF646CFF),
+                        color: Color(0xFFBA6A37),
                         size: 14,
                       ),
                       const SizedBox(width: 6),
@@ -948,7 +948,7 @@ class _ViewfinderWidget extends StatelessWidget {
             child: CustomPaint(
               painter: _BracketPainter(
                 progress: bracketProgress,
-                color: const Color(0xFF646CFF),
+                color: const Color(0xFFBA6A37),
               ),
             ),
           ),
@@ -966,13 +966,13 @@ class _ViewfinderWidget extends StatelessWidget {
                     gradient: const LinearGradient(
                       colors: [
                         Colors.transparent,
-                        Color(0xFF646CFF),
+                        Color(0xFFBA6A37),
                         Colors.transparent,
                       ],
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF646CFF).withValues(alpha: 0.5),
+                        color: const Color(0xFFBA6A37).withValues(alpha: 0.5),
                         blurRadius: 6,
                       ),
                     ],
@@ -1508,8 +1508,8 @@ class _PressableButtonState extends State<_PressableButton> {
   @override
   Widget build(BuildContext context) {
     final bgColor = widget.enabled
-        ? const Color(0xFF646CFF)
-        : const Color(0xFF646CFF).withValues(alpha: 0.30);
+        ? const Color(0xFFBA6A37)
+        : const Color(0xFFBA6A37).withValues(alpha: 0.30);
     final textColor = widget.enabled
         ? Colors.white
         : Colors.white.withValues(alpha: 0.40);
@@ -1636,12 +1636,12 @@ class _AnalysisScreenState extends State<_AnalysisScreen>
                   width: 72,
                   height: 72,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF646CFF).withValues(alpha: 0.15),
+                    color: const Color(0xFFBA6A37).withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: const Icon(
                     Icons.directions_run_rounded,
-                    color: Color(0xFF646CFF),
+                    color: Color(0xFFBA6A37),
                     size: 36,
                   ),
                 ),
@@ -1667,7 +1667,7 @@ class _AnalysisScreenState extends State<_AnalysisScreen>
                         value: _progressCtrl.value,
                         backgroundColor: const Color(0xFF1A1A2E),
                         valueColor: const AlwaysStoppedAnimation(
-                          Color(0xFF646CFF),
+                          Color(0xFFBA6A37),
                         ),
                         minHeight: 6,
                       ),

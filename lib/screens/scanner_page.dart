@@ -755,7 +755,7 @@ class _ScannerPageState extends State<ScannerPage>
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: const BorderSide(
-                      color: Color(0xFF646CFF),
+                      color: Color(0xFFBA6A37),
                       width: 1,
                     ),
                   ),
@@ -822,7 +822,7 @@ class _ScannerPageState extends State<ScannerPage>
                         }
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF646CFF),
+                        backgroundColor: const Color(0xFFBA6A37),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
@@ -939,7 +939,7 @@ class _ScannerPageState extends State<ScannerPage>
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: const BorderSide(
-                      color: Color(0xFF646CFF),
+                      color: Color(0xFFBA6A37),
                       width: 1,
                     ),
                   ),
@@ -999,7 +999,7 @@ class _ScannerPageState extends State<ScannerPage>
                       icon: const Icon(Icons.search, size: 18),
                       label: const Text('Search'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF646CFF),
+                        backgroundColor: const Color(0xFFBA6A37),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
@@ -1056,7 +1056,7 @@ class _ScannerPageState extends State<ScannerPage>
                 child: ElevatedButton(
                   onPressed: () => Navigator.of(dialogContext).pop(),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF646CFF),
+                    backgroundColor: const Color(0xFFBA6A37),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -1146,7 +1146,7 @@ class _ScannerPageState extends State<ScannerPage>
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               const CircularProgressIndicator(
-                                color: Color(0xFF646CFF),
+                                color: Color(0xFFBA6A37),
                               ),
                               const SizedBox(height: 16),
                               Text(
@@ -1180,10 +1180,10 @@ class _ScannerPageState extends State<ScannerPage>
                 icon: const Icon(Icons.camera_alt),
                 label: const Text('Scan Label'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF646CFF),
+                  backgroundColor: const Color(0xFFBA6A37),
                   foregroundColor: Colors.white,
                   disabledBackgroundColor: const Color(
-                    0xFF646CFF,
+                    0xFFBA6A37,
                   ).withValues(alpha: 0.5),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -1207,8 +1207,8 @@ class _ScannerPageState extends State<ScannerPage>
                 icon: const Icon(Icons.keyboard, size: 18),
                 label: const Text('Enter SKU Manually'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF646CFF),
-                  side: const BorderSide(color: Color(0xFF646CFF)),
+                  foregroundColor: const Color(0xFFBA6A37),
+                  side: const BorderSide(color: Color(0xFFBA6A37)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -1322,7 +1322,7 @@ class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
                 width: _boxWidth,
                 height: _boxHeight,
                 decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFF646CFF), width: 2),
+                  border: Border.all(color: const Color(0xFFBA6A37), width: 2),
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),

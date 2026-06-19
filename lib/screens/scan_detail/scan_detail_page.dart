@@ -1677,7 +1677,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           ),
         ),
         body: const Center(
-          child: CircularProgressIndicator(color: Color(0xFF646CFF)),
+          child: CircularProgressIndicator(color: Color(0xFFBA6A37)),
         ),
       );
     }
@@ -1720,7 +1720,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 icon: const Icon(Icons.qr_code_scanner),
                 label: const Text('Scan Another'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF646CFF),
+                  backgroundColor: const Color(0xFFBA6A37),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -1809,14 +1809,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                           ),
                           decoration: BoxDecoration(
                             color: const Color(
-                              0xFF646CFF,
+                              0xFFBA6A37,
                             ).withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             badgeBrand,
                             style: GoogleFonts.inter(
-                              color: const Color(0xFF646CFF),
+                              color: const Color(0xFFBA6A37),
                               fontWeight: FontWeight.w600,
                             ),
                           ),

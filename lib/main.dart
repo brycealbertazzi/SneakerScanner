@@ -29,10 +29,10 @@ class SneakerScannerApp extends StatelessWidget {
       title: 'SneakScan',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
-        primaryColor: const Color(0xFF646CFF),
+        primaryColor: const Color(0xFFBA6A37),
         scaffoldBackgroundColor: const Color(0xFF121212),
         colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF646CFF),
+          primary: Color(0xFFBA6A37),
           secondary: Color(0xFF535BF2),
           surface: Color(0xFF1E1E1E),
         ),
