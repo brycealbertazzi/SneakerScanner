@@ -38,6 +38,8 @@ class SneakerScannerApp extends StatelessWidget {
         ),
         textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
         appBarTheme: AppBarTheme(
+          surfaceTintColor: Colors.transparent,
+          scrolledUnderElevation: 0,
           titleTextStyle: GoogleFonts.poppins(
             fontSize: 20,
             fontWeight: FontWeight.w600,

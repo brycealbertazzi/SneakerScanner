@@ -153,10 +153,8 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
                 return Container(
                   width: 38,
                   height: 38,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     shape: BoxShape.circle,
-                    border:
-                        Border.all(color: const Color(0xFFBA6A37), width: 2),
                   ),
                   child: ClipOval(
                     child: photoUrl != null

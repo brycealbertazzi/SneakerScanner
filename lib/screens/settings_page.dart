@@ -358,12 +358,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   Container(
                     width: 70,
                     height: 70,
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: const Color(0xFFBA6A37),
-                        width: 3,
-                      ),
                     ),
                     child: ClipOval(
                       child: photoUrl != null
