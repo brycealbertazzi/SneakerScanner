@@ -541,9 +541,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           height: 64,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(16),
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFBA6A37), Color(0xFF8B5CF6)],
-                            ),
+                            color: const Color(0xFFBA6A37),
                             boxShadow: [
                               BoxShadow(
                                 color: const Color(
