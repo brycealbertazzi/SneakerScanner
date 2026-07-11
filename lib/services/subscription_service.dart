@@ -6,6 +6,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:purchases_flutter/purchases_flutter.dart' as rc;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../api_keys.dart';
 
 const String kAnnualProductId = 'sneakscan_annual';
 
@@ -63,10 +67,18 @@ class SubscriptionService extends ChangeNotifier {
     _startLaunchCheck();
   }
 
+  // RevenueCat observer-mode tracking (purchases completed by this app).
+  // Purchase flow and entitlements stay on in_app_purchase; RevenueCat only
+  // receives purchase events for analytics.
+  static bool _revenueCatConfigured = false;
+  static const _rcBackfillPrefsKey = 'rc_purchases_backfilled_v1';
+
   /// Safe to call multiple times — subsequent calls are no-ops.
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
+
+    await _configureRevenueCat();
 
     // Detect lapsed subscribers to show correct button label.
     // iOS: query StoreKit intro offer eligibility (from Apple).
@@ -109,6 +121,71 @@ class SubscriptionService extends ChangeNotifier {
     // Results arrive via the purchase stream. _startLaunchCheck is non-blocking;
     // call awaitLaunchCheck() to wait for resolution.
     _startLaunchCheck();
+  }
+
+  Future<void> _configureRevenueCat() async {
+    if (_revenueCatConfigured) return;
+    final apiKey = Platform.isIOS
+        ? ApiKeys.revenueCatAppleApiKey
+        : Platform.isAndroid
+            ? ApiKeys.revenueCatGoogleApiKey
+            : '';
+    if (apiKey.isEmpty) {
+      debugPrint('[RC] No API key for this platform — tracking disabled');
+      return;
+    }
+    try {
+      final configuration = rc.PurchasesConfiguration(apiKey)
+        ..purchasesAreCompletedBy = rc.PurchasesAreCompletedByMyApp(
+          storeKitVersion: rc.StoreKitVersion.storeKit2,
+        );
+      await rc.Purchases.configure(configuration);
+      _revenueCatConfigured = true;
+      _backfillRevenueCatPurchases();
+    } catch (e) {
+      debugPrint('[RC] Configure failed — tracking disabled: $e');
+    }
+  }
+
+  /// One-time (per install) sync so subscribers who purchased before
+  /// RevenueCat was added still show up in its dashboard.
+  void _backfillRevenueCatPurchases() {
+    Future(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if (prefs.getBool(_rcBackfillPrefsKey) ?? false) return;
+        await rc.Purchases.syncPurchases();
+        await prefs.setBool(_rcBackfillPrefsKey, true);
+        debugPrint('[RC] One-time purchase backfill complete');
+      } catch (e) {
+        debugPrint('[RC] Backfill failed (will retry next launch): $e');
+      }
+    });
+  }
+
+  /// Reports a completed purchase/restore to RevenueCat. Fire-and-forget —
+  /// tracking must never affect the purchase flow.
+  void _syncPurchaseToRevenueCat(PurchaseDetails purchase) {
+    if (!_revenueCatConfigured) return;
+    Future(() async {
+      try {
+        if (Platform.isIOS && purchase.status == PurchaseStatus.purchased) {
+          // StoreKit 2 observer mode: new purchases must be recorded
+          // explicitly; renewals are observed automatically.
+          await rc.Purchases.recordPurchase(purchase.productID);
+        } else {
+          await rc.Purchases.syncPurchases();
+        }
+        debugPrint('[RC] Purchase synced');
+      } catch (e) {
+        debugPrint('[RC] recordPurchase failed, falling back to sync: $e');
+        try {
+          await rc.Purchases.syncPurchases();
+        } catch (e2) {
+          debugPrint('[RC] Sync failed (non-fatal): $e2');
+        }
+      }
+    });
   }
 
   Future<String?> _getAndroidId() async {
@@ -310,6 +387,7 @@ class SubscriptionService extends ChangeNotifier {
               purchase.status == PurchaseStatus.restored;
           _purchaseInitiated = false;
           _validateInBackground(purchase);
+          _syncPurchaseToRevenueCat(purchase);
           if (Platform.isAndroid) _recordAndroidSubscription();
           _startLaunchCheck();
         }

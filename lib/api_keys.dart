@@ -19,6 +19,13 @@ class ApiKeys {
   static const String stockXRedirectUri = 'sneakerscanner://stockx-callback';
   static const bool ebayProduction = true;
 
+  // RevenueCat public app-specific API keys (dashboard → Project settings →
+  // API keys). Publishable, safe to hardcode. Empty = tracking disabled.
+  static const String revenueCatAppleApiKey =
+      'appl_hoLOIQDstFCgQivSqczmHTxgehb'; // appl_...
+  static const String revenueCatGoogleApiKey =
+      'goog_bdpchqxBSzmmnNJlObhGltPODlS'; // goog_...
+
   static Future<bool> fetch() async {
     if (_loaded) return true;
     try {
