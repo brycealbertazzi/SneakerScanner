@@ -78,7 +78,9 @@ class SubscriptionService extends ChangeNotifier {
     if (_initialized) return;
     _initialized = true;
 
-    await _configureRevenueCat();
+    // Tracking only — never awaited, so it can't delay or block the purchase
+    // flow if the RevenueCat SDK is slow to respond.
+    unawaited(_configureRevenueCat());
 
     // Detect lapsed subscribers to show correct button label.
     // iOS: query StoreKit intro offer eligibility (from Apple).
@@ -114,8 +116,14 @@ class SubscriptionService extends ChangeNotifier {
       },
     );
 
-    // Load IAP products.
-    await _loadProducts();
+    // Load IAP products. Capped so a stalled store query can't prevent the
+    // launch check below from ever starting — that would leave status stuck on
+    // `loading` and spin the paywall button forever.
+    try {
+      await _loadProducts().timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('[IAP] Product load failed or timed out: $e');
+    }
 
     // Silently query StoreKit/Play Billing for current subscription status.
     // Results arrive via the purchase stream. _startLaunchCheck is non-blocking;
@@ -139,8 +147,11 @@ class SubscriptionService extends ChangeNotifier {
         ..purchasesAreCompletedBy = rc.PurchasesAreCompletedByMyApp(
           storeKitVersion: rc.StoreKitVersion.storeKit2,
         );
-      await rc.Purchases.configure(configuration);
+      await rc.Purchases.configure(
+        configuration,
+      ).timeout(const Duration(seconds: 15));
       _revenueCatConfigured = true;
+      debugPrint('[RC] Configured (observer mode)');
       _backfillRevenueCatPurchases();
     } catch (e) {
       debugPrint('[RC] Configure failed — tracking disabled: $e');
