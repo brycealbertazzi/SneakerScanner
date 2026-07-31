@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/enums.dart';
 import '../models/scan_data.dart';
+import 'demo/demo_controller.dart';
 import 'main_screen.dart';
 import 'scan_detail/scan_detail_page.dart';
 
@@ -471,6 +472,7 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget _buildEmptyState() {
     return Center(
       child: Column(
+        key: DemoKeys.key(DemoTarget.historyEmptyState),
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(

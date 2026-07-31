@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'demo/demo_controller.dart';
+
 // ── Brand / format data ───────────────────────────────────────────────────────
 
 class _BrandFormat {
@@ -64,11 +66,15 @@ const _kBrands = [
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
-void showSkuFormatsSheet(BuildContext context) {
-  showModalBottomSheet(
+Future<void> showSkuFormatsSheet(BuildContext context) {
+  final demoActive = DemoController.instance.isActive;
+  return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
+    // The demo drives this sheet itself — nothing here is the user's to dismiss.
+    isDismissible: !demoActive,
+    enableDrag: !demoActive,
     builder: (_) => const _SkuFormatsSheet(),
   );
 }
@@ -78,85 +84,98 @@ void showSkuFormatsSheet(BuildContext context) {
 class _SkuFormatsSheet extends StatelessWidget {
   const _SkuFormatsSheet();
 
+  /// Fraction of the screen the sheet fills while the guided demo has it
+  /// spotlighted — short enough to leave the coach mark room above it.
+  static const _demoSize = 0.58;
+
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.92,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      builder: (_, scrollCtrl) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          children: [
-            // Drag handle
-            const SizedBox(height: 12),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.20),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
+    final demoActive = DemoController.instance.isActive;
 
-            // Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'SKU Formats by Brand',
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).pop(),
-                    child: Icon(
-                      Icons.close_rounded,
-                      color: Colors.grey[500],
-                      size: 22,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 6),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                'The SKU is on the side label of the shoe box.',
-                style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[500]),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            Divider(color: Colors.white.withValues(alpha: 0.08), height: 1),
-
-            // Brand list
-            Expanded(
-              child: ListView.separated(
-                controller: scrollCtrl,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: _kBrands.length,
-                separatorBuilder: (_, i) => Divider(
-                  color: Colors.white.withValues(alpha: 0.06),
-                  height: 1,
-                  indent: 24,
-                  endIndent: 24,
+    return PopScope(
+      canPop: !demoActive,
+      child: DraggableScrollableSheet(
+        initialChildSize: demoActive ? _demoSize : 0.92,
+        minChildSize: demoActive ? _demoSize : 0.5,
+        maxChildSize: demoActive ? _demoSize : 0.95,
+        builder: (_, scrollCtrl) => Container(
+          key: DemoKeys.key(DemoTarget.skuFormatsSheet),
+          decoration: const BoxDecoration(
+            color: Color(0xFF1A1A1A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Drag handle
+              const SizedBox(height: 12),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.20),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                itemBuilder: (_, i) => _BrandRow(brand: _kBrands[i]),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'SKU Formats by Brand',
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Icon(
+                        Icons.close_rounded,
+                        color: Colors.grey[500],
+                        size: 22,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  'The SKU is on the side label of the shoe box.',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: Colors.grey[500],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              Divider(color: Colors.white.withValues(alpha: 0.08), height: 1),
+
+              // Brand list
+              Expanded(
+                child: ListView.separated(
+                  controller: scrollCtrl,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  itemCount: _kBrands.length,
+                  separatorBuilder: (_, i) => Divider(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    height: 1,
+                    indent: 24,
+                    endIndent: 24,
+                  ),
+                  itemBuilder: (_, i) => _BrandRow(brand: _kBrands[i]),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

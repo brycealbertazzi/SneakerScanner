@@ -14,6 +14,7 @@ import '../models/scan_data.dart';
 import '../services/gtin_utils.dart';
 import '../services/mixpanel_service.dart';
 import '../services/subscription_service.dart';
+import 'demo/demo_controller.dart';
 import 'main_screen.dart';
 import 'paywall_page.dart';
 import 'scan_detail/scan_detail_page.dart';
@@ -588,10 +589,13 @@ class _ScannerPageState extends State<ScannerPage>
       // Parse OCR text into ScanData
       final scanData = _parseLabelInfo(fullText);
 
-      MixpanelService.instance.track('OCR Scan Completed', properties: {
-        'sku_found': scanData.sku != null,
-        if (scanData.brand != null) 'brand': scanData.brand!,
-      });
+      MixpanelService.instance.track(
+        'OCR Scan Completed',
+        properties: {
+          'sku_found': scanData.sku != null,
+          if (scanData.brand != null) 'brand': scanData.brand!,
+        },
+      );
 
       debugPrint('═══ SCAN RESULT ═══');
       if (scanData.sku != null) {
@@ -701,190 +705,226 @@ class _ScannerPageState extends State<ScannerPage>
 
   void _showManualSkuDialog(String ocrText, ScanData currentScanData) {
     final controller = TextEditingController();
-    showDialog(
+    final demoActive = DemoController.instance.isActive;
+    if (demoActive) {
+      // Let the dialog settle before the spotlight jumps onto it.
+      Future.delayed(const Duration(milliseconds: 280), () {
+        DemoController.instance.handleEvent(DemoEvent.manualDialogOpened);
+      });
+    }
+    showDialog<void>(
       context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF333333), width: 1),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                ocrText.isEmpty ? 'Enter SKU' : 'No SKU Found',
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                ocrText.isEmpty
-                    ? 'Type the SKU from the shoe label.'
-                    : 'We couldn\'t detect a SKU. Enter it manually or scan the barcode.',
-                style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[400]),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                textCapitalization: TextCapitalization.characters,
-                style: GoogleFonts.robotoMono(
-                  fontSize: 16,
-                  color: Colors.white,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'e.g. DD1391-100',
-                  hintStyle: GoogleFonts.robotoMono(
-                    fontSize: 14,
-                    color: Colors.grey[600],
+      // While the demo runs, Cancel is the only way out of this dialog.
+      barrierDismissible: !demoActive,
+      builder: (dialogContext) => PopScope(
+        canPop: !demoActive,
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF333333), width: 1),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  ocrText.isEmpty ? 'Enter SKU' : 'No SKU Found',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
                   ),
-                  filled: true,
-                  fillColor: const Color(0xFF252525),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  ocrText.isEmpty
+                      ? 'Type the SKU from the shoe label.'
+                      : 'We couldn\'t detect a SKU. Enter it manually or scan the barcode.',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: Colors.grey[400],
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: const BorderSide(
-                      color: Color(0xFFBA6A37),
-                      width: 1,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  key: DemoKeys.key(DemoTarget.skuField),
+                  controller: controller,
+                  // Keep the keyboard down during the demo — it would shove the
+                  // dialog around underneath the coach mark.
+                  autofocus: !demoActive,
+                  textCapitalization: TextCapitalization.characters,
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 16,
+                    color: Colors.white,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. DD1391-100',
+                    hintStyle: GoogleFonts.robotoMono(
+                      fontSize: 14,
+                      color: Colors.grey[600],
                     ),
-                  ),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      Icons.info_outline_rounded,
-                      color: Colors.grey[500],
-                      size: 26,
+                    filled: true,
+                    fillColor: const Color(0xFF252525),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
                     ),
-                    onPressed: () => showSkuFormatsSheet(context),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.grey[400],
-                        side: BorderSide(color: Colors.grey[600]!),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFBA6A37),
+                        width: 1,
                       ),
-                      child: const Text('Cancel'),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
+                    suffixIcon: IconButton(
+                      key: DemoKeys.key(DemoTarget.skuFormatsIcon),
+                      icon: Icon(
+                        Icons.info_outline_rounded,
+                        color: Colors.grey[500],
+                        size: 26,
+                      ),
                       onPressed: () async {
-                        final sku = controller.text.trim().toUpperCase();
-                        if (sku.isEmpty) return;
-                        MixpanelService.instance.track('Manual SKU Submitted', properties: {'sku': sku});
-                        Navigator.of(dialogContext).pop();
-                        await _previewController.stop();
-                        final data = currentScanData.copyWith(sku: sku);
-                        if (mounted) {
-                          if (!mounted) return;
-                          final result = await Navigator.of(context)
-                              .push<String>(
-                                MaterialPageRoute(
-                                  builder: (context) => ScanDetailPage(
-                                    scanId: '',
-                                    scanData: data,
-                                    timestamp:
-                                        DateTime.now().millisecondsSinceEpoch,
-                                  ),
-                                ),
-                              );
-                          await _maybeRequestReview();
-                          if (mounted && result == 'noResults') {
-                            _showNoResultsModal(data);
-                          } else if (mounted && result == 'scanAnother') {
-                            // camera restarted by didPopNext()
-                          } else if (mounted) {
-                            context
-                                .findAncestorStateOfType<MainScreenState>()
-                                ?.switchToTab(1);
-                          }
-                        }
+                        DemoController.instance.handleEvent(
+                          DemoEvent.formatsSheetOpened,
+                        );
+                        await showSkuFormatsSheet(context);
+                        DemoController.instance.handleEvent(
+                          DemoEvent.formatsSheetClosed,
+                        );
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFBA6A37),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        key: DemoKeys.key(DemoTarget.cancelButton),
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.grey[400],
+                          side: BorderSide(color: Colors.grey[600]!),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
+                        child: const Text('Cancel'),
                       ),
-                      child: const Text('Look Up'),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    Navigator.of(dialogContext).pop();
-                    if (!await _checkSubscription()) return;
-                    // Drop any OCR-derived SKU so the barcode GTIN is the
-                    // sole identifier — avoids SKU taking priority over GTIN.
-                    _scanBarcode(
-                      ocrText,
-                      ScanData(brand: currentScanData.brand),
-                    );
-                  },
-                  icon: const Icon(Icons.qr_code_scanner, size: 18),
-                  label: const Text('Scan Barcode'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: BorderSide(color: Colors.grey[600]!),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        key: DemoKeys.key(DemoTarget.lookUpButton),
+                        onPressed: () async {
+                          final sku = controller.text.trim().toUpperCase();
+                          if (sku.isEmpty) return;
+                          MixpanelService.instance.track(
+                            'Manual SKU Submitted',
+                            properties: {'sku': sku},
+                          );
+                          Navigator.of(dialogContext).pop();
+                          await _previewController.stop();
+                          final data = currentScanData.copyWith(sku: sku);
+                          if (mounted) {
+                            if (!mounted) return;
+                            final result = await Navigator.of(context)
+                                .push<String>(
+                                  MaterialPageRoute(
+                                    builder: (context) => ScanDetailPage(
+                                      scanId: '',
+                                      scanData: data,
+                                      timestamp:
+                                          DateTime.now().millisecondsSinceEpoch,
+                                    ),
+                                  ),
+                                );
+                            await _maybeRequestReview();
+                            if (mounted && result == 'noResults') {
+                              _showNoResultsModal(data);
+                            } else if (mounted && result == 'scanAnother') {
+                              // camera restarted by didPopNext()
+                            } else if (mounted) {
+                              context
+                                  .findAncestorStateOfType<MainScreenState>()
+                                  ?.switchToTab(1);
+                            }
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFBA6A37),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text('Look Up'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  key: DemoKeys.key(DemoTarget.scanBarcodeButton),
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      Navigator.of(dialogContext).pop();
+                      if (!await _checkSubscription()) return;
+                      // Drop any OCR-derived SKU so the barcode GTIN is the
+                      // sole identifier — avoids SKU taking priority over GTIN.
+                      _scanBarcode(
+                        ocrText,
+                        ScanData(brand: currentScanData.brand),
+                      );
+                    },
+                    icon: const Icon(Icons.qr_code_scanner, size: 18),
+                    label: const Text('Scan Barcode'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(color: Colors.grey[600]!),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    Navigator.of(dialogContext).pop();
-                    if (!await _checkSubscription()) return;
-                    _showTitleSearchDialog(currentScanData);
-                  },
-                  icon: const Icon(Icons.search, size: 18),
-                  label: const Text('Search by Title'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: BorderSide(color: Colors.grey[600]!),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                const SizedBox(height: 8),
+                SizedBox(
+                  key: DemoKeys.key(DemoTarget.searchByTitleButton),
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      Navigator.of(dialogContext).pop();
+                      if (!await _checkSubscription()) return;
+                      _showTitleSearchDialog(currentScanData);
+                    },
+                    icon: const Icon(Icons.search, size: 18),
+                    label: const Text('Search by Title'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(color: Colors.grey[600]!),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
+    ).then(
+      (_) => DemoController.instance.handleEvent(DemoEvent.manualDialogClosed),
     );
   }
 
@@ -1080,7 +1120,10 @@ class _ScannerPageState extends State<ScannerPage>
                   width: double.infinity,
                   child: OutlinedButton(
                     onPressed: () {
-                      MixpanelService.instance.track('Enter SKU Manually Tapped', properties: {'source': 'no_results_modal'});
+                      MixpanelService.instance.track(
+                        'Enter SKU Manually Tapped',
+                        properties: {'source': 'no_results_modal'},
+                      );
                       Navigator.of(dialogContext).pop();
                       onEnterManually();
                     },
@@ -1126,6 +1169,7 @@ class _ScannerPageState extends State<ScannerPage>
             const SizedBox(height: 24),
 
             ClipRRect(
+              key: DemoKeys.key(DemoTarget.cameraPreview),
               borderRadius: BorderRadius.circular(12),
               child: SizedBox(
                 height: 300,
@@ -1167,6 +1211,7 @@ class _ScannerPageState extends State<ScannerPage>
             const SizedBox(height: 16),
 
             SizedBox(
+              key: DemoKeys.key(DemoTarget.scanLabelButton),
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: _isProcessing
@@ -1194,13 +1239,22 @@ class _ScannerPageState extends State<ScannerPage>
             ),
             const SizedBox(height: 10),
             SizedBox(
+              key: DemoKeys.key(DemoTarget.enterSkuButton),
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: _isProcessing
                     ? null
                     : () async {
-                        if (await _checkSubscription()) {
-                          MixpanelService.instance.track('Enter SKU Manually Tapped', properties: {'source': 'scanner'});
+                        // The demo opens this dialog for illustration only — no
+                        // lookup happens, so it doesn't need a subscription.
+                        final allowed =
+                            DemoController.instance.isActive ||
+                            await _checkSubscription();
+                        if (allowed) {
+                          MixpanelService.instance.track(
+                            'Enter SKU Manually Tapped',
+                            properties: {'source': 'scanner'},
+                          );
                           _showManualSkuDialog('', const ScanData());
                         }
                       },

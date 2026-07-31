@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api_keys.dart';
 import '../services/stockx_auth_service.dart';
 import '../services/subscription_service.dart';
+import 'demo/demo_controller.dart';
 import 'paywall_page.dart';
 import 'scanner_page.dart';
 import 'history_page.dart';
@@ -55,14 +56,30 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     });
   }
 
+  static const _tutorialSeenKey = 'has_seen_tutorial';
+  static const _demoSeenKey = 'has_seen_demo';
+
+  /// First open after install: Quick Tips, then the guided demo. Both are
+  /// one-shot and neither is offered to installs that predate them.
   Future<void> _maybeShowTutorial() async {
     final prefs = await SharedPreferences.getInstance();
-    final seen = prefs.getBool('has_seen_tutorial') ?? false;
-    if (seen || !mounted) return;
-    await prefs.setBool('has_seen_tutorial', true);
+    if (prefs.getBool(_tutorialSeenKey) ?? false) {
+      // Already knows the app — don't drop a 2-minute demo on them at update.
+      await prefs.setBool(_demoSeenKey, true);
+      return;
+    }
+    if (!mounted) return;
+    await prefs.setBool(_tutorialSeenKey, true);
     await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
     await showTutorialSheet(context);
+
+    if (!mounted || (prefs.getBool(_demoSeenKey) ?? false)) return;
+    // Written up front so a force-quit mid-demo can't re-trap them next launch.
+    await prefs.setBool(_demoSeenKey, true);
+    await Future.delayed(const Duration(milliseconds: 450));
+    if (!mounted) return;
+    await DemoController.instance.start(context, switchTab: switchToTab);
   }
 
   Future<void> _loadApiKeys() async {
@@ -136,6 +153,19 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // The demo is non-skippable, so the Android back button can't be allowed to
+    // pop out of MainScreen while it's running.
+    return ListenableBuilder(
+      listenable: DemoController.instance,
+      builder: (context, child) => PopScope(
+        canPop: !DemoController.instance.isActive,
+        child: child!,
+      ),
+      child: _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -185,16 +215,32 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         onTap: (index) {
           _scannerActive.value = index == 0;
           setState(() => _currentIndex = index);
+          if (index == 1) {
+            // Small beat so the tab transition lands before the spotlight moves.
+            Future.delayed(const Duration(milliseconds: 250), () {
+              DemoController.instance.handleEvent(DemoEvent.historyTabOpened);
+            });
+          }
         },
         backgroundColor: const Color(0xFF1A1A1A),
         selectedItemColor: const Color(0xFFBA6A37),
         unselectedItemColor: Colors.grey[600],
-        items: const [
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: Icon(Icons.qr_code_scanner),
             label: 'Scan',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'History'),
+          BottomNavigationBarItem(
+            // Keyed on the inactive icon only: BottomNavigationBar can build
+            // icon and activeIcon at once, and a GlobalKey can't be mounted
+            // twice. History is unselected when the demo spotlights it.
+            icon: KeyedSubtree(
+              key: DemoKeys.key(DemoTarget.historyTab),
+              child: const Icon(Icons.history),
+            ),
+            activeIcon: const Icon(Icons.history),
+            label: 'History',
+          ),
         ],
       ),
     );
