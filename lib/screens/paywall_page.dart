@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../screens/login_screen.dart';
 import '../screens/main_screen.dart';
 import '../services/mixpanel_service.dart';
+import '../services/review_access.dart';
 import '../services/subscription_service.dart';
 
 class PaywallPage extends StatefulWidget {
@@ -42,20 +44,31 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
   bool _isRestoring = false;
   Timer? _cancelFallbackTimer;
 
+  // Hidden store-review unlock: hold the subscribe button for three seconds.
+  static const _holdDuration = Duration(seconds: 3);
+  // Matches Flutter's kTouchSlop: enough for finger jitter across a 3s hold,
+  // and the same threshold at which a scroll would take over anyway.
+  static const _holdSlop = 18.0;
+  Timer? _holdTimer;
+  Offset? _holdOrigin;
+  bool _holdFired = false;
+
   @override
   void initState() {
     super.initState();
     _wasActiveOnInit = _sub.isSubscribed;
     _sub.addListener(_onSubChanged);
     WidgetsBinding.instance.addObserver(this);
-    MixpanelService.instance.track('Paywall Viewed', properties: {
-      'is_closeable': widget.isCloseable,
-    });
+    MixpanelService.instance.track(
+      'Paywall Viewed',
+      properties: {'is_closeable': widget.isCloseable},
+    );
   }
 
   @override
   void dispose() {
     _cancelFallbackTimer?.cancel();
+    _holdTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _sub.removeListener(_onSubChanged);
     super.dispose();
@@ -329,6 +342,164 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     );
   }
 
+  // ── Hidden store-review unlock ──────────────────────────────────────────────
+
+  void _onSubscribePointerDown(PointerDownEvent event) {
+    // Mirrors the button's own disabled condition — no unlocking mid-purchase.
+    if (_sub.purchasePending && !_isRestoring) return;
+    _holdFired = false;
+    _holdOrigin = event.position;
+    _holdTimer?.cancel();
+    _holdTimer = Timer(_holdDuration, () {
+      _holdFired = true;
+      HapticFeedback.heavyImpact();
+      _showAccessCodeDialog();
+    });
+  }
+
+  void _onSubscribePointerMove(PointerMoveEvent event) {
+    final origin = _holdOrigin;
+    if (origin == null) return;
+    // A scroll that happens to start on the button isn't a hold.
+    if ((event.position - origin).distance > _holdSlop) _cancelHold();
+  }
+
+  void _cancelHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _holdOrigin = null;
+  }
+
+  void _showAccessCodeDialog() {
+    final controller = TextEditingController();
+    String? error;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF333333)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Access Code',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.characters,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 15,
+                    color: Colors.white,
+                  ),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: const Color(0xFF252525),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: Color(0xFFBA6A37)),
+                    ),
+                  ),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    error!,
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      color: Colors.redAccent,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.grey[400],
+                          side: BorderSide(color: Colors.grey[600]!),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => _submitAccessCode(
+                          dialogContext,
+                          controller.text,
+                          (message) => setDialogState(() => error = message),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFBA6A37),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text('Unlock'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _submitAccessCode(
+    BuildContext dialogContext,
+    String input,
+    void Function(String) onError,
+  ) async {
+    if (!ReviewAccess.instance.matches(input)) {
+      MixpanelService.instance.track('Review Access Denied');
+      onError('Invalid code');
+      return;
+    }
+
+    await ReviewAccess.instance.grant();
+    MixpanelService.instance.track('Review Access Granted');
+
+    if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+    if (!mounted) return;
+    // Entitlement getters flip on the flag, so listeners need a nudge.
+    _sub.refreshEntitlement();
+    // Same exit path as a real purchase — pre-login still routes to sign-in.
+    _dismissPaywall();
+  }
+
   /// Dismisses the paywall correctly depending on context:
   /// - Pre-login hard paywall → LoginScreen (user subscribed before creating account)
   /// - Hard paywall (in-app) → MainScreen
@@ -536,57 +707,68 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           ),
                         )
                       else
-                        Container(
-                          width: double.infinity,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            color: const Color(0xFFBA6A37),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(
-                                  0xFFBA6A37,
-                                ).withValues(alpha: 0.45),
-                                blurRadius: 18,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                          ),
-                          child: ElevatedButton(
-                            onPressed: (pending && !_isRestoring)
-                                ? null
-                                : () {
-                                    MixpanelService.instance.track('Subscribe Button Tapped');
-                                    _sub.buyAnnual();
-                                  },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              foregroundColor: Colors.white,
-                              disabledBackgroundColor: const Color(
-                                0xFFBA6A37,
-                              ).withValues(alpha: 0.5),
-                              shadowColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              elevation: 0,
+                        Listener(
+                          onPointerDown: _onSubscribePointerDown,
+                          onPointerMove: _onSubscribePointerMove,
+                          onPointerUp: (_) => _cancelHold(),
+                          onPointerCancel: (_) => _cancelHold(),
+                          child: Container(
+                            width: double.infinity,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              color: const Color(0xFFBA6A37),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFFBA6A37,
+                                  ).withValues(alpha: 0.45),
+                                  blurRadius: 18,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
                             ),
-                            child: (pending && !_isRestoring)
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      color: Colors.white,
+                            child: ElevatedButton(
+                              onPressed: (pending && !_isRestoring)
+                                  ? null
+                                  : () {
+                                      // Releasing after a three-second hold must
+                                      // not also open the real purchase sheet.
+                                      if (_holdFired) return;
+                                      MixpanelService.instance.track(
+                                        'Subscribe Button Tapped',
+                                      );
+                                      _sub.buyAnnual();
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                foregroundColor: Colors.white,
+                                disabledBackgroundColor: const Color(
+                                  0xFFBA6A37,
+                                ).withValues(alpha: 0.5),
+                                shadowColor: Colors.transparent,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: (pending && !_isRestoring)
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : Text(
+                                      buttonLabel ?? 'Get Unlimited Scans',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
-                                  )
-                                : Text(
-                                    buttonLabel ?? 'Get Unlimited Scans',
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
+                            ),
                           ),
                         ),
                       const SizedBox(height: 12),

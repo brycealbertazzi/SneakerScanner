@@ -10,6 +10,7 @@ import 'package:purchases_flutter/purchases_flutter.dart' as rc;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_keys.dart';
+import 'review_access.dart';
 
 const String kAnnualProductId = 'sneakscan_annual';
 
@@ -20,7 +21,9 @@ class SubscriptionService extends ChangeNotifier {
   SubscriptionService._();
 
   static const _storeKitChannel = MethodChannel('com.sneakerscanner/storekit');
-  static const _androidIdChannel = MethodChannel('com.sneakerscanner/androidid');
+  static const _androidIdChannel = MethodChannel(
+    'com.sneakerscanner/androidid',
+  );
 
   SubscriptionStatus _status = SubscriptionStatus.loading;
   ProductDetails? _annualProduct;
@@ -48,9 +51,15 @@ class SubscriptionService extends ChangeNotifier {
   ProductDetails? get annualProduct => _annualProduct;
 
   /// True only when the subscription is currently active (including trial period).
-  bool get canScan => _status == SubscriptionStatus.active;
+  ///
+  /// Review access short-circuits both entitlement getters, which is the only
+  /// place the bypass needs to exist: splash routing, the lapse kick-out in
+  /// MainScreen and every scan gate all read through these two.
+  bool get canScan =>
+      ReviewAccess.instance.isGranted || _status == SubscriptionStatus.active;
 
-  bool get isSubscribed => _status == SubscriptionStatus.active;
+  bool get isSubscribed =>
+      ReviewAccess.instance.isGranted || _status == SubscriptionStatus.active;
   bool get lastActivationWasRestore => _lastActivationWasRestore;
 
   bool get isLapsedSubscriber =>
@@ -136,8 +145,8 @@ class SubscriptionService extends ChangeNotifier {
     final apiKey = Platform.isIOS
         ? ApiKeys.revenueCatAppleApiKey
         : Platform.isAndroid
-            ? ApiKeys.revenueCatGoogleApiKey
-            : '';
+        ? ApiKeys.revenueCatGoogleApiKey
+        : '';
     if (apiKey.isEmpty) {
       debugPrint('[RC] No API key for this platform — tracking disabled');
       return;
@@ -217,7 +226,9 @@ class SubscriptionService extends ChangeNotifier {
           .get();
       return !snapshot.exists;
     } catch (e) {
-      debugPrint('[Android] Failed to check trial eligibility (defaulting to eligible): $e');
+      debugPrint(
+        '[Android] Failed to check trial eligibility (defaulting to eligible): $e',
+      );
       return true;
     }
   }
@@ -250,7 +261,6 @@ class SubscriptionService extends ChangeNotifier {
       return true;
     }
   }
-
 
   /// Awaitable by splash / login screens. Resolves once the launch subscription
   /// check completes (restored event or timeout), with a 3 s safety cap.
@@ -486,6 +496,10 @@ class SubscriptionService extends ChangeNotifier {
       }
     });
   }
+
+  /// Nudges listeners after review access flips the entitlement getters —
+  /// `_status` itself is untouched, so nothing else would signal the change.
+  void refreshEntitlement() => notifyListeners();
 
   void clearError() {
     _purchaseError = null;

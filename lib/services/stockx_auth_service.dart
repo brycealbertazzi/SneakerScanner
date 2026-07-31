@@ -62,19 +62,25 @@ class StockXAuthService {
   static Future<String?> fetchClientCredentialsToken() async {
     try {
       debugPrint('[StockX OAuth] Requesting client_credentials token...');
-      final response = await http.post(
-        Uri.parse('https://accounts.stockx.com/oauth/token'),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
-          'grant_type': 'client_credentials',
-          'client_id': ApiKeys.stockXClientId,
-          'client_secret': ApiKeys.stockXClientSecret,
-          'audience': 'gateway.stockx.com',
-        },
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .post(
+            Uri.parse('https://accounts.stockx.com/oauth/token'),
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: {
+              'grant_type': 'client_credentials',
+              'client_id': ApiKeys.stockXClientId,
+              'client_secret': ApiKeys.stockXClientSecret,
+              'audience': 'gateway.stockx.com',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
 
-      debugPrint('[StockX OAuth] Client credentials status: ${response.statusCode}');
-      debugPrint('[StockX OAuth] Client credentials body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}');
+      debugPrint(
+        '[StockX OAuth] Client credentials status: ${response.statusCode}',
+      );
+      debugPrint(
+        '[StockX OAuth] Client credentials body: ${response.body.length > 500 ? response.body.substring(0, 500) : response.body}',
+      );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -84,7 +90,9 @@ class StockXAuthService {
         debugPrint('[StockX OAuth] Client credentials token acquired');
         return accessToken;
       } else {
-        debugPrint('[StockX OAuth] Client credentials failed: ${response.body}');
+        debugPrint(
+          '[StockX OAuth] Client credentials failed: ${response.body}',
+        );
         return null;
       }
     } catch (e) {
@@ -96,16 +104,18 @@ class StockXAuthService {
   static Future<String?> refreshAccessToken() async {
     try {
       debugPrint('[StockX OAuth] Refreshing access token...');
-      final response = await http.post(
-        Uri.parse('https://accounts.stockx.com/oauth/token'),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
-          'grant_type': 'refresh_token',
-          'client_id': ApiKeys.stockXClientId,
-          'client_secret': ApiKeys.stockXClientSecret,
-          'refresh_token': refreshToken!,
-        },
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .post(
+            Uri.parse('https://accounts.stockx.com/oauth/token'),
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: {
+              'grant_type': 'refresh_token',
+              'client_id': ApiKeys.stockXClientId,
+              'client_secret': ApiKeys.stockXClientSecret,
+              'refresh_token': refreshToken!,
+            },
+          )
+          .timeout(const Duration(seconds: 15));
 
       debugPrint('[StockX OAuth] Refresh status: ${response.statusCode}');
 
@@ -120,13 +130,17 @@ class StockXAuthService {
         // Save to Firebase
         final user = FirebaseAuth.instance.currentUser;
         if (user != null) {
-          await FirebaseDatabase.instance.ref().child('stockxTokens').child(user.uid).set({
-            'accessToken': accessToken,
-            'refreshToken': refreshToken,
-            'expiresAt': DateTime.now()
-                .add(Duration(seconds: expiresIn))
-                .millisecondsSinceEpoch,
-          });
+          await FirebaseDatabase.instance
+              .ref()
+              .child('stockxTokens')
+              .child(user.uid)
+              .set({
+                'accessToken': accessToken,
+                'refreshToken': refreshToken,
+                'expiresAt': DateTime.now()
+                    .add(Duration(seconds: expiresIn))
+                    .millisecondsSinceEpoch,
+              });
         }
         debugPrint('[StockX OAuth] Token refreshed successfully');
         return accessToken;
@@ -147,19 +161,23 @@ class StockXAuthService {
   static Future<bool> exchangeCode(String code) async {
     try {
       debugPrint('[StockX OAuth] Exchanging authorization code for tokens...');
-      final response = await http.post(
-        Uri.parse('https://accounts.stockx.com/oauth/token'),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
-          'grant_type': 'authorization_code',
-          'code': code,
-          'client_id': ApiKeys.stockXClientId,
-          'client_secret': ApiKeys.stockXClientSecret,
-          'redirect_uri': ApiKeys.stockXRedirectUri,
-        },
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .post(
+            Uri.parse('https://accounts.stockx.com/oauth/token'),
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: {
+              'grant_type': 'authorization_code',
+              'code': code,
+              'client_id': ApiKeys.stockXClientId,
+              'client_secret': ApiKeys.stockXClientSecret,
+              'redirect_uri': ApiKeys.stockXRedirectUri,
+            },
+          )
+          .timeout(const Duration(seconds: 15));
 
-      debugPrint('[StockX OAuth] Token exchange status: ${response.statusCode}');
+      debugPrint(
+        '[StockX OAuth] Token exchange status: ${response.statusCode}',
+      );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -176,16 +194,17 @@ class StockXAuthService {
         // Save to Firebase
         final user = FirebaseAuth.instance.currentUser;
         if (user != null) {
-          await FirebaseDatabase.instance.ref()
+          await FirebaseDatabase.instance
+              .ref()
               .child('stockxTokens')
               .child(user.uid)
               .set({
-            'accessToken': newAccessToken,
-            'refreshToken': newRefreshToken,
-            'expiresAt': DateTime.now()
-                .add(Duration(seconds: expiresIn))
-                .millisecondsSinceEpoch,
-          });
+                'accessToken': newAccessToken,
+                'refreshToken': newRefreshToken,
+                'expiresAt': DateTime.now()
+                    .add(Duration(seconds: expiresIn))
+                    .millisecondsSinceEpoch,
+              });
         }
 
         debugPrint('[StockX OAuth] Tokens saved successfully');

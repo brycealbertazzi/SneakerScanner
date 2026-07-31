@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 import 'services/mixpanel_service.dart';
+import 'services/review_access.dart';
 
 final RouteObserver<ModalRoute<void>> routeObserver =
     RouteObserver<ModalRoute<void>>();
@@ -17,6 +18,9 @@ void main() async {
   }
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await MixpanelService.instance.initialize();
+  // Entitlement getters read this synchronously, so it has to be resolved
+  // before the splash screen makes its first routing decision.
+  await ReviewAccess.instance.load();
   runApp(const SneakerScannerApp());
 }
 
