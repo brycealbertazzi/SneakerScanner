@@ -540,10 +540,27 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     return null;
   }
 
+  /// Placeholder held at the price line's own height so the real text lands
+  /// without shifting the layout under the subscribe button.
+  Widget _priceSkeleton() {
+    return Container(
+      width: 180,
+      height: 15,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(4),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isStatusLoading = _sub.status == SubscriptionStatus.loading;
     final pending = _sub.purchasePending || isStatusLoading;
+    // The RevenueCat price experiment decides which product this user buys, so
+    // the price isn't final until both the store query and the offerings fetch
+    // land. Both are time-capped, so this can't stick on forever.
+    final priceLoading = isStatusLoading || !_sub.offeringsResolved;
     final buttonLabel = isStatusLoading
         ? null // still determining status — show spinner
         : _sub.isSubscribed
@@ -729,7 +746,13 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                               ],
                             ),
                             child: ElevatedButton(
-                              onPressed: (pending && !_isRestoring)
+                              // priceLoading also disables: buying before the
+                              // A/B variant resolves would charge a price the
+                              // paywall never showed. It only greys the button
+                              // — the spinner stays reserved for a real pending
+                              // purchase, since one on every open reads broken.
+                              onPressed:
+                                  ((pending && !_isRestoring) || priceLoading)
                                   ? null
                                   : () {
                                       // Releasing after a three-second hold must
@@ -775,7 +798,10 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
 
                       // Pricing note for lapsed subscribers
                       if (_sub.isLapsedSubscriber) ...[
-                        if (_priceLabel() != null) ...[
+                        if (priceLoading) ...[
+                          _priceSkeleton(),
+                          const SizedBox(height: 12),
+                        ] else if (_priceLabel() != null) ...[
                           Text(
                             '${_priceLabel()}/year - Cancel Anytime',
                             style: GoogleFonts.inter(
@@ -789,7 +815,10 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
 
                       // Trial pricing note — only for free trial eligible users
                       if (!_sub.isSubscribed && !_sub.isLapsedSubscriber) ...[
-                        if (_priceLabel() != null) ...[
+                        if (priceLoading) ...[
+                          _priceSkeleton(),
+                          const SizedBox(height: 12),
+                        ] else if (_priceLabel() != null) ...[
                           Text(
                             '7 day free trial then ${_priceLabel()}/year',
                             style: GoogleFonts.inter(

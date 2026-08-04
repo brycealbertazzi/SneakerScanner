@@ -10,9 +10,23 @@ import 'package:purchases_flutter/purchases_flutter.dart' as rc;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_keys.dart';
+import 'mixpanel_service.dart';
 import 'review_access.dart';
 
+/// Fallback when RevenueCat can't name a product. Deliberately NOT one of the
+/// price-experiment SKUs, so a user who never got assigned a variant can't be
+/// miscounted as a conversion for one.
 const String kAnnualProductId = 'sneakscan_annual';
+
+/// Every SKU the paywall may need to price, including the RevenueCat price
+/// A/B variants. Queried in a single store round trip so whichever product
+/// RevenueCat assigns is already loaded by the time the experiment resolves.
+const Set<String> kAllAnnualProductIds = {
+  kAnnualProductId,
+  'sneakscan_annual_ab_2999',
+  'sneakscan_annual_ab_3999',
+  'sneakscan_annual_ab_4999',
+};
 
 enum SubscriptionStatus { loading, freeTrial, active, expired, cancelled }
 
@@ -26,7 +40,16 @@ class SubscriptionService extends ChangeNotifier {
   );
 
   SubscriptionStatus _status = SubscriptionStatus.loading;
-  ProductDetails? _annualProduct;
+
+  /// Every store product from [kAllAnnualProductIds] that loaded, keyed by id.
+  final Map<String, ProductDetails> _products = {};
+
+  // Price A/B test: RevenueCat picks which product this user is offered.
+  String? _assignedProductId;
+  String? _assignedOfferingId;
+  bool _offeringsResolved = false;
+  Timer? _offeringsTimer;
+
   bool _purchasePending = false;
   bool _purchaseCancelled = false;
   String? _purchaseError;
@@ -48,7 +71,20 @@ class SubscriptionService extends ChangeNotifier {
   bool get purchasePending => _purchasePending;
   bool get purchaseCancelled => _purchaseCancelled;
   String? get purchaseError => _purchaseError;
-  ProductDetails? get annualProduct => _annualProduct;
+
+  /// The product this user should see and buy — the RevenueCat-assigned A/B
+  /// variant, falling back to the legacy SKU whenever RevenueCat didn't name
+  /// one (offline, misconfigured dashboard, tracking disabled).
+  ProductDetails? get annualProduct =>
+      _products[_assignedProductId ?? kAnnualProductId] ??
+      _products[kAnnualProductId];
+
+  /// False until RevenueCat has had its say. The paywall skeletons the price
+  /// and blocks the subscribe button while this is false, so nobody can buy at
+  /// a price that's about to change under them.
+  bool get offeringsResolved => _offeringsResolved;
+  String? get assignedProductId => _assignedProductId;
+  String? get assignedOfferingId => _assignedOfferingId;
 
   /// True only when the subscription is currently active (including trial period).
   ///
@@ -87,9 +123,22 @@ class SubscriptionService extends ChangeNotifier {
     if (_initialized) return;
     _initialized = true;
 
-    // Tracking only — never awaited, so it can't delay or block the purchase
-    // flow if the RevenueCat SDK is slow to respond.
+    // Never awaited, so a slow RevenueCat SDK can't delay or block the purchase
+    // flow. The product query below runs in parallel with it, so the paywall
+    // waits on the slower of the two rather than their sum.
     unawaited(_configureRevenueCat());
+
+    // Backstop on the A/B variant lookup. The subscribe button is disabled
+    // until offerings resolve, and RevenueCat's own timeouts add up to far
+    // longer than anyone should stare at a dead hard paywall. Resolving early
+    // just means falling back to kAnnualProductId.
+    _offeringsTimer?.cancel();
+    _offeringsTimer = Timer(const Duration(seconds: 6), () {
+      if (!_offeringsResolved) {
+        debugPrint('[RC] Offerings timed out — using fallback product');
+        _resolveOfferings();
+      }
+    });
 
     // Detect lapsed subscribers to show correct button label.
     // iOS: query StoreKit intro offer eligibility (from Apple).
@@ -141,7 +190,13 @@ class SubscriptionService extends ChangeNotifier {
   }
 
   Future<void> _configureRevenueCat() async {
-    if (_revenueCatConfigured) return;
+    if (_revenueCatConfigured) {
+      // Configuration is static and survives reset(), but the offerings state
+      // does not — re-resolve it or a re-initialize (e.g. after deleteAccount)
+      // would leave the paywall skeleton up and its button dead forever.
+      await _loadOfferings();
+      return;
+    }
     final apiKey = Platform.isIOS
         ? ApiKeys.revenueCatAppleApiKey
         : Platform.isAndroid
@@ -149,6 +204,7 @@ class SubscriptionService extends ChangeNotifier {
         : '';
     if (apiKey.isEmpty) {
       debugPrint('[RC] No API key for this platform — tracking disabled');
+      _resolveOfferings();
       return;
     }
     try {
@@ -162,9 +218,95 @@ class SubscriptionService extends ChangeNotifier {
       _revenueCatConfigured = true;
       debugPrint('[RC] Configured (observer mode)');
       _backfillRevenueCatPurchases();
+      await _loadOfferings();
     } catch (e) {
       debugPrint('[RC] Configure failed — tracking disabled: $e');
+      _resolveOfferings();
     }
+  }
+
+  /// Resolves the price A/B variant from RevenueCat's current offering.
+  ///
+  /// RevenueCat assigns the experiment variant server-side; all we do is honor
+  /// whichever offering it hands back. Any failure leaves [_assignedProductId]
+  /// null, which falls the paywall back to [kAnnualProductId].
+  Future<void> _loadOfferings() async {
+    try {
+      final offerings = await rc.Purchases.getOfferings().timeout(
+        const Duration(seconds: 6),
+      );
+      final current = offerings.current;
+      // `annual` covers the standard $rc_annual package; fall back to the first
+      // package so a custom package identifier still works.
+      final package =
+          current?.annual ??
+          (current != null && current.availablePackages.isNotEmpty
+              ? current.availablePackages.first
+              : null);
+      final rawId = package?.storeProduct.identifier;
+      if (rawId == null) {
+        debugPrint('[RC] No current offering — using fallback product');
+        return;
+      }
+      // Play returns subscriptions as `productId:basePlanId`; the store query
+      // and purchase flow both key off the bare product id.
+      final productId = rawId.split(':').first;
+      if (!kAllAnnualProductIds.contains(productId)) {
+        // A dashboard typo would otherwise leave `annualProduct` null and dead
+        // -button the paywall. Fall back rather than ship a broken purchase.
+        debugPrint(
+          '[RC] Offering names unknown product "$productId" — ignored',
+        );
+        return;
+      }
+      if (_offeringsResolved) {
+        // The backstop timer already committed this session to the fallback.
+        // Switching now would move the price under a user whose subscribe
+        // button is live — they could tap one price and be charged another.
+        debugPrint('[RC] Offerings arrived after timeout — keeping fallback');
+        return;
+      }
+      _assignedProductId = productId;
+      _assignedOfferingId = current!.identifier;
+      debugPrint('[RC] Assigned $productId from offering $_assignedOfferingId');
+    } catch (e) {
+      debugPrint('[RC] Offerings fetch failed — using fallback product: $e');
+    } finally {
+      _resolveOfferings();
+    }
+  }
+
+  /// Unblocks the paywall and records which variant this user was shown.
+  void _resolveOfferings() {
+    if (_offeringsResolved) return;
+    _offeringsResolved = true;
+    _offeringsTimer?.cancel();
+    _offeringsTimer = null;
+    _trackVariantAssigned();
+    notifyListeners();
+  }
+
+  /// Our own record of the assignment. RevenueCat's `recordPurchase` carries no
+  /// offering identifier in observer mode, so this is the ground truth for the
+  /// price test funnel rather than a duplicate of it.
+  void _trackVariantAssigned() {
+    final productId = _assignedProductId ?? kAnnualProductId;
+    final offeringId = _assignedOfferingId;
+    final price = _products[productId]?.price;
+    // Nulls are omitted rather than sent: a null *super* property would ride
+    // along on every event from here on, which is worse than an absent one.
+    final properties = <String, dynamic>{
+      'ab_product_id': productId,
+      'ab_assigned': _assignedProductId != null,
+      'ab_offering_id': ?offeringId,
+    };
+    // Rides along on Subscribe Button Tapped and Purchase Completed, making the
+    // whole funnel sliceable by variant.
+    MixpanelService.instance.registerSuperProperties(properties);
+    MixpanelService.instance.track(
+      'Paywall Variant Assigned',
+      properties: {...properties, 'price': ?price},
+    );
   }
 
   /// One-time (per install) sync so subscribers who purchased before
@@ -249,6 +391,11 @@ class SubscriptionService extends ChangeNotifier {
 
   Future<bool> _checkTrialEligibility() async {
     try {
+      // Deliberately the legacy SKU rather than the assigned A/B variant: intro
+      // -offer eligibility is per subscription *group*, and all four products
+      // share one, so the answer is identical for any of them — and this one is
+      // guaranteed to exist. If the variants ever move to their own groups,
+      // this is the line that breaks (a lapsed user would get a fresh trial).
       final result = await _storeKitChannel.invokeMethod<bool>(
         'checkTrialEligibility',
         kAnnualProductId,
@@ -318,17 +465,28 @@ class SubscriptionService extends ChangeNotifier {
       return;
     }
 
-    final response = await InAppPurchase.instance.queryProductDetails({
-      kAnnualProductId,
-    });
+    // All A/B variants in one round trip, so whichever one RevenueCat assigns
+    // is already priced by the time the offerings fetch comes back.
+    final response = await InAppPurchase.instance.queryProductDetails(
+      kAllAnnualProductIds,
+    );
     if (response.notFoundIDs.isNotEmpty) {
+      // Usually means a SKU isn't approved for sale yet — that variant would
+      // silently fall back, so it's worth shouting about.
       debugPrint('[IAP] Products not found in store: ${response.notFoundIDs}');
     }
     if (response.productDetails.isNotEmpty) {
-      _annualProduct = response.productDetails.first;
-      debugPrint(
-        '[IAP] Product loaded: ${_annualProduct!.id}, price: ${_annualProduct!.price}',
-      );
+      for (final product in response.productDetails) {
+        // Play returns one entry per subscription *offer*, all sharing an id.
+        // First wins, matching the `.first` this used before it handled more
+        // than one product — picking a different offer would change which base
+        // plan (and whether the free trial) the user actually buys.
+        if (_products.containsKey(product.id)) continue;
+        _products[product.id] = product;
+        debugPrint(
+          '[IAP] Product loaded: ${product.id}, price: ${product.price}',
+        );
+      }
       notifyListeners();
     } else {
       debugPrint('[IAP] No products returned from store');
@@ -336,10 +494,11 @@ class SubscriptionService extends ChangeNotifier {
   }
 
   Future<void> buyAnnual() async {
-    if (_annualProduct == null) {
+    if (annualProduct == null) {
       await _loadProducts();
     }
-    if (_annualProduct == null) {
+    final product = annualProduct;
+    if (product == null) {
       _purchaseError =
           'Product not available. Check your App Store connection and try again.';
       notifyListeners();
@@ -351,7 +510,7 @@ class SubscriptionService extends ChangeNotifier {
     _purchaseInitiated = true;
     notifyListeners();
 
-    final param = PurchaseParam(productDetails: _annualProduct!);
+    final param = PurchaseParam(productDetails: product);
     try {
       await InAppPurchase.instance.buyNonConsumable(purchaseParam: param);
     } catch (e) {
@@ -546,7 +705,12 @@ class SubscriptionService extends ChangeNotifier {
     _launchCheckCompleter = null;
     _purchaseSubscription?.cancel();
     _status = SubscriptionStatus.loading;
-    _annualProduct = null;
+    _products.clear();
+    _assignedProductId = null;
+    _assignedOfferingId = null;
+    _offeringsResolved = false;
+    _offeringsTimer?.cancel();
+    _offeringsTimer = null;
     _purchasePending = false;
     _purchaseCancelled = false;
     _purchaseError = null;
@@ -557,6 +721,7 @@ class SubscriptionService extends ChangeNotifier {
   @override
   void dispose() {
     _launchCheckTimer?.cancel();
+    _offeringsTimer?.cancel();
     _purchaseSubscription?.cancel();
     super.dispose();
   }

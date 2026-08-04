@@ -27,6 +27,14 @@ class MixpanelService {
     _mixpanel.reset();
   }
 
+  /// Attaches [properties] to every subsequent event. Used for the price A/B
+  /// variant so the whole paywall funnel stays sliceable by it. Cleared by
+  /// [reset], which the sign-out path already calls.
+  void registerSuperProperties(Map<String, dynamic> properties) {
+    if (!_initialized) return;
+    _mixpanel.registerSuperProperties(properties);
+  }
+
   void track(String eventName, {Map<String, dynamic>? properties}) {
     if (!_initialized) return;
     _mixpanel.track(eventName, properties: properties);
