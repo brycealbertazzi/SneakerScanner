@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:sneaker_scanner/services/review_access.dart';
-import 'package:sneaker_scanner/services/subscription_service.dart';
+import 'package:sneakscan/services/review_access.dart';
+import 'package:sneakscan/services/subscription_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

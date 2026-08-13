@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.brycealbertazzi" "\0"
-            VALUE "FileDescription", "sneaker_scanner" "\0"
+            VALUE "FileDescription", "SneakScan" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "sneaker_scanner" "\0"
+            VALUE "InternalName", "SneakScan" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.brycealbertazzi. All rights reserved." "\0"
-            VALUE "OriginalFilename", "sneaker_scanner.exe" "\0"
-            VALUE "ProductName", "sneaker_scanner" "\0"
+            VALUE "OriginalFilename", "SneakScan.exe" "\0"
+            VALUE "ProductName", "SneakScan" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

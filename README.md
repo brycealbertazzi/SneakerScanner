@@ -1,4 +1,4 @@
-# sneaker_scanner
+# SneakScan
 
 A new Flutter project.
 
