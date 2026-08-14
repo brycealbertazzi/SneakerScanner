@@ -51,7 +51,11 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   // when the user navigates back and then forward again.
   final Set<String> _trackedEvents = {};
 
-  void _trackOnce(String key, String eventName, {Map<String, dynamic>? properties}) {
+  void _trackOnce(
+    String key,
+    String eventName, {
+    Map<String, dynamic>? properties,
+  }) {
     if (_trackedEvents.contains(key)) return;
     _trackedEvents.add(key);
     MixpanelService.instance.track(eventName, properties: properties);
@@ -131,11 +135,15 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         final idx = _questionAnswers[_currentQuestion];
         answerText = idx != null ? question.answers[idx] : '';
       }
-      _trackOnce('question_${_currentQuestion + 1}', 'Onboarding Question Answered', properties: {
-        'question_number': _currentQuestion + 1,
-        'question': question.question,
-        'answer': answerText,
-      });
+      _trackOnce(
+        'question_${_currentQuestion + 1}',
+        'Onboarding Question Answered',
+        properties: {
+          'question_number': _currentQuestion + 1,
+          'question': question.question,
+          'answer': answerText,
+        },
+      );
 
       setState(() => _stepsCompleted++);
       if (_currentQuestion < _kQuestions.length - 1) {
@@ -150,10 +158,11 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         );
       } else {
         // Last question done — transitioning to feature pages
-        _trackOnce('page_1', 'Onboarding Feature Page Viewed', properties: {
-          'page_number': 1,
-          'page_title': _kPageTitles[0],
-        });
+        _trackOnce(
+          'page_1',
+          'Onboarding Feature Page Viewed',
+          properties: {'page_number': 1, 'page_title': _kPageTitles[0]},
+        );
         setState(() {
           _inQuestions = false;
           _currentSelectedAnswer = null;
@@ -163,10 +172,14 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       // Pages phase
       setState(() => _stepsCompleted++);
       if (_currentPage < 3) {
-        _trackOnce('page_${_currentPage + 2}', 'Onboarding Feature Page Viewed', properties: {
-          'page_number': _currentPage + 2,
-          'page_title': _kPageTitles[_currentPage + 1],
-        });
+        _trackOnce(
+          'page_${_currentPage + 2}',
+          'Onboarding Feature Page Viewed',
+          properties: {
+            'page_number': _currentPage + 2,
+            'page_title': _kPageTitles[_currentPage + 1],
+          },
+        );
         _pageController.nextPage(
           duration: const Duration(milliseconds: 350),
           curve: Curves.easeInOut,
@@ -515,7 +528,7 @@ const _kQuestions = [
     '3+ years',
   ]),
   _OnboardingQuestion('How many pairs do you flip per month?', [
-    '1–5',
+    '0–5',
     '6–15',
     '16–30',
     '30+',
@@ -534,12 +547,14 @@ const _kQuestions = [
     'Knowing which shoes to buy',
     'Identifying fakes',
     'Keeping track of inventory',
+    'Other',
   ]),
   _OnboardingQuestion('What\'s your main goal with SneakScan?', [
     'Just want to find good deals when I shop',
     'Occasionally flip sneakers as a hobby',
     'Maximize my profit on every flip',
     'Build a full-time reselling business',
+    'Other',
   ]),
   _OnboardingQuestion(
     'How quickly do you need to decide if a shoe is worth buying?',

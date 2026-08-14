@@ -122,7 +122,7 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
                     hole: hole,
                     radius: step.holeRadius,
                     pulse: _pulse.value,
-                    scrimOpacity: 0.82 * intro,
+                    scrimOpacity: 0.58 * intro,
                     ringOpacity: intro,
                   ),
                 ),
@@ -218,8 +218,6 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _progressRow(),
-            const SizedBox(height: 14),
             Text(
               step.title,
               style: GoogleFonts.poppins(
@@ -243,41 +241,6 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
           ],
         ),
       ),
-    );
-  }
-
-  Widget _progressRow() {
-    return Row(
-      children: [
-        Expanded(
-          child: Row(
-            children: List.generate(_demo.stepCount, (i) {
-              final done = i <= _demo.index;
-              return Expanded(
-                child: Container(
-                  height: 3,
-                  margin: const EdgeInsets.only(right: 3),
-                  decoration: BoxDecoration(
-                    color: done
-                        ? _accent
-                        : Colors.white.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Text(
-          '${_demo.index + 1} of ${_demo.stepCount}',
-          style: GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-            color: Colors.white.withValues(alpha: 0.45),
-          ),
-        ),
-      ],
     );
   }
 
