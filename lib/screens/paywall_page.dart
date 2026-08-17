@@ -58,6 +58,9 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     super.initState();
     _wasActiveOnInit = _sub.isSubscribed;
     _sub.addListener(_onSubChanged);
+    // Freezes the displayed price for as long as this paywall is up, so a
+    // late-arriving A/B variant can't change the number under a live button.
+    _sub.paywallShown();
     WidgetsBinding.instance.addObserver(this);
     MixpanelService.instance.track(
       'Paywall Viewed',
@@ -71,6 +74,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     _holdTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _sub.removeListener(_onSubChanged);
+    _sub.paywallDismissed();
     super.dispose();
   }
 
