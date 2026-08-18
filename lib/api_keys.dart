@@ -26,6 +26,13 @@ class ApiKeys {
   static const String revenueCatGoogleApiKey =
       'goog_bdpchqxBSzmmnNJlObhGltPODlS'; // goog_...
 
+  // GoMarketMe affiliate-attribution API key (dashboard → Profile > API Key).
+  // Client-side SDK key like the RevenueCat ones above, so it stays hardcoded —
+  // it has to be available at launch, long before the signed-in Cloud Function
+  // fetch below can run. Empty = attribution disabled.
+  static const String goMarketMeApiKey =
+      'LDXonRaxvw16KocTslT0j104kUz2DqB18EWFijXx';
+
   static Future<bool> fetch() async {
     if (_loaded) return true;
     try {

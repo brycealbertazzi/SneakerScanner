@@ -10,6 +10,7 @@ import 'package:purchases_flutter/purchases_flutter.dart' as rc;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_keys.dart';
+import 'gomarketme_service.dart';
 import 'mixpanel_service.dart';
 import 'review_access.dart';
 
@@ -710,6 +711,7 @@ class SubscriptionService extends ChangeNotifier {
           _purchaseInitiated = false;
           _validateInBackground(purchase);
           _syncPurchaseToRevenueCat(purchase);
+          unawaited(GoMarketMeService.instance.syncTransactions());
           if (Platform.isAndroid) _recordAndroidSubscription();
           _startLaunchCheck();
         }

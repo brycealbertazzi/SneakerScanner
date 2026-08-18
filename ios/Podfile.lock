@@ -1,5 +1,7 @@
 PODS:
   - Flutter (1.0.0)
+  - gomarketme (5.0.5):
+    - Flutter
   - google_mlkit_barcode_scanning (0.13.0):
     - Flutter
     - google_mlkit_commons
@@ -72,6 +74,7 @@ PODS:
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
+  - gomarketme (from `.symlinks/plugins/gomarketme/ios`)
   - google_mlkit_barcode_scanning (from `.symlinks/plugins/google_mlkit_barcode_scanning/ios`)
   - google_mlkit_commons (from `.symlinks/plugins/google_mlkit_commons/ios`)
   - google_mlkit_text_recognition (from `.symlinks/plugins/google_mlkit_text_recognition/ios`)
@@ -96,6 +99,8 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   Flutter:
     :path: Flutter
+  gomarketme:
+    :path: ".symlinks/plugins/gomarketme/ios"
   google_mlkit_barcode_scanning:
     :path: ".symlinks/plugins/google_mlkit_barcode_scanning/ios"
   google_mlkit_commons:
@@ -107,6 +112,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  gomarketme: 23e30a57375b7c18e9ec662c25f17207f267c755
   google_mlkit_barcode_scanning: c0a50c1042484a6ca506967dfa91fa7d7e74f280
   google_mlkit_commons: 92c769cc2e0a2bfdeb3c38091a36e8a9cc8c63d4
   google_mlkit_text_recognition: d70cc1ed5064db39fce44d77b2c5449adc39a13d
