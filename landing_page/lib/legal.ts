@@ -1,11 +1,20 @@
 /**
- * Legal copy, ported verbatim from the pages previously served at
- * privacy.sneakscan.com and terms.sneakscan.com so they can live at
- * sneakscan.com/privacy and sneakscan.com/terms.
+ * Legal copy, ported from the pages previously served at privacy.sneakscan.com
+ * and terms.sneakscan.com so they can live at sneakscan.com/privacy and
+ * sneakscan.com/terms.
  *
  * NOTE: the published text refers to the app as "Sneaker Scanner", the old
  * product name. Left as-published rather than silently rewritten — rename here
  * if the legal copy should say "SneakScan".
+ *
+ * The PRIVACY POLICY was rewritten in August 2026 (no longer verbatim). The
+ * original claimed the app "does not require account creation" and listed name
+ * and email under "we do not collect" — untrue since Google/Apple sign-in was
+ * added, and a direct contradiction of the Play Data safety declaration.
+ * Sections 2, 3, 5, 7, 9, 10 describe what the app actually stores; keep them in
+ * sync with login_screen.dart, subscription_service.dart, and the RTDB shape
+ * (users/{uid}, scans/{uid}, stockxTokens/{uid}, androidTrialIds/{androidId}).
+ * The TERMS below are still the verbatim published text.
  */
 
 export type LegalBlock = { p: string } | { ul: string[] };
@@ -23,7 +32,7 @@ export type LegalDoc = {
 
 export const privacyPolicy: LegalDoc = {
   title: "Sneaker Scanner Privacy Policy",
-  updated: "February 2026",
+  updated: "August 2026",
   sections: [
     {
       heading: "1. Introduction",
@@ -48,13 +57,35 @@ export const privacyPolicy: LegalDoc = {
       ],
     },
     {
-      heading: "2. Information We Collect",
+      heading: "2. Your Account",
       blocks: [
         {
-          p: "Sneaker Scanner does not require account creation and does not collect personal identity information.",
+          p: "Sneaker Scanner requires an account. You sign in with Google or with Apple — we do not offer a password-based sign-up, and we never see or store a password.",
         },
         {
-          p: "We may process the following information to provide app functionality:",
+          p: "When you sign in, Google or Apple provides us with the following, which we store to identify your account and display it back to you in the app:",
+        },
+        {
+          ul: [
+            "A unique account identifier",
+            "Your name, as your Google or Apple account provides it",
+            "Your email address",
+            "Your profile photo, if your Google or Apple account has one",
+          ],
+        },
+        {
+          p: "If you use Sign in with Apple and choose to hide your email address, we receive only Apple’s private relay address and never your real one.",
+        },
+        {
+          p: "Your account exists so that your scan history syncs across your devices and so that your subscription stays attached to you rather than to a single phone.",
+        },
+      ],
+    },
+    {
+      heading: "3. Information We Collect",
+      blocks: [
+        {
+          p: "Beyond the account information described above, we process the following to provide app functionality:",
         },
         {
           ul: [
@@ -62,63 +93,72 @@ export const privacyPolicy: LegalDoc = {
             "Barcode (UPC / EAN / GTIN)",
             "Model name",
             "Brand",
+            "Shoe size",
             "Timestamp of scan",
+            "Market prices retrieved for the scanned product",
           ],
         },
         {
-          p: "Scan results may be stored in Firebase to allow persistence of your scan history.",
+          p: "Scan results are stored in Firebase, under your account, so that your scan history persists and syncs across devices.",
+        },
+        {
+          p: "On Android, we collect your device’s Android ID. It is used solely to determine whether a free trial has already been used on that device, in order to prevent repeat trials. It is not used for advertising or tracking across apps.",
         },
         { p: "We do not collect or store:" },
         {
           ul: [
-            "Your name",
-            "Email address",
-            "Phone number",
-            "Payment information",
-            "Contacts",
-            "Location data",
+            "Your phone number",
+            "Payment or credit card information",
+            "Your contacts",
+            "Your location",
+            "Photos from your camera roll",
+            "Advertising identifiers",
           ],
         },
       ],
     },
     {
-      heading: "3. Camera Access",
+      heading: "4. Camera Access",
       blocks: [
         {
           p: "Sneaker Scanner requests access to your device camera solely to scan barcodes and text on shoe labels.",
         },
         {
-          p: "Images are processed locally on your device for recognition purposes. We do not store or retain raw camera images on our servers.",
+          p: "Images are processed locally on your device for recognition purposes, using on-device text and barcode recognition. Raw camera images are never uploaded to or stored on our servers — only the text and codes recognized from them.",
         },
       ],
     },
     {
-      heading: "4. Subscription Information (If Applicable)",
+      heading: "5. Subscription Information",
       blocks: [
-        { p: "If Sneaker Scanner offers paid subscriptions:" },
         {
-          p: "Subscriptions are processed and managed through the Apple App Store or Google Play.",
+          p: "Subscriptions are processed and managed through the Apple App Store or Google Play. We never receive or store payment card information.",
         },
-        { p: "We may receive limited information such as:" },
+        { p: "We may receive and store limited information such as:" },
         {
           ul: [
             "Product identifier",
             "Subscription status",
             "Renewal or expiration status",
+            "A purchase or transaction identifier, used to verify the purchase",
           ],
         },
-        { p: "We do not receive or store payment card information." },
+        {
+          p: "We use RevenueCat to help us measure subscription performance. RevenueCat receives purchase events under an anonymous identifier and is not given your name or email address.",
+        },
       ],
     },
     {
-      heading: "5. How We Use Information",
+      heading: "6. How We Use Information",
       blocks: [
         { p: "We use collected information to:" },
         {
           ul: [
+            "Sign you in and maintain your account",
             "Identify sneaker products",
             "Display product details and pricing information",
-            "Maintain scan history",
+            "Maintain and sync your scan history",
+            "Manage your subscription and free-trial eligibility",
             "Improve app accuracy and performance",
             "Diagnose technical issues",
             "Comply with legal obligations",
@@ -129,47 +169,61 @@ export const privacyPolicy: LegalDoc = {
           ul: [
             "Advertising",
             "Behavioral profiling",
-            "Selling or renting user data",
+            "Selling to third parties",
+            "Tracking you across other companies’ apps or websites",
           ],
         },
       ],
     },
     {
-      heading: "6. Data Storage and Security",
+      heading: "7. Data Storage and Security",
       blocks: [
         {
-          p: "Scan results may be stored securely in Firebase to maintain app functionality and persistence.",
+          p: "Your account record and scan history are stored securely in Firebase, operated by Google, on servers located in the United States.",
         },
         { p: "We implement safeguards such as:" },
         {
           ul: [
             "Encrypted data transmission (HTTPS)",
-            "Access controls",
+            "Encryption of stored data at rest",
+            "Access controls that limit each account to its own data",
             "Least-privilege backend configuration",
             "Secure credential management",
           ],
         },
-        { p: "We do not store personal identity data on our servers." },
       ],
     },
     {
-      heading: "7. Third-Party Data Sources",
+      heading: "8. Third-Party Data Sources",
       blocks: [
         {
           p: "Sneaker Scanner may retrieve product information from third-party APIs or marketplaces in order to display product details and pricing.",
         },
         { p: "These services operate under their own privacy policies." },
         {
-          p: "We transmit only necessary product identifiers (such as SKU or barcode) to retrieve relevant product data.",
+          p: "We transmit only necessary product identifiers (such as SKU or barcode) to retrieve relevant product data. We do not send your name, email address, or account identifier to these services.",
+        },
+        {
+          p: "If you choose to connect a marketplace account, such as StockX, we store the authorization token that connection produces so the app can act on your behalf. That token is deleted when you delete your account, and can also be revoked from the marketplace’s own account settings.",
         },
       ],
     },
     {
-      heading: "8. Data Sharing",
+      heading: "9. Data Sharing and Service Providers",
       blocks: [
         { p: "We do not sell, rent, or trade user data." },
         {
-          p: "We may share limited information with service providers strictly for the purpose of delivering app functionality.",
+          p: "We share limited information with service providers strictly to deliver app functionality:",
+        },
+        {
+          ul: [
+            "Google (Firebase) — authentication, database, and cloud functions",
+            "Google and Apple — sign-in, and subscription billing and validation",
+            "RevenueCat — anonymous subscription analytics",
+          ],
+        },
+        {
+          p: "These providers process data on our behalf and are not permitted to use it for their own purposes.",
         },
         {
           p: "We may disclose information if required by law, subpoena, or court order.",
@@ -177,40 +231,71 @@ export const privacyPolicy: LegalDoc = {
       ],
     },
     {
-      heading: "9. Data Retention and Deletion",
+      heading: "10. Data Retention and Deletion",
       blocks: [
         {
-          p: "Scan history stored in Firebase is retained only to provide app functionality.",
+          p: "Your account information and scan history are retained for as long as your account exists.",
         },
         {
-          p: "If scan deletion is supported within the app, deleted scans cannot be restored.",
+          p: "You can delete your account and its data at any time from within the app: tap your profile photo in the top-right corner to open Settings, scroll to the Account section, and tap Delete Account. Deletion takes effect immediately.",
         },
-        { p: "We do not maintain long-term personal user profiles." },
+        {
+          p: "You can also request deletion by emailing support@sneakscan.com from the address your account uses. We complete such requests within 30 days. Full instructions are available at sneakscan.com/delete-account.",
+        },
+        {
+          p: "Deleting your account removes your sign-in record, your scan history, your stored subscription record, and any marketplace authorization tokens. Deleted data cannot be restored. Residual copies are purged from encrypted backups within 30 days.",
+        },
+        {
+          p: "Purchase records held by Apple and Google, anonymous aggregate statistics, and records we must keep for legal or tax reasons are not removed by account deletion.",
+        },
+        {
+          p: "Individual scans can also be deleted from your history without deleting your account. Deleted scans cannot be restored.",
+        },
       ],
     },
     {
-      heading: "10. Security Practices",
+      heading: "11. Your Rights and Choices",
       blocks: [
-        { p: "We follow industry-standard practices including:" },
+        {
+          p: "You can, at any time:",
+        },
         {
           ul: [
-            "Encrypted data transport",
-            "Restricted backend access",
-            "Secure cloud infrastructure",
-            "Data minimization principles",
+            "Access your account information and scan history from within the app",
+            "Delete individual scans from your history",
+            "Delete your entire account and all associated data",
+            "Revoke Sneaker Scanner’s access from a linked marketplace’s own account settings",
+            "Revoke camera access in your device settings, though scanning will no longer work",
+            "Withdraw Sneaker Scanner’s access from your Google or Apple account settings",
           ],
         },
         {
-          p: "We do not maintain long-term storage of personal information.",
+          p: "Depending on where you live, you may have additional rights over your personal data — including the right to request a copy of it, to correct it, or to object to its processing. Email support@sneakscan.com and we will respond within 30 days.",
         },
       ],
     },
     {
-      heading: "11. Changes to This Policy",
+      heading: "12. Children’s Privacy",
+      blocks: [
+        {
+          p: "Sneaker Scanner is not directed to children under 13, and we do not knowingly collect personal information from them. If you believe a child has provided us with personal information, email support@sneakscan.com and we will delete it.",
+        },
+      ],
+    },
+    {
+      heading: "13. Changes to This Policy",
       blocks: [
         { p: "We may update this Privacy Policy from time to time." },
         {
           p: "Continued use of Sneaker Scanner after changes are posted constitutes acceptance of the updated Policy.",
+        },
+      ],
+    },
+    {
+      heading: "14. Contact Us",
+      blocks: [
+        {
+          p: "Questions about this Privacy Policy, or about the data we hold, can be sent to support@sneakscan.com.",
         },
       ],
     },

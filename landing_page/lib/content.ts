@@ -155,4 +155,72 @@ export const cta = {
 export const legalLinks = [
   { label: "Privacy Policy", href: "/privacy" },
   { label: "Terms of Service", href: "/terms" },
+  { label: "Delete Account", href: "/delete-account" },
 ];
+
+/**
+ * Copy for /delete-account — the account-deletion URL required by Google
+ * Play's Data safety form. Play crawls this page, so the two methods below
+ * must stay in sync with what Settings actually does (lib/screens/
+ * settings_page.dart) and what SubscriptionService.deleteAccount() wipes.
+ */
+export const accountDeletion = {
+  title: "Delete Your SneakScan Account",
+  updated: "August 2026",
+  intro:
+    "You can permanently delete your SneakScan account and the data tied to it at any time. There are two ways to do it — choose whichever you prefer.",
+  methods: [
+    {
+      label: "Option 1",
+      heading: "Delete it in the app",
+      body: "The fastest route. Deletion takes effect immediately.",
+      steps: [
+        "Open SneakScan and sign in, if you aren't already.",
+        "Tap your profile photo in the top-right corner to open Settings.",
+        "Scroll to the bottom, to the ACCOUNT section.",
+        "Tap Delete Account, then confirm.",
+      ],
+      note: "Your account and scan history are erased right away and you are returned to the sign-in screen.",
+    },
+    {
+      label: "Option 2",
+      heading: "Email us",
+      body: "If you no longer have the app installed or can't sign in, email us and we'll delete the account for you.",
+      steps: [
+        "Email support@sneakscan.com from the address your SneakScan account uses.",
+        'Use the subject line "Delete my account".',
+      ],
+      note: "We complete the deletion within 30 days of receiving the request and email you once it's done.",
+    },
+  ],
+  deleted: {
+    heading: "What gets deleted",
+    intro: "Deleting your account permanently removes:",
+    items: [
+      "Your account itself — the Google or Apple sign-in record, along with the name, email address, and profile photo it provided",
+      "Your entire scan history — every scanned sneaker, style code, size, photo, and timestamp",
+      "Your subscription record and in-app preferences stored on our servers",
+      "Any marketplace account you connected to SneakScan, including stored StockX authorization tokens",
+    ],
+    warning:
+      "This is permanent. We cannot restore an account or its scan history once it has been deleted.",
+  },
+  retained: {
+    heading: "What we keep, and for how long",
+    intro:
+      "A small amount of information sits outside the account record and is not removed:",
+    items: [
+      "Purchase and subscription receipts held by Apple and Google. These live in the App Store and Play Store, not on our servers, and only Apple or Google can remove them.",
+      "Anonymous, aggregated usage and crash statistics that are not linked to you or your account.",
+      "Records we are required to retain for legal, tax, or fraud-prevention purposes.",
+    ],
+    note: "Account data is removed from our live databases immediately and purged from encrypted backups within 30 days.",
+  },
+  subscriptionWarning: {
+    heading: "Cancel your subscription separately",
+    body: "Deleting your account does not cancel an active SneakScan subscription — Apple and Google manage billing, and we can't cancel it on your behalf. Cancel it in your App Store or Play Store subscription settings first, otherwise you'll keep being charged after the account is gone.",
+  },
+  footer: {
+    body: "Questions, or want only part of your data deleted rather than the whole account? Email us and we'll take care of it.",
+  },
+};
