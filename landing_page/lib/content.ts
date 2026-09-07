@@ -149,7 +149,7 @@ export const cta = {
   headline: "Start scanning today.",
   headlineAccent: "Free trial, no commitment.",
   subhead:
-    "Try SneakScan free for 7 days — then keep going for less than the profit on a single flip.",
+    "Try SneakScan FREE for 7 days — then keep going for less than the profit on a single flip.",
 };
 
 export const legalLinks = [

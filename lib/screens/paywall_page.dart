@@ -536,13 +536,10 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     );
   }
 
-  String? _priceLabel() {
-    final product = _sub.annualProduct;
-    if (product != null && product.price.toLowerCase() != 'free') {
-      return product.price;
-    }
-    return null;
-  }
+  /// The renewal price. Reads past any trial phase on Play, so a trial-eligible
+  /// Android user gets "$59.99/year" here rather than "Free" — which used to
+  /// fall through to null and leave the line on its skeleton forever.
+  String? _priceLabel() => _sub.annualPriceLabel;
 
   /// Placeholder held at the price line's own height so the real text lands
   /// without shifting the layout under the subscribe button.
@@ -574,7 +571,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
         : 'Start Free Trial';
     final headline = (_sub.isLapsedSubscriber || _sub.isSubscribed)
         ? 'Spot profits instantly with SneakScan'
-        : 'Try SneakScan free for 7 days';
+        : 'How Your Free Trial Works';
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -610,7 +607,13 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                     padding: const EdgeInsets.symmetric(horizontal: 28),
                     child: Column(
                       children: [
-                        const SizedBox(height: 60),
+                        const SizedBox(height: 36),
+
+                        // Outside the trial/lapsed branch below — both variants
+                        // get the same trust anchor before the pitch.
+                        const PaywallSocialProof(),
+
+                        const SizedBox(height: 28),
 
                         // Headline
                         Text(
@@ -624,45 +627,39 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           ),
                         ),
 
-                        if (!_sub.isLapsedSubscriber && !_sub.isSubscribed) ...[
-                          const SizedBox(height: 24),
-                          Text(
-                            'We\'ll remind you 1 day before your free trial ends',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.inter(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white.withValues(alpha: 0.75),
-                            ),
-                          ),
-                        ],
-
                         const SizedBox(height: 32),
 
-                        // Feature list
-                        _FeatureRow(
-                          icon: Icons.all_inclusive_rounded,
-                          iconColor: const Color(0xFFBA6A37),
-                          text: 'Unlimited scans',
-                        ),
-                        const SizedBox(height: 22),
-                        _FeatureRow(
-                          icon: Icons.show_chart_rounded,
-                          iconColor: Colors.green,
-                          text: 'Live StockX & GOAT market prices',
-                        ),
-                        const SizedBox(height: 22),
-                        _FeatureRow(
-                          icon: Icons.sell_rounded,
-                          iconColor: Colors.orange,
-                          text: 'eBay sold listings with fees',
-                        ),
-                        const SizedBox(height: 22),
-                        _FeatureRow(
-                          icon: Icons.camera_alt_rounded,
-                          iconColor: Colors.blue,
-                          text: 'OCR label & barcode scanning',
-                        ),
+                        // Trial-eligible users get the billing timeline instead
+                        // of the feature list: the onboarding priming screen
+                        // just pitched the features, and what's actually unclear
+                        // at this point is when they get charged.
+                        if (_sub.isLapsedSubscriber || _sub.isSubscribed) ...[
+                          PaywallFeatureRow(
+                            icon: Icons.all_inclusive_rounded,
+                            iconColor: const Color(0xFFBA6A37),
+                            text: 'Unlimited scans',
+                          ),
+                          const SizedBox(height: 22),
+                          PaywallFeatureRow(
+                            icon: Icons.show_chart_rounded,
+                            iconColor: Colors.green,
+                            text: 'Live StockX & GOAT market prices',
+                          ),
+                          const SizedBox(height: 22),
+                          PaywallFeatureRow(
+                            icon: Icons.sell_rounded,
+                            iconColor: Colors.orange,
+                            text: 'eBay sold listings with fees',
+                          ),
+                          const SizedBox(height: 22),
+                          PaywallFeatureRow(
+                            icon: Icons.camera_alt_rounded,
+                            iconColor: Colors.blue,
+                            text: 'OCR label & barcode scanning',
+                          ),
+                        ] else
+                          const TrialTimeline(),
+
                         const SizedBox(height: 40),
                       ],
                     ),
@@ -681,15 +678,15 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // No payment hint — only for free trial eligible users
-                      if (!_sub.isSubscribed && !_sub.isLapsedSubscriber) ...[
-                        Text(
-                          'No Payment Due Now. Cancel Anytime.',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.grey[400],
-                          ),
+                      // Reassurance line — both variants get it, with the
+                      // wording that fits what they're actually agreeing to.
+                      // Active subscribers are excluded: they've already
+                      // subscribed, so there's nothing to reassure them about.
+                      if (!_sub.isSubscribed) ...[
+                        _ReassuranceLine(
+                          text: _sub.isLapsedSubscriber
+                              ? 'No Commitment. Cancel Anytime.'
+                              : 'No Payment Due Now. Cancel Anytime.',
                         ),
                         const SizedBox(height: 12),
                       ],
@@ -824,7 +821,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           const SizedBox(height: 12),
                         ] else if (_priceLabel() != null) ...[
                           Text(
-                            '7 day free trial then ${_priceLabel()}/year',
+                            '$kTrialDays day free trial then ${_priceLabel()}/year',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               color: Colors.grey[600],
@@ -968,12 +965,15 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
   }
 }
 
-class _FeatureRow extends StatelessWidget {
+/// A single icon-tile + label row. Public so the onboarding paywall priming
+/// screen can pitch the app in an identical visual language.
+class PaywallFeatureRow extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final String text;
 
-  const _FeatureRow({
+  const PaywallFeatureRow({
+    super.key,
     required this.icon,
     required this.iconColor,
     required this.text,
@@ -993,12 +993,234 @@ class _FeatureRow extends StatelessWidget {
           child: Icon(icon, color: iconColor, size: 22),
         ),
         const SizedBox(width: 16),
+        // Expanded so a long label wraps instead of overflowing the row. The
+        // paywall's own four labels happen to fit on common widths, but only
+        // just — a narrow device or bumped text scale overflowed them.
+        Expanded(
+          child: Text(
+            text,
+            style: GoogleFonts.inter(
+              fontSize: 17,
+              color: Colors.white,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The three-beat free-trial timeline shown to trial-eligible users in place of
+/// the feature list.
+///
+/// Public so it can be widget-tested on its own, without standing up
+/// [SubscriptionService] and Firebase — same reason [PaywallFeatureRow] is.
+class TrialTimeline extends StatelessWidget {
+  const TrialTimeline({super.key});
+
+  static const _brand = Color(0xFFBA6A37);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const _TimelineNode(
+          icon: Icons.lock_open_rounded,
+          color: _brand,
+          title: 'Today',
+          body: 'Your free trial starts',
+        ),
+        // Explicit connector segments rather than a Stack/IntrinsicHeight rail:
+        // heights stay predictable inside the paywall's SingleChildScrollView,
+        // and each segment carries its own slice of the fade.
+        const _TimelineConnector(fromAlpha: 1.0, toAlpha: 0.6),
+        _TimelineNode(
+          icon: Icons.notifications_active_rounded,
+          color: _brand,
+          title: 'In ${kTrialDays - 1} days',
+          body: 'We\'ll remind you 1 day before your free trial ends',
+        ),
+        const _TimelineConnector(fromAlpha: 0.6, toAlpha: 0.25),
+        _TimelineNode(
+          // Muted: the charge hasn't happened, and saying so plainly is the
+          // whole reassurance this timeline exists to deliver.
+          icon: Icons.workspace_premium_rounded,
+          color: null,
+          title: 'In $kTrialDays days',
+          body: 'Your subscription starts unless you cancelled beforehand',
+        ),
+      ],
+    );
+  }
+}
+
+class _TimelineNode extends StatelessWidget {
+  final IconData icon;
+
+  /// Null renders the muted state used for the not-yet-reached final beat.
+  final Color? color;
+  final String title;
+  final String body;
+
+  const _TimelineNode({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.body,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = color;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Deliberately larger than PaywallFeatureRow's 44pt tile: the timeline
+        // is the only content on the trial variant, so it carries the screen
+        // rather than sitting in a list.
+        Container(
+          width: 58,
+          height: 58,
+          decoration: BoxDecoration(
+            color: accent == null
+                ? Colors.white.withValues(alpha: 0.06)
+                : accent.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(15),
+          ),
+          child: Icon(icon, color: accent ?? Colors.grey[500], size: 30),
+        ),
+        const SizedBox(width: 18),
+        // Expanded so the long middle line wraps instead of overflowing.
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                body,
+                style: GoogleFonts.inter(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white.withValues(alpha: 0.65),
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The rail between two nodes, fading as it runs down the timeline.
+class _TimelineConnector extends StatelessWidget {
+  final double fromAlpha;
+  final double toAlpha;
+
+  const _TimelineConnector({required this.fromAlpha, required this.toAlpha});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          // Centred under the 58pt tile above it.
+          margin: const EdgeInsets.only(left: 27),
+          width: 4,
+          height: 34,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(2),
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                TrialTimeline._brand.withValues(alpha: fromAlpha),
+                TrialTimeline._brand.withValues(alpha: toAlpha),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Five-star trust anchor above the paywall headline, shown on both the
+/// trial-timeline and the lapsed/subscribed variants.
+///
+/// Public so it can be widget-tested on its own, without standing up
+/// [SubscriptionService] and Firebase — same reason [PaywallFeatureRow] and
+/// [TrialTimeline] are.
+class PaywallSocialProof extends StatelessWidget {
+  const PaywallSocialProof({super.key});
+
+  /// Amber rather than the brand orange: the top glow and the CTA are both
+  /// #BA6A37, so orange stars would blend into them and stop reading as a
+  /// rating at all.
+  static const _star = Color(0xFFFFC107);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            5,
+            (_) => const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 1),
+              child: Icon(Icons.star_rounded, color: _star, size: 18),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
         Text(
-          text,
+          '\u201CIt paid for itself after just one flip\u201D',
+          textAlign: TextAlign.center,
           style: GoogleFonts.inter(
-            fontSize: 17,
-            color: Colors.white,
-            fontWeight: FontWeight.w500,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.white.withValues(alpha: 0.92),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The green-badge reassurance line above the subscribe button.
+class _ReassuranceLine extends StatelessWidget {
+  final String text;
+
+  const _ReassuranceLine({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.verified_rounded, color: Color(0xFF22C55E), size: 16),
+        const SizedBox(width: 6),
+        // Flexible rather than fixed: the line is centred, and at large text
+        // scales it needs to wrap instead of overflowing the bottom bar.
+        Flexible(
+          child: Text(
+            text,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey[400],
+            ),
           ),
         ),
       ],

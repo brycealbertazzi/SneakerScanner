@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.2.7+27
+version: 1.2.8+28
 
 environment:
   sdk: ^3.10.8
@@ -48,6 +48,10 @@ dependencies:
   cloud_functions: ^5.2.0
   mobile_scanner: ^7.1.4
   in_app_purchase: ^3.3.0
+  # Direct dependency so play_offers.dart can read Play's subscription
+  # offers (GooglePlayProductDetails, PricingPhaseWrapper) to decide trial
+  # eligibility. Resolved transitively by in_app_purchase either way.
+  in_app_purchase_android: ^0.5.2
   sign_in_with_apple: ^6.1.0
   crypto: ^3.0.3
   shared_preferences: ^2.3.0

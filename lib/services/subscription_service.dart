@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_keys.dart';
 import 'gomarketme_service.dart';
+import 'play_offers.dart';
 import 'mixpanel_service.dart';
 import 'review_access.dart';
 
@@ -18,6 +19,11 @@ import 'review_access.dart';
 /// price-experiment SKUs, so a user who never got assigned a variant can't be
 /// miscounted as a conversion for one.
 const String kAnnualProductId = 'sneakscan_annual';
+
+/// Length of the store's introductory free trial, in days. Every piece of trial
+/// copy derives from this — change it here when the offer changes in App Store
+/// Connect / Play Console, not in four separate strings.
+const int kTrialDays = 7;
 
 /// Shape of a price-experiment SKU: `sneakscan_annual_ab_<price in cents>`.
 final RegExp _annualVariantPattern = RegExp(r'^sneakscan_annual_ab_\d{3,5}$');
@@ -47,7 +53,11 @@ class SubscriptionService extends ChangeNotifier {
 
   /// Store products priced so far, keyed by id: the fallback SKU plus whichever
   /// variant RevenueCat assigned this session.
-  final Map<String, ProductDetails> _products = {};
+  ///
+  /// Every offer is kept, not just the first. On Play a subscription comes back
+  /// as one entry per offer, and which one we buy — and whether a free trial is
+  /// among them — is the whole basis for trial eligibility.
+  final Map<String, List<ProductDetails>> _products = {};
 
   // Price A/B test: RevenueCat picks which product this user is offered.
   String? _assignedProductId;
@@ -97,12 +107,25 @@ class SubscriptionService extends ChangeNotifier {
   bool get purchaseCancelled => _purchaseCancelled;
   String? get purchaseError => _purchaseError;
 
-  /// The product this user should see and buy — the RevenueCat-assigned A/B
-  /// variant, falling back to the legacy SKU whenever RevenueCat didn't name
+  /// Offers for the product this user should be shown — the RevenueCat-assigned
+  /// A/B variant, falling back to the legacy SKU whenever RevenueCat didn't name
   /// one (offline, misconfigured dashboard, tracking disabled).
-  ProductDetails? get annualProduct =>
+  List<ProductDetails> get _annualOffers =>
       _products[_assignedProductId ?? kAnnualProductId] ??
-      _products[kAnnualProductId];
+      _products[kAnnualProductId] ??
+      const [];
+
+  /// The exact offer to purchase.
+  ///
+  /// Chosen rather than taken in order: Play doesn't guarantee which offer comes
+  /// back first, so buying `.first` is how a trial-eligible user gets charged
+  /// immediately.
+  ProductDetails? get annualProduct =>
+      pickOffer(_annualOffers, wantTrial: _isEligibleForTrial == true);
+
+  /// The renewal price, formatted. Reads past any trial or intro phase, so the
+  /// paywall's price line can't render "Free".
+  String? get annualPriceLabel => recurringPriceLabel(annualProduct);
 
   /// False until RevenueCat has had its say. The paywall skeletons the price
   /// and blocks the subscribe button while this is false, so nobody can buy at
@@ -116,7 +139,7 @@ class SubscriptionService extends ChangeNotifier {
   /// what separates "never enrolled" from "enrolled, but that SKU isn't live".
   bool get assignedProductMissingFromStore {
     final assigned = _assignedProductId;
-    return assigned != null && !_products.containsKey(assigned);
+    return assigned != null && (_products[assigned]?.isEmpty ?? true);
   }
 
   /// True only when the subscription is currently active (including trial period).
@@ -177,9 +200,10 @@ class SubscriptionService extends ChangeNotifier {
       }
     });
 
-    // Detect lapsed subscribers to show correct button label.
+    // Detect lapsed subscribers to show the correct button label.
     // iOS: query StoreKit intro offer eligibility (from Apple).
-    // Android: query Firebase androidTrialIds table by ANDROID_ID.
+    // Android: resolved from Play's own offer list once products load below —
+    // see _resolveAndroidTrialEligibility.
     if (Platform.isIOS) {
       _checkTrialEligibility().then((eligible) {
         _isEligibleForTrial = eligible;
@@ -188,15 +212,7 @@ class SubscriptionService extends ChangeNotifier {
           notifyListeners();
         }
       });
-    } else if (Platform.isAndroid) {
-      _checkAndroidTrialEligibility().then((eligible) {
-        _isEligibleForTrial = eligible;
-        if (!eligible && _status == SubscriptionStatus.loading) {
-          _status = SubscriptionStatus.cancelled;
-          notifyListeners();
-        }
-      });
-    } else {
+    } else if (!Platform.isAndroid) {
       _isEligibleForTrial = true;
     }
 
@@ -228,6 +244,12 @@ class SubscriptionService extends ChangeNotifier {
         _productsQueried!.complete();
       }
     }
+
+    // Deliberately before _startLaunchCheck: resolving eligibility here rather
+    // than from an unawaited future means the 4 s launch-check timer can never
+    // fire while it's still unknown, which is what used to let the trial
+    // paywall show to an account that had already used its trial.
+    _resolveAndroidTrialEligibility();
 
     // Silently query StoreKit/Play Billing for current subscription status.
     // Results arrive via the purchase stream. _startLaunchCheck is non-blocking;
@@ -337,6 +359,10 @@ class SubscriptionService extends ChangeNotifier {
       } catch (e) {
         debugPrint('[IAP] Query for assigned variant $productId failed: $e');
       }
+      // The variants share a subscription group, so this should agree with the
+      // fallback SKU's answer — recomputed anyway so a future regrouping can't
+      // silently leave the wrong variant on screen.
+      _resolveAndroidTrialEligibility();
       if (_offeringsResolved) {
         // The backstop timer already committed this session to the fallback.
         // Hold the assignment rather than drop it: applying it now could move
@@ -417,7 +443,12 @@ class SubscriptionService extends ChangeNotifier {
     // was shown the legacy price.
     final productId = assignedId ?? kAnnualProductId;
     final effectiveId = annualProduct?.id ?? kAnnualProductId;
-    final price = _products[effectiveId]?.price;
+    final price = recurringPriceLabel(
+      pickOffer(
+        _products[effectiveId] ?? const [],
+        wantTrial: _isEligibleForTrial == true,
+      ),
+    );
     if (assignedId != null && effectiveId != assignedId) {
       debugPrint(
         '[RC] MISMATCH: assigned "$assignedId" but the store never returned '
@@ -436,6 +467,9 @@ class SubscriptionService extends ChangeNotifier {
       // The variant is only truly delivered when its price came from the store.
       'ab_shown_product_id': effectiveId,
       'ab_variant_delivered': assignedId != null && effectiveId == assignedId,
+      // Conversion isn't comparable across trial states, so every variant event
+      // needs to say which paywall the user was actually looking at.
+      'ab_trial_eligible': _isEligibleForTrial,
     };
     // Rides along on Subscribe Button Tapped and Purchase Completed, making the
     // whole funnel sliceable by variant.
@@ -496,20 +530,28 @@ class SubscriptionService extends ChangeNotifier {
     }
   }
 
-  Future<bool> _checkAndroidTrialEligibility() async {
-    final androidId = await _getAndroidId();
-    if (androidId == null) return true;
-    try {
-      final snapshot = await FirebaseDatabase.instance
-          .ref('androidTrialIds/$androidId')
-          .get();
-      return !snapshot.exists;
-    } catch (e) {
-      debugPrint(
-        '[Android] Failed to check trial eligibility (defaulting to eligible): $e',
-      );
-      return true;
+  /// Asks Play whether this account can still start a free trial.
+  ///
+  /// Play answers by omission: `queryProductDetails` only returns offers the
+  /// user is eligible for, so a spent trial offer simply isn't in the list.
+  /// That's account-scoped and authoritative — unlike the ANDROID_ID/Firebase
+  /// record this replaced, which is device-scoped (and per signing key, so a
+  /// sideloaded build and a Play install disagreed on the same phone).
+  ///
+  /// A failed or empty query resolves to *not* eligible. Showing the plain
+  /// paywall to someone who could have had a trial costs them nothing — Play
+  /// still applies the trial at checkout — whereas promising one it won't
+  /// honour is the failure this replaced.
+  void _resolveAndroidTrialEligibility() {
+    if (!Platform.isAndroid) return;
+    final eligible = hasFreeTrialOffer(_annualOffers);
+    if (_isEligibleForTrial == eligible) return;
+    _isEligibleForTrial = eligible;
+    debugPrint('[IAP] Play trial eligibility: $eligible');
+    if (!eligible && _status == SubscriptionStatus.loading) {
+      _status = SubscriptionStatus.cancelled;
     }
+    notifyListeners();
   }
 
   Future<void> _recordAndroidSubscription() async {
@@ -619,15 +661,15 @@ class SubscriptionService extends ChangeNotifier {
       debugPrint('[IAP] Products not found in store: ${response.notFoundIDs}');
     }
     if (response.productDetails.isNotEmpty) {
+      // Play returns one entry per subscription *offer*, all sharing an id.
+      // Keep them all: which offer gets bought is decided by pickOffer, and
+      // whether a free-trial offer is present is how trial eligibility is
+      // determined. Dropping all but the first threw both away.
       for (final product in response.productDetails) {
-        // Play returns one entry per subscription *offer*, all sharing an id.
-        // First wins, matching the `.first` this used before it handled more
-        // than one product — picking a different offer would change which base
-        // plan (and whether the free trial) the user actually buys.
-        if (_products.containsKey(product.id)) continue;
-        _products[product.id] = product;
+        (_products[product.id] ??= <ProductDetails>[]).add(product);
         debugPrint(
-          '[IAP] Product loaded: ${product.id}, price: ${product.price}',
+          '[IAP] Offer loaded: ${product.id}, price: ${product.price}, '
+          'trial: ${offerIsFreeTrial(product)}',
         );
       }
       notifyListeners();

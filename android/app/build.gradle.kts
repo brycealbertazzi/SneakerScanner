@@ -62,3 +62,11 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Google Play requires Play Billing >= 8.0.0 from Aug 30, 2026; 9.1.0 is current.
+    // No Flutter plugin declares v9 yet (in_app_purchase_android pins 8.0.0, RevenueCat
+    // and GoMarketMe 8.3.0), so pull it up here — Gradle resolves to the highest version
+    // across the graph, and this keeps working if a plugin later declares something newer.
+    implementation("com.android.billingclient:billing:9.1.0")
+}

@@ -10,6 +10,7 @@ import '../services/subscription_service.dart';
 import 'login_screen.dart';
 import 'main_screen.dart';
 import 'paywall_page.dart';
+import 'paywall_priming_screen.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   final _pageController = PageController();
   int _currentPage = 0;
   bool _showAnalysis = false;
+  bool _showPriming = false;
 
   // Starts at 1 so the bar opens at one step in; incremented on each action
   int _stepsCompleted = 1;
@@ -184,13 +186,33 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           duration: const Duration(milliseconds: 350),
           curve: Curves.easeInOut,
         );
+      } else if (!SubscriptionService.instance.canScan) {
+        // Paywall lies ahead — prime it first. `canScan` is settled by now:
+        // initialize() runs in initState and its launch check is capped at 4 s,
+        // while the intro, eight questions and four pages take far longer. And
+        // _completeOnboarding re-checks after awaitLaunchCheck() either way, so
+        // the worst a wrong answer here can do is show one extra screen.
+        _trackOnce('priming', 'Paywall Priming Viewed');
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (mounted) setState(() => _showPriming = true);
+        });
       } else {
+        // Already subscribed — no paywall ahead, so no priming either.
         _trackOnce('analysis', 'Onboarding Analysis Viewed');
         Future.delayed(const Duration(milliseconds: 500), () {
           if (mounted) setState(() => _showAnalysis = true);
         });
       }
     }
+  }
+
+  void _startAnalysis() {
+    _trackOnce('priming_continued', 'Paywall Priming Continued');
+    _trackOnce('analysis', 'Onboarding Analysis Viewed');
+    setState(() {
+      _showPriming = false;
+      _showAnalysis = true;
+    });
   }
 
   // Back is available on all question/page screens (Q1 back → intro)
@@ -344,6 +366,12 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     // Analysis screen stands alone — no progress bar
     if (_showAnalysis) {
       return _AnalysisScreen(onComplete: _completeOnboarding);
+    }
+
+    // Paywall priming — also standalone, and checked after _showAnalysis so the
+    // analysis screen wins the frame in which we hand off to it.
+    if (_showPriming) {
+      return PaywallPrimingScreen(onContinue: _startAnalysis);
     }
 
     // Intro screen — no top bar
@@ -528,7 +556,7 @@ const _kQuestions = [
     '3+ years',
   ]),
   _OnboardingQuestion('How many pairs do you flip per month?', [
-    '0–5',
+    'Less than 5',
     '6–15',
     '16–30',
     '30+',
@@ -538,8 +566,6 @@ const _kQuestions = [
     'GOAT',
     'eBay',
     'Facebook Marketplace',
-    'Depop',
-    'Mercari',
     'Other',
   ]),
   _OnboardingQuestion('What\'s your biggest challenge when reselling?', [
@@ -550,19 +576,21 @@ const _kQuestions = [
     'Other',
   ]),
   _OnboardingQuestion('What\'s your main goal with SneakScan?', [
-    'Just want to find good deals when I shop',
-    'Occasionally flip sneakers as a hobby',
+    'Find as many shoes as possible to flip',
     'Maximize my profit on every flip',
     'Build a full-time reselling business',
+    'Occasionally flip sneakers as a hobby',
     'Other',
   ]),
-  _OnboardingQuestion(
-    'How quickly do you need to decide if a shoe is worth buying?',
-    ['On the spot (seconds)', 'A few minutes', 'I take my time', 'It varies'],
-  ),
+  _OnboardingQuestion('What matters most when you find a shoe?', [
+    'How much I can make',
+    'How fast it will sell',
+    'The resale price',
+    'Whether it’s worth buying',
+  ]),
   _OnboardingQuestion(
     'How much time per week do you spend researching prices?',
-    ['Less than 1 hour', '1–3 hours', '3–5 hours', '5+ hours'],
+    ['None', 'Less than 1 hour', '1–3 hours', '3–5 hours', '5+ hours'],
   ),
   _OnboardingQuestion('What type of sneakers do you mostly flip?', [
     'Nike / Jordan',

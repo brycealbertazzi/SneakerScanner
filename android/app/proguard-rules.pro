@@ -13,3 +13,9 @@
 # attribution paths (a failure that would only ever show up in production).
 -keep class co.gomarketme.** { *; }
 -dontwarn co.gomarketme.**
+
+# RevenueCat's purchases-android keeps an unused buildQueryPurchaseHistoryParams helper that
+# references QueryPurchaseHistoryParams, removed in Play Billing 9. Nothing calls it — the live
+# path (QueryPurchaseHistoryUseCase) only reads BillingResult — so it is safe to shrink away.
+-dontwarn com.android.billingclient.api.QueryPurchaseHistoryParams
+-dontwarn com.android.billingclient.api.QueryPurchaseHistoryParams$Builder
