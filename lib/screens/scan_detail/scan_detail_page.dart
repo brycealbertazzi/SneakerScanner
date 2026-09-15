@@ -10,6 +10,7 @@ import '../../api_keys.dart';
 import '../../models/scan_data.dart';
 import '../../services/ebay_auth_service.dart';
 import '../../services/nike_colorway_utils.dart';
+import '../../services/review_prompt_service.dart';
 import 'widgets/info_card.dart';
 import 'widgets/profit_calculator.dart';
 
@@ -294,6 +295,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       // New scan — create the DB record now that we have at least one price.
       if (_resolvedScanId.isEmpty) {
         await _createScanInDb();
+        if (mounted) await ReviewPromptService.recordSuccessfulScan();
       }
 
       setState(() => _checkingResults = false);
