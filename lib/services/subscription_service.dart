@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_storekit/store_kit_2_wrappers.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:purchases_flutter/purchases_flutter.dart' as rc;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -735,13 +736,87 @@ class SubscriptionService extends ChangeNotifier {
     _purchaseInitiated = true;
     notifyListeners();
 
+    // StoreKit 2 refuses to start a purchase while the same product has an
+    // unfinished transaction, so clear any stragglers first.
+    await _finishUnfinishedIosTransactions(productId: product.id);
+
     final param = PurchaseParam(productDetails: product);
     try {
       await InAppPurchase.instance.buyNonConsumable(purchaseParam: param);
+    } on PlatformException catch (e) {
+      if (e.code == _duplicateTransactionCode) {
+        // One could still land between the sweep above and the purchase call.
+        debugPrint('[IAP] Unfinished transaction blocked purchase — retrying');
+        await _finishUnfinishedIosTransactions(productId: product.id);
+        try {
+          await InAppPurchase.instance.buyNonConsumable(purchaseParam: param);
+          return;
+        } catch (retryError) {
+          debugPrint(
+            '[IAP] Retry after finishing transactions failed: $retryError',
+          );
+        }
+      } else {
+        debugPrint('[IAP] Purchase failed to start: $e');
+      }
+      _failPurchaseStart();
     } catch (e) {
-      _purchaseError = e.toString();
-      _purchasePending = false;
-      notifyListeners();
+      debugPrint('[IAP] Purchase failed to start: $e');
+      _failPurchaseStart();
+    }
+  }
+
+  static const _duplicateTransactionCode = 'storekit_duplicate_product_object';
+
+  /// Clears the pending state after a purchase couldn't even be started, with
+  /// a readable message rather than a raw PlatformException string.
+  void _failPurchaseStart() {
+    _purchaseError =
+        'Couldn\'t start the purchase. Please try again in a moment.';
+    _purchasePending = false;
+    _purchaseInitiated = false;
+    notifyListeners();
+  }
+
+  /// Finishes StoreKit 2 transactions that were left unfinished — e.g. the app
+  /// was killed, or the purchase stream wasn't listening, before
+  /// completePurchase ran. While one exists for a product, StoreKit rejects
+  /// new purchases of it with `storekit_duplicate_product_object`.
+  ///
+  /// Safe to finish: entitlement never rests on these events — the launch
+  /// check re-reads current entitlements from Apple.
+  Future<void> _finishUnfinishedIosTransactions({String? productId}) async {
+    if (!Platform.isIOS) return;
+    try {
+      final unfinished = await SK2Transaction.unfinishedTransactions().timeout(
+        const Duration(seconds: 5),
+      );
+      for (final transaction in unfinished) {
+        if (productId != null && transaction.productId != productId) continue;
+        final id = int.tryParse(transaction.id);
+        if (id == null) continue;
+        debugPrint(
+          '[IAP] Finishing stale transaction ${transaction.id} '
+          '(${transaction.productId})',
+        );
+        // finish() never completes if StoreKit can't find the transaction.
+        await SK2Transaction.finish(id).timeout(const Duration(seconds: 5));
+      }
+    } catch (e) {
+      debugPrint('[IAP] Could not finish stale transactions: $e');
+    }
+  }
+
+  /// completePurchase that can't break the purchase-update loop. StoreKit 2
+  /// cancel and pending events carry no transaction, and the plugin throws
+  /// synchronously on the missing id — which used to abort handling of every
+  /// other purchase in the same batch, leaving them unfinished.
+  Future<void> _completeSafely(PurchaseDetails purchase) async {
+    if (Platform.isIOS && purchase.purchaseID == null) return;
+    try {
+      await InAppPurchase.instance.completePurchase(purchase);
+    } catch (e) {
+      debugPrint('[IAP] completePurchase failed for ${purchase.productID}: $e');
     }
   }
 
@@ -771,7 +846,7 @@ class SubscriptionService extends ChangeNotifier {
           purchase.status == PurchaseStatus.restored) {
         // Always complete the transaction unconditionally — Apple owns the
         // receipt and determines whether the subscription is valid.
-        InAppPurchase.instance.completePurchase(purchase);
+        unawaited(_completeSafely(purchase));
 
         if (_isLaunchCheck) {
           // During the silent launch check, only a 'restored' event means an
@@ -800,12 +875,12 @@ class SubscriptionService extends ChangeNotifier {
       } else if (purchase.status == PurchaseStatus.error) {
         if (_isLaunchCheck) {
           _completeLaunchCheck(SubscriptionStatus.freeTrial);
-          InAppPurchase.instance.completePurchase(purchase);
+          unawaited(_completeSafely(purchase));
         } else {
           final wasPurchaseInitiated = _purchaseInitiated;
           _purchasePending = false;
           _purchaseInitiated = false;
-          InAppPurchase.instance.completePurchase(purchase);
+          unawaited(_completeSafely(purchase));
           final isCancellation = _isCancellationError(purchase.error);
           final isAlreadyOwned = _isAlreadyOwnedError(purchase.error);
           if (isAlreadyOwned ||
@@ -827,7 +902,7 @@ class SubscriptionService extends ChangeNotifier {
         _purchaseInitiated = false;
         _purchaseCancelled = true;
         notifyListeners();
-        InAppPurchase.instance.completePurchase(purchase);
+        unawaited(_completeSafely(purchase));
       }
     }
   }

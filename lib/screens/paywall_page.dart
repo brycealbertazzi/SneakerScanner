@@ -567,7 +567,10 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
         : _sub.isLapsedSubscriber
         ? 'Get Unlimited Scans'
         : 'Start Free Trial';
-    final headline = (_sub.isLapsedSubscriber || _sub.isSubscribed)
+    // Lapsed and active subscribers see the full feature list instead of the
+    // free-trial timeline.
+    final showFeatureList = _sub.isLapsedSubscriber || _sub.isSubscribed;
+    final headline = showFeatureList
         ? 'Spot profits instantly with SneakScan'
         : 'How Your Free Trial Works';
 
@@ -616,36 +619,28 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                         AppCard(
                           outlined: true,
                           padding: const EdgeInsets.all(20),
-                          child: (_sub.isLapsedSubscriber || _sub.isSubscribed)
-                              ? const Column(
+                          child: showFeatureList
+                              ? Column(
                                   children: [
-                                    PaywallFeatureRow(
-                                      icon: Icons.all_inclusive_rounded,
-                                      text: 'Unlimited scans',
-                                    ),
-                                    SizedBox(height: 22),
-                                    PaywallFeatureRow(
-                                      icon: Icons.show_chart_rounded,
-                                      text: 'Live StockX & GOAT market prices',
-                                    ),
-                                    SizedBox(height: 22),
-                                    PaywallFeatureRow(
-                                      icon: Icons.sell_rounded,
-                                      text: 'eBay sold listings with fees',
-                                    ),
-                                    SizedBox(height: 22),
-                                    PaywallFeatureRow(
-                                      icon: Icons.camera_alt_rounded,
-                                      text: 'OCR label & barcode scanning',
-                                    ),
+                                    for (final (i, point)
+                                        in kSellingPoints.indexed) ...[
+                                      if (i > 0) const SizedBox(height: 22),
+                                      PaywallFeatureRow(
+                                        icon: point.icon,
+                                        text: point.text,
+                                      ),
+                                    ],
                                   ],
                                 )
                               : const TrialTimeline(),
                         ),
 
-                        const SizedBox(height: 28),
-
-                        const _SellingPointChecklist(),
+                        // The feature card above already lists every selling
+                        // point, so only the trial variant needs the checklist.
+                        if (!showFeatureList) ...[
+                          const SizedBox(height: 28),
+                          const _SellingPointChecklist(),
+                        ],
 
                         const SizedBox(height: 32),
                       ],
@@ -961,8 +956,8 @@ const kSellingPoints = <({IconData icon, String text})>[
   (icon: Icons.history_rounded, text: 'Full history of every scan'),
 ];
 
-/// Orange check-circle list of [kSellingPoints], shown under the paywall's
-/// timeline or feature card.
+/// Orange check-circle list of [kSellingPoints], shown under the free-trial
+/// timeline. The non-trial paywall lists the same points in its feature card.
 class _SellingPointChecklist extends StatelessWidget {
   const _SellingPointChecklist();
 

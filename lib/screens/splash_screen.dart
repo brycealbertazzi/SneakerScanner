@@ -9,6 +9,7 @@ import 'main_screen.dart';
 import 'onboarding_flow.dart';
 import 'paywall_page.dart';
 import '../theme/app_theme.dart';
+import '../widgets/pulsing_app_icon.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -136,30 +137,7 @@ class _SplashScreenState extends State<SplashScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(30),
-                          boxShadow: AppColors.cardShadow,
-                        ),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Icon(
-                              Icons.qr_code_scanner_rounded,
-                              size: 64,
-                              color: AppColors.accent.withValues(alpha: 0.3),
-                            ),
-                            const Icon(
-                              Icons.directions_run_rounded,
-                              size: 48,
-                              color: AppColors.accent,
-                            ),
-                          ],
-                        ),
-                      ),
+                      const PulsingAppIcon(size: 120),
                       const SizedBox(height: 32),
                       Text(
                         'SneakScan',

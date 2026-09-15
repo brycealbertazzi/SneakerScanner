@@ -12,6 +12,7 @@ import 'main_screen.dart';
 import 'paywall_page.dart';
 import 'paywall_priming_screen.dart';
 import '../theme/app_theme.dart';
+import '../widgets/pulsing_app_icon.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -435,30 +436,7 @@ class _IntroScreen extends StatefulWidget {
   State<_IntroScreen> createState() => _IntroScreenState();
 }
 
-class _IntroScreenState extends State<_IntroScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _pulseCtrl;
-  late final Animation<double> _scale;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
-    _scale = Tween<double>(
-      begin: 0.92,
-      end: 1.05,
-    ).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _pulseCtrl.dispose();
-    super.dispose();
-  }
-
+class _IntroScreenState extends State<_IntroScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -469,18 +447,7 @@ class _IntroScreenState extends State<_IntroScreen>
           child: Column(
             children: [
               const Spacer(flex: 3),
-              // Logo with pulse animation
-              ScaleTransition(
-                scale: _scale,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(28),
-                  child: Image.asset(
-                    'assets/app_icon.png',
-                    width: 140,
-                    height: 140,
-                  ),
-                ),
-              ),
+              const PulsingAppIcon(size: 140),
               const SizedBox(height: 36),
               Text(
                 'SneakScan',
@@ -1682,20 +1649,7 @@ class _AnalysisScreenState extends State<_AnalysisScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Sneaker icon
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: const Icon(
-                    Icons.directions_run_rounded,
-                    color: AppColors.accent,
-                    size: 36,
-                  ),
-                ),
+                const PulsingAppIcon(size: 88),
                 const SizedBox(height: 28),
                 Text(
                   'Scanning sneaker\ndatabase…',

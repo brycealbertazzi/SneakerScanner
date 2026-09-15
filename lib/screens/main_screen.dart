@@ -230,7 +230,7 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           _NavItem(
             icon: Icons.history,
             label: 'History',
-            iconKey: DemoKeys.key(DemoTarget.historyTab),
+            demoKey: DemoKeys.key(DemoTarget.historyTab),
           ),
         ],
       ),
@@ -258,11 +258,14 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 }
 
 class _NavItem {
-  const _NavItem({required this.icon, required this.label, this.iconKey});
+  const _NavItem({required this.icon, required this.label, this.demoKey});
 
   final IconData icon;
   final String label;
-  final Key? iconKey;
+
+  /// Marks the whole tab (not just its icon) so the demo spotlight matches
+  /// the tab's pill shape.
+  final Key? demoKey;
 }
 
 /// Nike-style floating white pill with a gray pill behind the selected tab.
@@ -358,30 +361,30 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(item.icon, color: AppColors.textPrimary, size: 26);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            item.iconKey != null
-                ? KeyedSubtree(key: item.iconKey, child: icon)
-                : icon,
-            const SizedBox(height: 2),
-            AnimatedDefaultTextStyle(
-              duration: _FloatingNavBar._duration,
-              curve: _FloatingNavBar._curve,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: AppColors.textPrimary,
+    return KeyedSubtree(
+      key: item.demoKey,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(item.icon, color: AppColors.textPrimary, size: 26),
+              const SizedBox(height: 2),
+              AnimatedDefaultTextStyle(
+                duration: _FloatingNavBar._duration,
+                curve: _FloatingNavBar._curve,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: AppColors.textPrimary,
+                ),
+                child: Text(item.label),
               ),
-              child: Text(item.label),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -343,7 +343,9 @@ class _SpotlightPainter extends CustomPainter {
       return;
     }
 
-    final rrect = RRect.fromRectAndRadius(cutout, Radius.circular(radius));
+    // Clamped so a pill-shaped step (huge radius) stays a clean stadium.
+    final r = math.min(radius, cutout.shortestSide / 2);
+    final rrect = RRect.fromRectAndRadius(cutout, Radius.circular(r));
     canvas.drawPath(
       Path.combine(
         PathOperation.difference,
@@ -359,7 +361,7 @@ class _SpotlightPainter extends CustomPainter {
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         cutout.inflate(2 + spread),
-        Radius.circular(radius + 2 + spread),
+        Radius.circular(r + 2 + spread),
       ),
       Paint()
         ..style = PaintingStyle.stroke

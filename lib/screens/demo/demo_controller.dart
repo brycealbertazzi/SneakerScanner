@@ -311,8 +311,9 @@ const kDemoSteps = <DemoStep>[
     body: 'Your whole scan history lives one tap away.',
     awaitEvent: DemoEvent.historyTabOpened,
     actionHint: 'Tap History',
-    // Kept inside the nav item so the press can't miss it and hit the page.
-    holePadding: EdgeInsets.symmetric(horizontal: 22, vertical: 4),
+    // Cut to the tab's own pill so the spotlight matches the floating nav bar.
+    holePadding: EdgeInsets.zero,
+    holeRadius: 999,
   ),
   DemoStep(
     target: DemoTarget.historyEmptyState,
