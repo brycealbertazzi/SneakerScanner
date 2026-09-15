@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../screens/login_screen.dart';
 import '../screens/main_screen.dart';
 import '../services/mixpanel_service.dart';
+import '../services/paywall_impression.dart';
 import '../services/review_access.dart';
 import '../services/subscription_service.dart';
 
@@ -44,6 +45,9 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
   bool _isRestoring = false;
   Timer? _cancelFallbackTimer;
 
+  /// One RevenueCat impression per display, however many rebuilds happen.
+  bool _impressionTracked = false;
+
   // Hidden store-review unlock: hold the subscribe button for three seconds.
   static const _holdDuration = Duration(seconds: 3);
   // Matches Flutter's kTouchSlop: enough for finger jitter across a 3s hold,
@@ -65,6 +69,36 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     MixpanelService.instance.track(
       'Paywall Viewed',
       properties: {'is_closeable': widget.isCloseable},
+    );
+    // Fire-and-forget: RevenueCat needs to hear about the view, but nothing on
+    // this screen should wait on it.
+    unawaited(_trackRevenueCatImpression());
+  }
+
+  /// Reports this display to RevenueCat, which is the only way a *custom*
+  /// paywall ever counts as viewed. Without it every customer stays under
+  /// "Not viewed" and filtering the price experiment by Viewed returns nobody.
+  Future<void> _trackRevenueCatImpression() async {
+    if (_impressionTracked) return;
+    _impressionTracked = true;
+    if (!_sub.revenueCatConfigured) return;
+
+    // Both waits are already capped internally. They matter because at mount
+    // `status` can still be `loading`: until the launch check settles we don't
+    // know whether this user is seeing the trial timeline or the lapsed
+    // feature rows, and that's exactly what the paywall id records.
+    await _sub.awaitOfferings();
+    await _sub.awaitLaunchCheck();
+
+    // An active subscriber opening this from Settings was never a conversion
+    // opportunity — counting them would pad the experiment's denominator.
+    if (_sub.isSubscribed) return;
+
+    // Deliberately not gated on `mounted`: the view already happened, so a fast
+    // dismissal should still count.
+    await trackPaywallImpression(
+      paywallId: paywallIdFor(trialEligible: !_sub.isLapsedSubscriber),
+      offering: _sub.assignedOffering,
     );
   }
 

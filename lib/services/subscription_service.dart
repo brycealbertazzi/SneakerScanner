@@ -62,14 +62,25 @@ class SubscriptionService extends ChangeNotifier {
   // Price A/B test: RevenueCat picks which product this user is offered.
   String? _assignedProductId;
   String? _assignedOfferingId;
+
+  /// The offering object itself, not just its id. RevenueCat reads placement
+  /// and targeting context off this when a paywall impression is reported, so
+  /// the id alone isn't enough to tie a view to an experiment arm.
+  rc.Offering? _assignedOffering;
+
   bool _offeringsResolved = false;
   Timer? _offeringsTimer;
+
+  /// Completes when the A/B offering has resolved one way or the other, so a
+  /// paywall can wait for experiment context before reporting its impression.
+  Completer<void>? _offeringsCompleter;
 
   // An assignment that landed after the backstop timer already committed this
   // session to the fallback. Held rather than dropped, and applied as soon as
   // there's no paywall on screen for it to change the price of.
   String? _pendingAssignedProductId;
   String? _pendingAssignedOfferingId;
+  rc.Offering? _pendingAssignedOffering;
 
   /// Paywalls currently mounted. While this is non-zero the displayed price is
   /// frozen — a late variant would otherwise move the number a user is looking
@@ -134,6 +145,14 @@ class SubscriptionService extends ChangeNotifier {
   String? get assignedProductId => _assignedProductId;
   String? get assignedOfferingId => _assignedOfferingId;
 
+  /// The offering to report alongside a paywall impression. Null when this
+  /// session fell back to the legacy SKU.
+  rc.Offering? get assignedOffering => _assignedOffering;
+
+  /// False when `Purchases.configure` never succeeded — there's no RevenueCat
+  /// customer to attach anything to.
+  bool get revenueCatConfigured => _revenueCatConfigured;
+
   /// True when RevenueCat named a variant the store returned no price for. The
   /// paywall then silently shows — and charges — the legacy price, so this is
   /// what separates "never enrolled" from "enrolled, but that SKU isn't live".
@@ -182,6 +201,7 @@ class SubscriptionService extends ChangeNotifier {
     // Created before the RevenueCat call below so the variant tracking always
     // has something to await, whichever of the two finishes first.
     _productsQueried = Completer<void>();
+    _offeringsCompleter = Completer<void>();
 
     // Never awaited, so a slow RevenueCat SDK can't delay or block the purchase
     // flow. The product query below runs in parallel with it, so the paywall
@@ -370,6 +390,7 @@ class SubscriptionService extends ChangeNotifier {
         // no paywall is on screen cannot.
         _pendingAssignedProductId = productId;
         _pendingAssignedOfferingId = current.identifier;
+        _pendingAssignedOffering = current;
         debugPrint(
           '[RC] Offerings arrived after timeout — holding $productId until '
           'no paywall is on screen',
@@ -379,6 +400,7 @@ class SubscriptionService extends ChangeNotifier {
       }
       _assignedProductId = productId;
       _assignedOfferingId = current.identifier;
+      _assignedOffering = current;
       debugPrint('[RC] Assigned $productId from offering $_assignedOfferingId');
     } catch (e) {
       debugPrint('[RC] Offerings fetch failed — using fallback product: $e');
@@ -394,8 +416,10 @@ class SubscriptionService extends ChangeNotifier {
     if (_paywallsOnScreen > 0 || _purchaseInitiated || _purchasePending) return;
     _assignedProductId = productId;
     _assignedOfferingId = _pendingAssignedOfferingId;
+    _assignedOffering = _pendingAssignedOffering;
     _pendingAssignedProductId = null;
     _pendingAssignedOfferingId = null;
+    _pendingAssignedOffering = null;
     debugPrint('[RC] Applied late assignment $productId');
     unawaited(_trackVariantAssigned());
     notifyListeners();
@@ -415,6 +439,9 @@ class SubscriptionService extends ChangeNotifier {
     _offeringsResolved = true;
     _offeringsTimer?.cancel();
     _offeringsTimer = null;
+    if (!(_offeringsCompleter?.isCompleted ?? true)) {
+      _offeringsCompleter!.complete();
+    }
     // Not awaited: the paywall unblocks now, while the tracking waits on the
     // store query so it can report a real price rather than a null one.
     unawaited(_trackVariantAssigned());
@@ -586,6 +613,19 @@ class SubscriptionService extends ChangeNotifier {
       );
       return true;
     }
+  }
+
+  /// Awaitable by the paywall. Resolves once the A/B offering has landed or been
+  /// given up on, so an impression can carry experiment context. Capped, and a
+  /// no-op once already resolved — this must never hold a paywall open.
+  Future<void> awaitOfferings() async {
+    if (_offeringsResolved) return;
+    final completer = _offeringsCompleter;
+    if (completer == null || completer.isCompleted) return;
+    await completer.future.timeout(
+      const Duration(seconds: 8),
+      onTimeout: () {},
+    );
   }
 
   /// Awaitable by splash / login screens. Resolves once the launch subscription
@@ -894,10 +934,16 @@ class SubscriptionService extends ChangeNotifier {
     _products.clear();
     _assignedProductId = null;
     _assignedOfferingId = null;
+    _assignedOffering = null;
     _pendingAssignedProductId = null;
     _pendingAssignedOfferingId = null;
+    _pendingAssignedOffering = null;
     _trackedVariantProductId = null;
     _productsQueried = null;
+    if (!(_offeringsCompleter?.isCompleted ?? true)) {
+      _offeringsCompleter!.complete();
+    }
+    _offeringsCompleter = null;
     _offeringsResolved = false;
     _offeringsTimer?.cancel();
     _offeringsTimer = null;
