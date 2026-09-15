@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:app_links/app_links.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -28,16 +27,11 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
   late AppLinks _appLinks;
   final ValueNotifier<bool> _scannerActive = ValueNotifier(true);
-  late final StreamSubscription<User?> _userSub;
   bool _wasSubscribed = false;
 
   @override
   void initState() {
     super.initState();
-    // Rebuild avatar whenever user profile changes (displayName, photoURL, etc.)
-    _userSub = FirebaseAuth.instance.userChanges().listen((_) {
-      if (mounted) setState(() {});
-    });
     _wasSubscribed = SubscriptionService.instance.canScan;
     SubscriptionService.instance.addListener(_onSubChanged);
     WidgetsBinding.instance.addObserver(this);
@@ -136,7 +130,6 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     SubscriptionService.instance.removeListener(_onSubChanged);
-    _userSub.cancel();
     _scannerActive.dispose();
     super.dispose();
   }
@@ -173,31 +166,23 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         elevation: 0,
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.only(right: 20),
             child: GestureDetector(
               onTap: _openSettings,
-              child: Builder(
-                builder: (context) {
-                  final user = FirebaseAuth.instance.currentUser;
-                  final photoUrl = user?.photoURL;
-                  final displayName =
-                      user?.displayName ?? user?.email?.split('@').first;
-                  return Container(
-                    width: 38,
-                    height: 38,
-                    decoration: const BoxDecoration(shape: BoxShape.circle),
-                    child: ClipOval(
-                      child: photoUrl != null
-                          ? Image.network(
-                              photoUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  _buildDefaultAvatar(displayName),
-                            )
-                          : _buildDefaultAvatar(displayName),
-                    ),
-                  );
-                },
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.surface,
+                  border: Border.all(color: AppColors.buttonBorder),
+                  boxShadow: AppColors.buttonShadow(),
+                ),
+                child: const Icon(
+                  Icons.person_rounded,
+                  color: AppColors.textPrimary,
+                  size: 22,
+                ),
               ),
             ),
           ),
@@ -233,25 +218,6 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             demoKey: DemoKeys.key(DemoTarget.historyTab),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDefaultAvatar(String? displayName) {
-    final initial = displayName?.isNotEmpty == true
-        ? displayName![0].toUpperCase()
-        : '?';
-    return Container(
-      color: AppColors.textPrimary,
-      child: Center(
-        child: Text(
-          initial,
-          style: GoogleFonts.inter(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
-          ),
-        ),
       ),
     );
   }
