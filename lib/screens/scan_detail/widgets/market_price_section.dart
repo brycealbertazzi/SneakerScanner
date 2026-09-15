@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../services/nike_colorway_utils.dart';
+import '../../../theme/app_theme.dart';
 
 class MarketPriceSection extends StatefulWidget {
   final String label;
@@ -106,10 +107,8 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
     if (widget.sizeMap == null) return [];
     final sizes = widget.sizeMap!.keys.toList();
     sizes.sort((a, b) {
-      final da =
-          double.tryParse(a.replaceAll(RegExp(r'[yY]$'), '')) ?? 999;
-      final db =
-          double.tryParse(b.replaceAll(RegExp(r'[yY]$'), '')) ?? 999;
+      final da = double.tryParse(a.replaceAll(RegExp(r'[yY]$'), '')) ?? 999;
+      final db = double.tryParse(b.replaceAll(RegExp(r'[yY]$'), '')) ?? 999;
       return da.compareTo(db);
     });
     return sizes;
@@ -194,7 +193,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -204,7 +203,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
             '$label (${(rate * 100).toStringAsFixed(1)}%)',
             style: GoogleFonts.inter(
               fontSize: 12,
-              color: Colors.grey[500],
+              color: AppColors.textSecondary,
             ),
           ),
           Text(
@@ -212,7 +211,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
             style: GoogleFonts.inter(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: Colors.orange[300],
+              color: Colors.orange[800],
             ),
           ),
         ],
@@ -224,7 +223,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -234,7 +233,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
             label,
             style: GoogleFonts.inter(
               fontSize: 12,
-              color: Colors.grey[500],
+              color: AppColors.textSecondary,
             ),
           ),
           Text(
@@ -242,7 +241,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
             style: GoogleFonts.inter(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: Colors.orange[300],
+              color: Colors.orange[800],
             ),
           ),
         ],
@@ -257,7 +256,8 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
     if (_hasSizeMap) return null; // dropdown replaces the badge
     final platform = widget.label;
     if ((platform != 'GOAT' && platform != 'StockX') ||
-        widget.scannedSize == null) return null;
+        widget.scannedSize == null)
+      return null;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -312,8 +312,8 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF252525),
-        borderRadius: BorderRadius.circular(10),
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         children: [
@@ -327,7 +327,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                 ),
               ),
               const Spacer(),
@@ -336,7 +336,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                   'Loading ${widget.label} prices...',
                   style: GoogleFonts.inter(
                     fontSize: 13,
-                    color: Colors.grey[500],
+                    color: AppColors.textSecondary,
                     fontStyle: FontStyle.italic,
                   ),
                 )
@@ -350,7 +350,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                       style: GoogleFonts.inter(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                     if (_showLowestAskLabel)
@@ -358,7 +358,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                         'lowest ask',
                         style: GoogleFonts.inter(
                           fontSize: 10,
-                          color: Colors.grey[500],
+                          color: AppColors.textSecondary,
                           fontStyle: FontStyle.italic,
                         ),
                       ),
@@ -369,7 +369,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                   'Not found on ${widget.label}',
                   style: GoogleFonts.inter(
                     fontSize: 13,
-                    color: Colors.grey[600],
+                    color: AppColors.textSecondary,
                   ),
                 )
               else if (widget.onOpenMarketplace != null)
@@ -396,7 +396,11 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                           ),
                         ),
                         const SizedBox(width: 4),
-                        Icon(Icons.open_in_new, size: 12, color: widget.iconColor),
+                        Icon(
+                          Icons.open_in_new,
+                          size: 12,
+                          color: widget.iconColor,
+                        ),
                       ],
                     ),
                   ),
@@ -410,17 +414,17 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String?>(
                   value: _selectedSize,
                   isExpanded: true,
-                  dropdownColor: const Color(0xFF1A1A1A),
+                  dropdownColor: AppColors.surface,
                   icon: Icon(
                     Icons.expand_more,
-                    color: Colors.grey[500],
+                    color: AppColors.textSecondary,
                     size: 20,
                   ),
                   items: [
@@ -430,7 +434,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                         'Select Size',
                         style: GoogleFonts.inter(
                           fontSize: 13,
-                          color: Colors.grey[500],
+                          color: AppColors.textSecondary,
                         ),
                       ),
                     ),
@@ -444,14 +448,14 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                               'US $size',
                               style: GoogleFonts.inter(
                                 fontSize: 13,
-                                color: Colors.white,
+                                color: AppColors.textPrimary,
                               ),
                             ),
                             Text(
                               '\$${widget.sizeMap![size]!.toStringAsFixed(2)}',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
-                                color: Colors.grey[400],
+                                color: AppColors.textSecondary,
                               ),
                             ),
                           ],
@@ -469,7 +473,9 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
           ],
 
           // Open on... button for non-colorway sections with a price
-          if (!_hasColorways && price != null && widget.onOpenMarketplace != null) ...[
+          if (!_hasColorways &&
+              price != null &&
+              widget.onOpenMarketplace != null) ...[
             const SizedBox(height: 8),
             Row(
               children: [
@@ -498,7 +504,11 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                           ),
                         ),
                         const SizedBox(width: 4),
-                        Icon(Icons.open_in_new, size: 12, color: widget.iconColor),
+                        Icon(
+                          Icons.open_in_new,
+                          size: 12,
+                          color: widget.iconColor,
+                        ),
                       ],
                     ),
                   ),
@@ -514,7 +524,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
               'Exact color not found — available in other colors',
               style: GoogleFonts.inter(
                 fontSize: 11,
-                color: Colors.grey[500],
+                color: AppColors.textSecondary,
                 fontStyle: FontStyle.italic,
               ),
             ),
@@ -522,15 +532,19 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<int>(
                   value: _selectedColorwayIndex,
                   isExpanded: true,
-                  dropdownColor: const Color(0xFF1A1A1A),
-                  icon: Icon(Icons.expand_more, color: Colors.grey[500], size: 20),
+                  dropdownColor: AppColors.surface,
+                  icon: Icon(
+                    Icons.expand_more,
+                    color: AppColors.textSecondary,
+                    size: 20,
+                  ),
                   items: List.generate(widget.colorways!.length, (i) {
                     final variant = widget.colorways![i];
                     return DropdownMenuItem<int>(
@@ -544,8 +558,8 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                               color: variant.displayColor,
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: Colors.grey[600]!,
-                                width: variant.displayColor == Colors.black ? 1 : 0,
+                                color: AppColors.outline,
+                                width: 1,
                               ),
                             ),
                           ),
@@ -554,7 +568,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                             variant.colorFamily,
                             style: GoogleFonts.inter(
                               fontSize: 13,
-                              color: Colors.white,
+                              color: AppColors.textPrimary,
                             ),
                           ),
                           const SizedBox(width: 6),
@@ -562,7 +576,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                             variant.sku,
                             style: GoogleFonts.inter(
                               fontSize: 11,
-                              color: Colors.grey[500],
+                              color: AppColors.textSecondary,
                             ),
                           ),
                         ],
@@ -608,7 +622,11 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                           ),
                         ),
                         const SizedBox(width: 4),
-                        Icon(Icons.open_in_new, size: 12, color: widget.iconColor),
+                        Icon(
+                          Icons.open_in_new,
+                          size: 12,
+                          color: widget.iconColor,
+                        ),
                       ],
                     ),
                   ),
@@ -624,11 +642,19 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
           ],
           if (price != null && _transactionFeeAmount != null) ...[
             const SizedBox(height: 8),
-            _feeRow('Transaction Fee', widget.transactionFeeRate!, _transactionFeeAmount!),
+            _feeRow(
+              'Transaction Fee',
+              widget.transactionFeeRate!,
+              _transactionFeeAmount!,
+            ),
           ],
           if (price != null && _paymentProcessingFeeAmount != null) ...[
             const SizedBox(height: 8),
-            _feeRow('Payment Processing', widget.paymentProcessingFeeRate!, _paymentProcessingFeeAmount!),
+            _feeRow(
+              'Payment Processing',
+              widget.paymentProcessingFeeRate!,
+              _paymentProcessingFeeAmount!,
+            ),
           ],
           if (price != null && widget.sellerFlatFee != null) ...[
             const SizedBox(height: 8),
@@ -636,7 +662,11 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
           ],
           if (price != null && _commissionFeeAmount != null) ...[
             const SizedBox(height: 8),
-            _feeRow('Commission', widget.commissionFeeRate!, _commissionFeeAmount!),
+            _feeRow(
+              'Commission',
+              widget.commissionFeeRate!,
+              _commissionFeeAmount!,
+            ),
           ],
 
           // Profit Row
@@ -645,7 +675,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Row(
@@ -655,7 +685,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                     _hasFees ? 'Profit after fees' : 'Profit',
                     style: GoogleFonts.inter(
                       fontSize: 13,
-                      color: Colors.grey[400],
+                      color: AppColors.textSecondary,
                     ),
                   ),
                   if (profit != null)
@@ -663,12 +693,13 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                       children: [
                         Text(
                           '${profit >= 0 ? '+' : ''}\$${profit.toStringAsFixed(2)}',
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.inter(
+                            letterSpacing: -0.5,
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                             color: profit >= 0
-                                ? Colors.green[400]
-                                : Colors.red[400],
+                                ? AppColors.profit
+                                : Colors.red[700],
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -688,8 +719,8 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: profit >= 0
-                                  ? Colors.green[400]
-                                  : Colors.red[400],
+                                  ? AppColors.profit
+                                  : Colors.red[700],
                             ),
                           ),
                         ),
@@ -700,7 +731,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                       'Retail price not found',
                       style: GoogleFonts.inter(
                         fontSize: 12,
-                        color: Colors.grey[500],
+                        color: AppColors.textSecondary,
                         fontStyle: FontStyle.italic,
                       ),
                     ),

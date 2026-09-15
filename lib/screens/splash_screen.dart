@@ -8,6 +8,7 @@ import 'login_screen.dart';
 import 'main_screen.dart';
 import 'onboarding_flow.dart';
 import 'paywall_page.dart';
+import '../theme/app_theme.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -120,7 +121,9 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => DarkThemeScope(builder: _buildDark);
+
+  Widget _buildDark(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       body: Container(

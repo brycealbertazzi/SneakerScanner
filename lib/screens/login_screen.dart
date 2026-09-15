@@ -14,6 +14,7 @@ import '../services/mixpanel_service.dart';
 import '../services/subscription_service.dart';
 import 'main_screen.dart';
 import 'paywall_page.dart';
+import '../theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -296,7 +297,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => DarkThemeScope(builder: _buildDark);
+
+  Widget _buildDark(BuildContext context) {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/subscription_service.dart';
 import 'login_screen.dart';
 import 'paywall_page.dart';
+import '../theme/app_theme.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -76,9 +77,8 @@ class _SettingsPageState extends State<SettingsPage> {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF333333), width: 1),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -99,10 +99,11 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 20),
               Text(
                 'Delete Account',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
+                  letterSpacing: -0.5,
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 12),
@@ -111,7 +112,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 14,
-                  color: Colors.grey[400],
+                  color: AppColors.textSecondary,
                   height: 1.5,
                 ),
               ),
@@ -121,14 +122,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(dialogContext).pop(),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.grey[400],
-                        side: BorderSide(color: Colors.grey[600]!),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
                       child: Text(
                         'Cancel',
                         style: GoogleFonts.inter(
@@ -148,10 +141,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
                       ),
                       child: Text(
                         'Delete',
@@ -190,9 +179,8 @@ class _SettingsPageState extends State<SettingsPage> {
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF333333), width: 1),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -213,10 +201,11 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(height: 20),
               Text(
                 'Sign Out',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
+                  letterSpacing: -0.5,
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 12),
@@ -225,7 +214,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 14,
-                  color: Colors.grey[400],
+                  color: AppColors.textSecondary,
                   height: 1.5,
                 ),
               ),
@@ -235,14 +224,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(dialogContext).pop(),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.grey[400],
-                        side: BorderSide(color: Colors.grey[600]!),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
                       child: Text(
                         'Cancel',
                         style: GoogleFonts.inter(
@@ -262,10 +243,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
                       ),
                       child: Text(
                         'Sign Out',
@@ -309,7 +286,7 @@ class _SettingsPageState extends State<SettingsPage> {
       case SubscriptionStatus.cancelled:
         return Colors.red;
       case SubscriptionStatus.loading:
-        return Colors.grey;
+        return AppColors.textSecondary;
     }
   }
 
@@ -317,26 +294,26 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final photoUrl = user?.photoURL;
-    final displayName = user?.displayName ??
-        user?.email?.split('@').first ??
-        'User';
+    final displayName =
+        user?.displayName ?? user?.email?.split('@').first ?? 'User';
     final email = user?.email ?? '';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
           'Settings',
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
+            letterSpacing: -0.5,
             fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textPrimary,
           ),
         ),
       ),
@@ -349,18 +326,16 @@ class _SettingsPageState extends State<SettingsPage> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
+                boxShadow: AppColors.cardShadow,
               ),
               child: Row(
                 children: [
                   Container(
                     width: 70,
                     height: 70,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                    ),
+                    decoration: const BoxDecoration(shape: BoxShape.circle),
                     child: ClipOval(
                       child: photoUrl != null
                           ? Image.network(
@@ -379,10 +354,11 @@ class _SettingsPageState extends State<SettingsPage> {
                       children: [
                         Text(
                           displayName,
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.inter(
+                            letterSpacing: -0.5,
                             fontSize: 20,
                             fontWeight: FontWeight.w600,
-                            color: Colors.white,
+                            color: AppColors.textPrimary,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -390,7 +366,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           email,
                           style: GoogleFonts.inter(
                             fontSize: 14,
-                            color: Colors.grey[500],
+                            color: AppColors.textSecondary,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -408,16 +384,16 @@ class _SettingsPageState extends State<SettingsPage> {
               style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey[600],
+                color: AppColors.textSecondary,
                 letterSpacing: 1.2,
               ),
             ),
             const SizedBox(height: 12),
             Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: AppColors.cardShadow,
               ),
               child: Column(
                 children: [
@@ -446,16 +422,16 @@ class _SettingsPageState extends State<SettingsPage> {
               style: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: Colors.grey[600],
+                color: AppColors.textSecondary,
                 letterSpacing: 1.2,
               ),
             ),
             const SizedBox(height: 12),
             Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: AppColors.cardShadow,
               ),
               child: Column(
                 children: [
@@ -487,13 +463,13 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildLargeDefaultAvatar(String displayName) {
     final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
     return Container(
-      color: const Color(0xFFBA6A37),
+      color: AppColors.textPrimary,
       child: Center(
         child: Text(
           initial,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
             color: Colors.white,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             fontSize: 28,
           ),
         ),
@@ -535,7 +511,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     style: GoogleFonts.inter(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white,
+                      color: AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -543,7 +519,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     subtitle,
                     style: GoogleFonts.inter(
                       fontSize: 13,
-                      color: Colors.grey[500],
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ],
@@ -551,7 +527,11 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             ?trailing,
             if (onTap != null && trailing == null)
-              Icon(Icons.chevron_right, color: Colors.grey[600], size: 22),
+              Icon(
+                Icons.chevron_right,
+                color: AppColors.textSecondary,
+                size: 22,
+              ),
           ],
         ),
       ),
@@ -561,7 +541,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildDivider() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Divider(height: 1, color: Colors.grey[800]),
+      child: Divider(height: 1, color: AppColors.divider),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../../services/nike_colorway_utils.dart';
 import 'market_price_section.dart';
+import '../../../theme/app_theme.dart';
 
 class ProfitCalculator extends StatefulWidget {
   final Map<String, dynamic>? productInfo;
@@ -107,33 +108,32 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
     final retailPrice = fetchedRetailPrice ?? widget.manualRetailPrice;
 
     final ebayPrice = widget.ebayAveragePrice;
-    final ebayFeeRate = ebayPrice != null ? (ebayPrice >= 150 ? 0.08 : 0.136) : null;
+    final ebayFeeRate = ebayPrice != null
+        ? (ebayPrice >= 150 ? 0.08 : 0.136)
+        : null;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppColors.cardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                Icons.calculate_rounded,
-                color: const Color(0xFFBA6A37),
-                size: 20,
-              ),
+              Icon(Icons.calculate_rounded, color: AppColors.accent, size: 20),
               const SizedBox(width: 8),
               Text(
                 'Profit Calculator',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
+                  letterSpacing: -0.5,
                   fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
                 ),
               ),
             ],
@@ -143,7 +143,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
           // Retail Price Row — always editable
           Row(
             children: [
-              Icon(Icons.sell, size: 16, color: Colors.green[400]),
+              Icon(Icons.sell, size: 16, color: AppColors.profit),
               const SizedBox(width: 8),
               Expanded(
                 child: Row(
@@ -153,7 +153,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
                       'Retail Price',
                       style: GoogleFonts.inter(
                         fontSize: 14,
-                        color: Colors.grey[400],
+                        color: AppColors.textSecondary,
                       ),
                     ),
                     if (_showRetailEntry)
@@ -174,27 +174,27 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
                               style: GoogleFonts.inter(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                                color: AppColors.textPrimary,
                               ),
                               textAlign: TextAlign.right,
                               decoration: InputDecoration(
                                 hintText: '0.00',
                                 hintStyle: GoogleFonts.inter(
                                   fontSize: 13,
-                                  color: Colors.grey[600],
+                                  color: AppColors.textSecondary,
                                 ),
                                 prefixText: '\$ ',
                                 prefixStyle: GoogleFonts.inter(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.white,
+                                  color: AppColors.textPrimary,
                                 ),
                                 contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 10,
                                   vertical: 8,
                                 ),
                                 filled: true,
-                                fillColor: const Color(0xFF252525),
+                                fillColor: AppColors.background,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                   borderSide: BorderSide.none,
@@ -202,13 +202,15 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(8),
                                   borderSide: BorderSide(
-                                    color: Colors.green[400]!,
+                                    color: AppColors.profit,
                                     width: 1,
                                   ),
                                 ),
                               ),
                               onChanged: (value) {
-                                widget.onRetailPriceChanged(double.tryParse(value));
+                                widget.onRetailPriceChanged(
+                                  double.tryParse(value),
+                                );
                               },
                               onSubmitted: (value) {
                                 final parsed = double.tryParse(value);
@@ -236,14 +238,12 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
                               width: 40,
                               height: 36,
                               decoration: BoxDecoration(
-                                color: Colors.green[400]!.withValues(
-                                  alpha: 0.2,
-                                ),
+                                color: Colors.green.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Icon(
                                 Icons.check,
-                                color: Colors.green[400],
+                                color: AppColors.profit,
                                 size: 20,
                               ),
                             ),
@@ -253,7 +253,8 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
                     else if (retailPrice != null)
                       GestureDetector(
                         onTap: () {
-                          _retailPriceController.text = retailPrice.toStringAsFixed(2);
+                          _retailPriceController.text = retailPrice
+                              .toStringAsFixed(2);
                           setState(() => _showRetailEntry = true);
                         },
                         child: Row(
@@ -264,14 +265,14 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
                               style: GoogleFonts.inter(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                                color: AppColors.textPrimary,
                               ),
                             ),
                             const SizedBox(width: 6),
                             Icon(
                               Icons.edit,
                               size: 14,
-                              color: Colors.grey[500],
+                              color: AppColors.textSecondary,
                             ),
                           ],
                         ),
@@ -296,7 +297,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
                                 style: GoogleFonts.inter(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.green[400],
+                                  color: AppColors.profit,
                                 ),
                               ),
                             ),
@@ -312,7 +313,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
           // Divider
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Divider(color: Colors.grey[800], height: 1),
+            child: Divider(color: AppColors.divider, height: 1),
           ),
 
           // eBay Section
@@ -343,7 +344,9 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             retailPrice: retailPrice,
             productFound: widget.stockXPrice != null,
             colorways: widget.stockXColorways,
-            onOpenMarketplace: widget.stockXPrice != null ? widget.onOpenStockX : null,
+            onOpenMarketplace: widget.stockXPrice != null
+                ? widget.onOpenStockX
+                : null,
             transactionFeeRate: widget.stockXPrice != null ? 0.08 : null,
             paymentProcessingFeeRate: widget.stockXPrice != null ? 0.03 : null,
             scannedSize: widget.scannedSize,
@@ -366,7 +369,9 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             retailPrice: retailPrice,
             productFound: widget.goatPrice != null,
             colorways: widget.goatColorways,
-            onOpenMarketplace: widget.goatPrice != null ? widget.onOpenGoat : null,
+            onOpenMarketplace: widget.goatPrice != null
+                ? widget.onOpenGoat
+                : null,
             sellerFlatFee: widget.goatPrice != null ? 5.0 : null,
             commissionFeeRate: widget.goatPrice != null ? 0.095 : null,
             scannedSize: widget.scannedSize,

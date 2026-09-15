@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api_keys.dart';
 import '../services/stockx_auth_service.dart';
 import '../services/subscription_service.dart';
+import '../theme/app_theme.dart';
 import 'demo/demo_controller.dart';
 import 'paywall_page.dart';
 import 'scanner_page.dart';
@@ -99,9 +100,11 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(success
-              ? 'StockX connected successfully!'
-              : 'Failed to connect StockX. Please try again.'),
+          content: Text(
+            success
+                ? 'StockX connected successfully!'
+                : 'Failed to connect StockX. Please try again.',
+          ),
           backgroundColor: success ? Colors.green : Colors.red,
         ),
       );
@@ -157,10 +160,8 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     // pop out of MainScreen while it's running.
     return ListenableBuilder(
       listenable: DemoController.instance,
-      builder: (context, child) => PopScope(
-        canPop: !DemoController.instance.isActive,
-        child: child!,
-      ),
+      builder: (context, child) =>
+          PopScope(canPop: !DemoController.instance.isActive, child: child!),
       child: _buildScaffold(context),
     );
   }
@@ -175,34 +176,36 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             padding: const EdgeInsets.only(right: 12),
             child: GestureDetector(
               onTap: _openSettings,
-              child: Builder(builder: (context) {
-                final user = FirebaseAuth.instance.currentUser;
-                final photoUrl = user?.photoURL;
-                final displayName = user?.displayName ??
-                    user?.email?.split('@').first;
-                return Container(
-                  width: 38,
-                  height: 38,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                  ),
-                  child: ClipOval(
-                    child: photoUrl != null
-                        ? Image.network(
-                            photoUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                _buildDefaultAvatar(displayName),
-                          )
-                        : _buildDefaultAvatar(displayName),
-                  ),
-                );
-              }),
+              child: Builder(
+                builder: (context) {
+                  final user = FirebaseAuth.instance.currentUser;
+                  final photoUrl = user?.photoURL;
+                  final displayName =
+                      user?.displayName ?? user?.email?.split('@').first;
+                  return Container(
+                    width: 38,
+                    height: 38,
+                    decoration: const BoxDecoration(shape: BoxShape.circle),
+                    child: ClipOval(
+                      child: photoUrl != null
+                          ? Image.network(
+                              photoUrl,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  _buildDefaultAvatar(displayName),
+                            )
+                          : _buildDefaultAvatar(displayName),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ],
       ),
       extendBodyBehindAppBar: true,
+      // Pages scroll behind the floating tab bar.
+      extendBody: true,
       body: IndexedStack(
         index: _currentIndex,
         children: [
@@ -210,7 +213,7 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           const HistoryPage(),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
+      bottomNavigationBar: _FloatingNavBar(
         currentIndex: _currentIndex,
         onTap: (index) {
           _scannerActive.value = index == 0;
@@ -222,24 +225,12 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             });
           }
         },
-        backgroundColor: const Color(0xFF1A1A1A),
-        selectedItemColor: const Color(0xFFBA6A37),
-        unselectedItemColor: Colors.grey[600],
         items: [
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.qr_code_scanner),
-            label: 'Scan',
-          ),
-          BottomNavigationBarItem(
-            // Keyed on the inactive icon only: BottomNavigationBar can build
-            // icon and activeIcon at once, and a GlobalKey can't be mounted
-            // twice. History is unselected when the demo spotlights it.
-            icon: KeyedSubtree(
-              key: DemoKeys.key(DemoTarget.historyTab),
-              child: const Icon(Icons.history),
-            ),
-            activeIcon: const Icon(Icons.history),
+          const _NavItem(icon: Icons.qr_code_scanner, label: 'Scan'),
+          _NavItem(
+            icon: Icons.history,
             label: 'History',
+            iconKey: DemoKeys.key(DemoTarget.historyTab),
           ),
         ],
       ),
@@ -251,15 +242,146 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         ? displayName![0].toUpperCase()
         : '?';
     return Container(
-      color: const Color(0xFFBA6A37),
+      color: AppColors.textPrimary,
       child: Center(
         child: Text(
           initial,
-          style: GoogleFonts.poppins(
+          style: GoogleFonts.inter(
             color: Colors.white,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             fontSize: 16,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavItem {
+  const _NavItem({required this.icon, required this.label, this.iconKey});
+
+  final IconData icon;
+  final String label;
+  final Key? iconKey;
+}
+
+/// Nike-style floating white pill with a gray pill behind the selected tab.
+class _FloatingNavBar extends StatelessWidget {
+  const _FloatingNavBar({
+    required this.currentIndex,
+    required this.onTap,
+    required this.items,
+  });
+
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+  final List<_NavItem> items;
+
+  static const _duration = Duration(milliseconds: 280);
+  static const _curve = Curves.easeOutCubic;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = items.length;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.10),
+                blurRadius: 24,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              // One shared pill that slides to the selected tab, so only the
+              // tapped tab changes instead of one fading out as another fades in.
+              Positioned.fill(
+                child: AnimatedAlign(
+                  duration: _duration,
+                  curve: _curve,
+                  alignment: Alignment(
+                    count > 1 ? -1 + 2 * currentIndex / (count - 1) : 0,
+                    0,
+                  ),
+                  child: FractionallySizedBox(
+                    widthFactor: 1 / count,
+                    heightFactor: 1,
+                    child: const DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.selectedPill,
+                        borderRadius: BorderRadius.all(Radius.circular(999)),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  for (var i = 0; i < count; i++)
+                    Expanded(
+                      child: _NavButton(
+                        item: items[i],
+                        selected: i == currentIndex,
+                        onTap: () => onTap(i),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NavButton extends StatelessWidget {
+  const _NavButton({
+    required this.item,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _NavItem item;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = Icon(item.icon, color: AppColors.textPrimary, size: 26);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            item.iconKey != null
+                ? KeyedSubtree(key: item.iconKey, child: icon)
+                : icon,
+            const SizedBox(height: 2),
+            AnimatedDefaultTextStyle(
+              duration: _FloatingNavBar._duration,
+              curve: _FloatingNavBar._curve,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: AppColors.textPrimary,
+              ),
+              child: Text(item.label),
+            ),
+          ],
         ),
       ),
     );

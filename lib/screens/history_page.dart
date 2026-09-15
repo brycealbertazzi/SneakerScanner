@@ -8,6 +8,7 @@ import '../models/scan_data.dart';
 import 'demo/demo_controller.dart';
 import 'main_screen.dart';
 import 'scan_detail/scan_detail_page.dart';
+import '../theme/app_theme.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -61,8 +62,7 @@ class _HistoryPageState extends State<HistoryPage> {
 
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
-        if (!code.contains(query) &&
-            !productTitle.contains(query)) {
+        if (!code.contains(query) && !productTitle.contains(query)) {
           return false;
         }
       }
@@ -184,22 +184,6 @@ class _HistoryPageState extends State<HistoryPage> {
               start: now.subtract(const Duration(days: 7)),
               end: now,
             ),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFFBA6A37),
-              onPrimary: Colors.white,
-              surface: Color(0xFF1A1A1A),
-              onSurface: Colors.white,
-            ),
-            dialogTheme: const DialogThemeData(
-              backgroundColor: Color(0xFF1A1A1A),
-            ),
-          ),
-          child: child!,
-        );
-      },
     );
 
     if (picked != null) {
@@ -216,42 +200,43 @@ class _HistoryPageState extends State<HistoryPage> {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: SafeArea(
+        // Horizontal padding lives on each child rather than here so the chip
+        // row and list can draw card shadows without being clipped.
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.only(top: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                'Scan History',
-                style: GoogleFonts.poppins(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-
               Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: AppColors.cardShadow,
                 ),
                 child: TextField(
                   controller: _searchController,
                   onChanged: (value) => setState(() => _searchQuery = value),
-                  style: GoogleFonts.inter(color: Colors.white, fontSize: 15),
+                  style: GoogleFonts.inter(
+                    color: AppColors.textPrimary,
+                    fontSize: 15,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Search by product name or code...',
                     hintStyle: GoogleFonts.inter(
-                      color: Colors.grey[600],
+                      color: AppColors.textSecondary,
                       fontSize: 15,
                     ),
-                    prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      color: AppColors.textSecondary,
+                    ),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
-                            icon: Icon(Icons.clear, color: Colors.grey[600]),
+                            icon: Icon(
+                              Icons.clear,
+                              color: AppColors.textSecondary,
+                            ),
                             onPressed: () {
                               _searchController.clear();
                               setState(() => _searchQuery = '');
@@ -259,6 +244,7 @@ class _HistoryPageState extends State<HistoryPage> {
                           )
                         : null,
                     border: InputBorder.none,
+                    filled: false,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 14,
@@ -266,10 +252,14 @@ class _HistoryPageState extends State<HistoryPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 6),
 
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
                 child: Row(
                   children: [
                     _buildFilterChip('All', DateFilter.all),
@@ -284,7 +274,7 @@ class _HistoryPageState extends State<HistoryPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 4),
 
               Expanded(
                 child: StreamBuilder<DatabaseEvent>(
@@ -294,7 +284,7 @@ class _HistoryPageState extends State<HistoryPage> {
                       return Center(
                         child: Text(
                           'Error loading scans',
-                          style: TextStyle(color: Colors.grey[500]),
+                          style: TextStyle(color: AppColors.textSecondary),
                         ),
                       );
                     }
@@ -302,7 +292,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const Center(
                         child: CircularProgressIndicator(
-                          color: Color(0xFFBA6A37),
+                          color: AppColors.accent,
                         ),
                       );
                     }
@@ -330,6 +320,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     final dateKeys = groupedScans.keys.toList();
 
                     return ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
                       itemCount: dateKeys.length,
                       itemBuilder: (context, sectionIndex) {
                         final dateKey = dateKeys[sectionIndex];
@@ -346,10 +337,11 @@ class _HistoryPageState extends State<HistoryPage> {
                               ),
                               child: Text(
                                 dateKey,
-                                style: GoogleFonts.poppins(
+                                style: GoogleFonts.inter(
+                                  letterSpacing: -0.5,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
-                                  color: Colors.grey[400],
+                                  color: AppColors.textSecondary,
                                 ),
                               ),
                             ),
@@ -386,28 +378,21 @@ class _HistoryPageState extends State<HistoryPage> {
       child: InkWell(
         onTap: () => setState(() => _dateFilter = filter),
         borderRadius: BorderRadius.circular(20),
-        splashColor: const Color(0xFFBA6A37).withValues(alpha: 0.3),
-        highlightColor: const Color(0xFFBA6A37).withValues(alpha: 0.1),
+        splashColor: Colors.black.withValues(alpha: 0.08),
+        highlightColor: Colors.black.withValues(alpha: 0.04),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected
-                ? const Color(0xFFBA6A37)
-                : const Color(0xFF1A1A1A),
+            color: isSelected ? AppColors.textPrimary : AppColors.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected
-                  ? const Color(0xFFBA6A37)
-                  : const Color(0xFF2A2A2A),
-              width: 1,
-            ),
+            boxShadow: isSelected ? null : AppColors.cardShadow,
           ),
           child: Text(
             label,
             style: GoogleFonts.inter(
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: isSelected ? Colors.white : Colors.grey[400],
+              color: isSelected ? Colors.white : AppColors.textPrimary,
             ),
           ),
         ),
@@ -429,21 +414,14 @@ class _HistoryPageState extends State<HistoryPage> {
       child: InkWell(
         onTap: _showDateRangePicker,
         borderRadius: BorderRadius.circular(20),
-        splashColor: const Color(0xFFBA6A37).withValues(alpha: 0.3),
-        highlightColor: const Color(0xFFBA6A37).withValues(alpha: 0.1),
+        splashColor: Colors.black.withValues(alpha: 0.08),
+        highlightColor: Colors.black.withValues(alpha: 0.04),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: isSelected
-                ? const Color(0xFFBA6A37)
-                : const Color(0xFF1A1A1A),
+            color: isSelected ? AppColors.textPrimary : AppColors.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected
-                  ? const Color(0xFFBA6A37)
-                  : const Color(0xFF2A2A2A),
-              width: 1,
-            ),
+            boxShadow: isSelected ? null : AppColors.cardShadow,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -451,7 +429,7 @@ class _HistoryPageState extends State<HistoryPage> {
               Icon(
                 Icons.calendar_today,
                 size: 14,
-                color: isSelected ? Colors.white : Colors.grey[400],
+                color: isSelected ? Colors.white : AppColors.textPrimary,
               ),
               const SizedBox(width: 6),
               Text(
@@ -459,7 +437,7 @@ class _HistoryPageState extends State<HistoryPage> {
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  color: isSelected ? Colors.white : Colors.grey[400],
+                  color: isSelected ? Colors.white : AppColors.textPrimary,
                 ),
               ),
             ],
@@ -479,28 +457,33 @@ class _HistoryPageState extends State<HistoryPage> {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: const Color(0xFFBA6A37).withValues(alpha: 0.1),
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(20),
+              boxShadow: AppColors.cardShadow,
             ),
             child: Icon(
               Icons.qr_code_scanner,
               size: 40,
-              color: Colors.grey[600],
+              color: AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 20),
           Text(
             'No scans yet',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
+              letterSpacing: -0.5,
               fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[400],
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             'Scan a label to see it here',
-            style: GoogleFonts.inter(fontSize: 14, color: Colors.grey[600]),
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -516,24 +499,33 @@ class _HistoryPageState extends State<HistoryPage> {
             width: 80,
             height: 80,
             decoration: BoxDecoration(
-              color: const Color(0xFFBA6A37).withValues(alpha: 0.1),
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(20),
+              boxShadow: AppColors.cardShadow,
             ),
-            child: Icon(Icons.search_off, size: 40, color: Colors.grey[600]),
+            child: Icon(
+              Icons.search_off,
+              size: 40,
+              color: AppColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 20),
           Text(
             'No results found',
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
+              letterSpacing: -0.5,
               fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[400],
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             'Try adjusting your search or filters',
-            style: GoogleFonts.inter(fontSize: 14, color: Colors.grey[600]),
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              color: AppColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 20),
           TextButton(
@@ -551,7 +543,7 @@ class _HistoryPageState extends State<HistoryPage> {
               style: GoogleFonts.inter(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: const Color(0xFFBA6A37),
+                color: AppColors.accent,
               ),
             ),
           ),
@@ -571,8 +563,8 @@ class _HistoryPageState extends State<HistoryPage> {
     final displayTitle = productTitle != null && productTitle.isNotEmpty
         ? productTitle
         : scanData.displayName.isNotEmpty
-            ? scanData.displayName
-            : 'Unknown Product';
+        ? scanData.displayName
+        : 'Unknown Product';
     final hasProductInfo = productTitle != null && productTitle.isNotEmpty;
     final hasImage = productImage != null && productImage.isNotEmpty;
 
@@ -590,7 +582,7 @@ class _HistoryPageState extends State<HistoryPage> {
         padding: const EdgeInsets.only(right: 16),
         decoration: BoxDecoration(
           color: Colors.red,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
         ),
         child: const Icon(Icons.delete, color: Colors.white),
       ),
@@ -613,22 +605,15 @@ class _HistoryPageState extends State<HistoryPage> {
             mainScreenState?.switchToTab(0);
           }
         },
-        child: Container(
+        child: AppCard(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFF2A2A2A), width: 1),
-          ),
           child: Row(
             children: [
               Container(
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: hasProductInfo
-                      ? const Color(0xFFBA6A37).withValues(alpha: 0.15)
-                      : const Color(0xFF333333),
+                  color: AppColors.background,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: hasImage
@@ -641,7 +626,7 @@ class _HistoryPageState extends State<HistoryPage> {
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) => Icon(
                             Icons.directions_run,
-                            color: const Color(0xFFBA6A37),
+                            color: AppColors.textPrimary,
                             size: 26,
                           ),
                         ),
@@ -651,8 +636,8 @@ class _HistoryPageState extends State<HistoryPage> {
                             ? Icons.directions_run
                             : Icons.help_outline_rounded,
                         color: hasProductInfo
-                            ? const Color(0xFFBA6A37)
-                            : Colors.grey[500],
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
                         size: 26,
                       ),
               ),
@@ -666,7 +651,9 @@ class _HistoryPageState extends State<HistoryPage> {
                       style: GoogleFonts.inter(
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
-                        color: hasProductInfo ? Colors.white : Colors.grey[400],
+                        color: hasProductInfo
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -677,7 +664,7 @@ class _HistoryPageState extends State<HistoryPage> {
                         Icon(
                           isStyleCode ? Icons.label : Icons.qr_code,
                           size: 12,
-                          color: Colors.grey[600],
+                          color: AppColors.textSecondary,
                         ),
                         const SizedBox(width: 4),
                         Flexible(
@@ -685,7 +672,7 @@ class _HistoryPageState extends State<HistoryPage> {
                             subtitle,
                             style: GoogleFonts.robotoMono(
                               fontSize: 11,
-                              color: Colors.grey[500],
+                              color: AppColors.textSecondary,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -694,14 +681,14 @@ class _HistoryPageState extends State<HistoryPage> {
                         Icon(
                           Icons.access_time,
                           size: 12,
-                          color: Colors.grey[600],
+                          color: AppColors.textSecondary,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           timeStr,
                           style: GoogleFonts.inter(
                             fontSize: 11,
-                            color: Colors.grey[500],
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
@@ -714,12 +701,12 @@ class _HistoryPageState extends State<HistoryPage> {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFBA6A37).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(999),
                 ),
                 child: const Icon(
                   Icons.arrow_forward_ios,
-                  color: Color(0xFFBA6A37),
+                  color: AppColors.textPrimary,
                   size: 14,
                 ),
               ),

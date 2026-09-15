@@ -6,10 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'demo_controller.dart';
+import '../../theme/app_theme.dart';
 
-const _accent = Color(0xFFBA6A37);
-const _cardColor = Color(0xFF1A1A1A);
-const _borderColor = Color(0xFF333333);
+const _accent = AppColors.accent;
+const _cardColor = AppColors.surface;
+
+/// White reads on both the dark scrim and the light UI inside the cutout.
+const _ringColor = Colors.white;
 
 /// Full-screen scrim with a spotlight cut out over the current demo target.
 ///
@@ -205,10 +208,9 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
         decoration: BoxDecoration(
           color: _cardColor,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: _borderColor),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.45),
+              color: Colors.black.withValues(alpha: 0.25),
               blurRadius: 24,
               offset: const Offset(0, 8),
             ),
@@ -220,10 +222,11 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
           children: [
             Text(
               step.title,
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
+                letterSpacing: -0.5,
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
-                color: Colors.white,
+                color: AppColors.textPrimary,
                 height: 1.25,
               ),
             ),
@@ -233,7 +236,7 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
               style: GoogleFonts.inter(
                 fontSize: 13.5,
                 height: 1.5,
-                color: Colors.grey[400],
+                color: AppColors.textSecondary,
               ),
             ),
             const SizedBox(height: 18),
@@ -253,13 +256,7 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
           _demo.next();
         },
         style: ElevatedButton.styleFrom(
-          backgroundColor: _accent,
-          foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 14),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -267,7 +264,8 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
           children: [
             Text(
               _demo.isLastStep ? 'Start Scanning' : 'Next',
-              style: GoogleFonts.poppins(
+              style: GoogleFonts.inter(
+                letterSpacing: -0.5,
                 fontSize: 14.5,
                 fontWeight: FontWeight.w600,
               ),
@@ -307,7 +305,7 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
               style: GoogleFonts.inter(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: Colors.white.withValues(alpha: 0.92),
+                color: AppColors.textPrimary.withValues(alpha: 0.92),
               ),
             ),
           ),
@@ -366,7 +364,7 @@ class _SpotlightPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
-        ..color = _accent.withValues(alpha: (1 - t) * 0.8 * ringOpacity),
+        ..color = _ringColor.withValues(alpha: (1 - t) * 0.8 * ringOpacity),
     );
 
     // Steady outline so the target stays legible between pulses.
@@ -375,7 +373,7 @@ class _SpotlightPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
-        ..color = _accent.withValues(alpha: 0.9 * ringOpacity),
+        ..color = _ringColor.withValues(alpha: 0.9 * ringOpacity),
     );
   }
 

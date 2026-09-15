@@ -11,6 +11,7 @@ import 'login_screen.dart';
 import 'main_screen.dart';
 import 'paywall_page.dart';
 import 'paywall_priming_screen.dart';
+import '../theme/app_theme.dart';
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
@@ -362,7 +363,9 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => DarkThemeScope(builder: _buildDark);
+
+  Widget _buildDark(BuildContext context) {
     // Analysis screen stands alone — no progress bar
     if (_showAnalysis) {
       return _AnalysisScreen(onComplete: _completeOnboarding);

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'paywall_page.dart';
+import '../theme/app_theme.dart';
 
 /// Full-value pitch shown at the end of onboarding, immediately before the
 /// analysis animation that leads into [PaywallPage].
@@ -23,7 +24,9 @@ class PaywallPrimingScreen extends StatelessWidget {
   static const _brand = Color(0xFFBA6A37);
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => DarkThemeScope(builder: _buildDark);
+
+  Widget _buildDark(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(

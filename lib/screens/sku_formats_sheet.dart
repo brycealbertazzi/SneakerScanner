@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'demo/demo_controller.dart';
+import '../theme/app_theme.dart';
 
 // ── Brand / format data ───────────────────────────────────────────────────────
 
@@ -101,7 +102,7 @@ class _SkuFormatsSheet extends StatelessWidget {
         builder: (_, scrollCtrl) => Container(
           key: DemoKeys.key(DemoTarget.skuFormatsSheet),
           decoration: const BoxDecoration(
-            color: Color(0xFF1A1A1A),
+            color: AppColors.surface,
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: Column(
@@ -112,7 +113,7 @@ class _SkuFormatsSheet extends StatelessWidget {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.20),
+                  color: AppColors.textPrimary.withValues(alpha: 0.20),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -126,17 +127,18 @@ class _SkuFormatsSheet extends StatelessWidget {
                   children: [
                     Text(
                       'SKU Formats by Brand',
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
+                        letterSpacing: -0.5,
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                     GestureDetector(
                       onTap: () => Navigator.of(context).pop(),
                       child: Icon(
                         Icons.close_rounded,
-                        color: Colors.grey[500],
+                        color: AppColors.textSecondary,
                         size: 22,
                       ),
                     ),
@@ -150,14 +152,17 @@ class _SkuFormatsSheet extends StatelessWidget {
                   'The SKU is on the side label of the shoe box.',
                   style: GoogleFonts.inter(
                     fontSize: 13,
-                    color: Colors.grey[500],
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              Divider(color: Colors.white.withValues(alpha: 0.08), height: 1),
+              Divider(
+                color: AppColors.textPrimary.withValues(alpha: 0.08),
+                height: 1,
+              ),
 
               // Brand list
               Expanded(
@@ -166,7 +171,7 @@ class _SkuFormatsSheet extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: _kBrands.length,
                   separatorBuilder: (_, i) => Divider(
-                    color: Colors.white.withValues(alpha: 0.06),
+                    color: AppColors.textPrimary.withValues(alpha: 0.06),
                     height: 1,
                     indent: 24,
                     endIndent: 24,
@@ -204,7 +209,7 @@ class _BrandRow extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -212,7 +217,7 @@ class _BrandRow extends StatelessWidget {
                   brand.hint,
                   style: GoogleFonts.inter(
                     fontSize: 12,
-                    color: Colors.grey[500],
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
@@ -222,10 +227,10 @@ class _BrandRow extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xFF252525),
+              color: AppColors.background,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.08),
+                color: AppColors.textPrimary.withValues(alpha: 0.08),
                 width: 1,
               ),
             ),
@@ -233,7 +238,7 @@ class _BrandRow extends StatelessWidget {
               brand.example,
               style: GoogleFonts.robotoMono(
                 fontSize: 13,
-                color: const Color(0xFFBA6A37),
+                color: AppColors.accent,
                 fontWeight: FontWeight.w600,
               ),
             ),

@@ -18,6 +18,7 @@ import 'main_screen.dart';
 import 'paywall_page.dart';
 import 'scan_detail/scan_detail_page.dart';
 import 'sku_formats_sheet.dart';
+import '../theme/app_theme.dart';
 
 class ScannerPage extends StatefulWidget {
   const ScannerPage({super.key, this.activeNotifier});
@@ -705,9 +706,8 @@ class _ScannerPageState extends State<ScannerPage>
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF333333), width: 1),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -715,10 +715,11 @@ class _ScannerPageState extends State<ScannerPage>
               children: [
                 Text(
                   ocrText.isEmpty ? 'Enter SKU' : 'No SKU Found',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
+                    letterSpacing: -0.5,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -728,7 +729,7 @@ class _ScannerPageState extends State<ScannerPage>
                       : 'We couldn\'t detect a SKU. Enter it manually or scan the barcode.',
                   style: GoogleFonts.inter(
                     fontSize: 13,
-                    color: Colors.grey[400],
+                    color: AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -741,16 +742,16 @@ class _ScannerPageState extends State<ScannerPage>
                   textCapitalization: TextCapitalization.characters,
                   style: GoogleFonts.robotoMono(
                     fontSize: 16,
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                   ),
                   decoration: InputDecoration(
                     hintText: 'e.g. DD1391-100',
                     hintStyle: GoogleFonts.robotoMono(
                       fontSize: 14,
-                      color: Colors.grey[600],
+                      color: AppColors.textSecondary,
                     ),
                     filled: true,
-                    fillColor: const Color(0xFF252525),
+                    fillColor: AppColors.background,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
@@ -758,7 +759,7 @@ class _ScannerPageState extends State<ScannerPage>
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: const BorderSide(
-                        color: Color(0xFFBA6A37),
+                        color: AppColors.accent,
                         width: 1,
                       ),
                     ),
@@ -766,7 +767,7 @@ class _ScannerPageState extends State<ScannerPage>
                       key: DemoKeys.key(DemoTarget.skuFormatsIcon),
                       icon: Icon(
                         Icons.info_outline_rounded,
-                        color: Colors.grey[500],
+                        color: AppColors.textSecondary,
                         size: 26,
                       ),
                       onPressed: () async {
@@ -788,14 +789,6 @@ class _ScannerPageState extends State<ScannerPage>
                       child: OutlinedButton(
                         key: DemoKeys.key(DemoTarget.cancelButton),
                         onPressed: () => Navigator.of(dialogContext).pop(),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.grey[400],
-                          side: BorderSide(color: Colors.grey[600]!),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
                         child: const Text('Cancel'),
                       ),
                     ),
@@ -838,14 +831,6 @@ class _ScannerPageState extends State<ScannerPage>
                             }
                           }
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFBA6A37),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
                         child: const Text('Look Up'),
                       ),
                     ),
@@ -868,14 +853,6 @@ class _ScannerPageState extends State<ScannerPage>
                     },
                     icon: const Icon(Icons.qr_code_scanner, size: 18),
                     label: const Text('Scan Barcode'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.grey[600]!),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -890,14 +867,6 @@ class _ScannerPageState extends State<ScannerPage>
                     },
                     icon: const Icon(Icons.search, size: 18),
                     label: const Text('Search by Title'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.grey[600]!),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
                   ),
                 ),
               ],
@@ -919,9 +888,8 @@ class _ScannerPageState extends State<ScannerPage>
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF333333), width: 1),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -929,31 +897,38 @@ class _ScannerPageState extends State<ScannerPage>
             children: [
               Text(
                 'Search by Title',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
+                  letterSpacing: -0.5,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 'Enter the shoe name, model, colorway, or any text from the label.',
-                style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[400]),
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: controller,
                 autofocus: true,
                 textCapitalization: TextCapitalization.words,
-                style: GoogleFonts.inter(fontSize: 15, color: Colors.white),
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  color: AppColors.textPrimary,
+                ),
                 decoration: InputDecoration(
                   hintText: 'e.g. Nike Air Max 90 White',
                   hintStyle: GoogleFonts.inter(
                     fontSize: 14,
-                    color: Colors.grey[600],
+                    color: AppColors.textSecondary,
                   ),
                   filled: true,
-                  fillColor: const Color(0xFF252525),
+                  fillColor: AppColors.background,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide.none,
@@ -961,7 +936,7 @@ class _ScannerPageState extends State<ScannerPage>
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: const BorderSide(
-                      color: Color(0xFFBA6A37),
+                      color: AppColors.accent,
                       width: 1,
                     ),
                   ),
@@ -973,14 +948,6 @@ class _ScannerPageState extends State<ScannerPage>
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(dialogContext).pop(),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.grey[400],
-                        side: BorderSide(color: Colors.grey[600]!),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
                       child: const Text('Cancel'),
                     ),
                   ),
@@ -1020,14 +987,6 @@ class _ScannerPageState extends State<ScannerPage>
                       },
                       icon: const Icon(Icons.search, size: 18),
                       label: const Text('Search'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFBA6A37),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
                     ),
                   ),
                 ],
@@ -1049,42 +1008,37 @@ class _ScannerPageState extends State<ScannerPage>
         child: Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF333333), width: 1),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.search_off, size: 48, color: Colors.grey[500]),
+              Icon(Icons.search_off, size: 48, color: AppColors.textSecondary),
               const SizedBox(height: 16),
               Text(
                 'No Results Found',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
+                  letterSpacing: -0.5,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
                 'No marketplace listings were found for $identifier.',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[400]),
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFBA6A37),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
                   child: const Text('OK'),
                 ),
               ),
@@ -1094,7 +1048,7 @@ class _ScannerPageState extends State<ScannerPage>
                   'Wrong SKU detected?',
                   style: GoogleFonts.inter(
                     fontSize: 11,
-                    color: Colors.grey[600],
+                    color: AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -1109,14 +1063,6 @@ class _ScannerPageState extends State<ScannerPage>
                       Navigator.of(dialogContext).pop();
                       onEnterManually();
                     },
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.grey[600]!),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                    ),
                     child: const Text('Enter SKU Manually'),
                   ),
                 ),
@@ -1136,23 +1082,17 @@ class _ScannerPageState extends State<ScannerPage>
         child: Column(
           children: [
             Text(
-              'SneakScan',
-              style: GoogleFonts.poppins(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
               'Take a photo of a shoe label on the box',
-              style: GoogleFonts.inter(fontSize: 14, color: Colors.grey[500]),
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: AppColors.textSecondary,
+              ),
             ),
             const SizedBox(height: 24),
 
             ClipRRect(
               key: DemoKeys.key(DemoTarget.cameraPreview),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(16),
               child: SizedBox(
                 height: 300,
                 child: Stack(
@@ -1172,7 +1112,7 @@ class _ScannerPageState extends State<ScannerPage>
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               const CircularProgressIndicator(
-                                color: Color(0xFFBA6A37),
+                                color: Colors.white,
                               ),
                               const SizedBox(height: 16),
                               Text(
@@ -1206,17 +1146,6 @@ class _ScannerPageState extends State<ScannerPage>
                       },
                 icon: const Icon(Icons.camera_alt),
                 label: const Text('Scan Label'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFBA6A37),
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: const Color(
-                    0xFFBA6A37,
-                  ).withValues(alpha: 0.5),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -1242,14 +1171,6 @@ class _ScannerPageState extends State<ScannerPage>
                       },
                 icon: const Icon(Icons.keyboard, size: 18),
                 label: const Text('Enter SKU Manually'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFBA6A37),
-                  side: const BorderSide(color: Color(0xFFBA6A37)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
               ),
             ),
           ],
@@ -1323,9 +1244,14 @@ class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
         appBar: AppBar(
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
+          systemOverlayStyle: SystemUiOverlayStyle.light,
           title: Text(
             'Scan Barcode',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            style: GoogleFonts.inter(
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.5,
+              color: Colors.white,
+            ),
           ),
           actions: [
             IconButton(
@@ -1358,7 +1284,7 @@ class _BarcodeScannerPageState extends State<_BarcodeScannerPage> {
                 width: _boxWidth,
                 height: _boxHeight,
                 decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFFBA6A37), width: 2),
+                  border: Border.all(color: Colors.white, width: 2),
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),

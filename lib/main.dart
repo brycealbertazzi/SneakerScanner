@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
+import 'theme/app_theme.dart';
 import 'screens/splash_screen.dart';
 import 'services/gomarketme_service.dart';
 import 'services/mixpanel_service.dart';
@@ -38,25 +38,7 @@ class SneakerScannerApp extends StatelessWidget {
     return MaterialApp(
       title: 'SneakScan',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        primaryColor: const Color(0xFFBA6A37),
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFBA6A37),
-          secondary: Color(0xFF535BF2),
-          surface: Color(0xFF1E1E1E),
-        ),
-        textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-        appBarTheme: AppBarTheme(
-          surfaceTintColor: Colors.transparent,
-          scrolledUnderElevation: 0,
-          titleTextStyle: GoogleFonts.poppins(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-      ),
+      theme: AppTheme.light,
       navigatorObservers: [routeObserver],
       home: const SplashScreen(),
     );

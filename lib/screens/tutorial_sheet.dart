@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../theme/app_theme.dart';
 
 // ── Tutorial tip data ─────────────────────────────────────────────────────────
 
@@ -94,7 +95,7 @@ class _TutorialSheetState extends State<_TutorialSheet> {
       child: Container(
         height: MediaQuery.of(context).size.height * 0.88,
         decoration: const BoxDecoration(
-          color: Color(0xFF0D0D1A),
+          color: AppColors.background,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
@@ -109,17 +110,18 @@ class _TutorialSheetState extends State<_TutorialSheet> {
                 children: [
                   Text(
                     'Quick Tips',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
+                      letterSpacing: -0.5,
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                      color: AppColors.textPrimary,
                     ),
                   ),
                   Text(
                     '${_current + 1} / ${_kTips.length}',
                     style: GoogleFonts.inter(
                       fontSize: 14,
-                      color: Colors.white.withValues(alpha: 0.45),
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ],
@@ -140,9 +142,7 @@ class _TutorialSheetState extends State<_TutorialSheet> {
                   width: active ? 20 : 6,
                   height: 6,
                   decoration: BoxDecoration(
-                    color: active
-                        ? const Color(0xFFBA6A37)
-                        : Colors.white.withValues(alpha: 0.20),
+                    color: active ? AppColors.textPrimary : AppColors.outline,
                     borderRadius: BorderRadius.circular(3),
                   ),
                 );
@@ -166,13 +166,7 @@ class _TutorialSheetState extends State<_TutorialSheet> {
             Container(
               padding: EdgeInsets.fromLTRB(24, 14, 24, 32 + MediaQuery.of(context).padding.bottom),
               decoration: BoxDecoration(
-                color: const Color(0xFF0D0D1A),
-                border: Border(
-                  top: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.08),
-                    width: 0.5,
-                  ),
-                ),
+                color: AppColors.background,
               ),
               child: _PressableButton(
                 label: isLast ? 'Got it' : 'Next',
@@ -249,10 +243,11 @@ class _TipCardState extends State<_TipCard> with SingleTickerProviderStateMixin 
           Text(
             widget.tip.title,
             textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
+              letterSpacing: -0.5,
               fontSize: 22,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: AppColors.textPrimary,
               height: 1.2,
             ),
           ),
@@ -262,7 +257,7 @@ class _TipCardState extends State<_TipCard> with SingleTickerProviderStateMixin 
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
               fontSize: 15,
-              color: Colors.white.withValues(alpha: 0.65),
+              color: AppColors.textSecondary,
               height: 1.6,
             ),
           ),
@@ -313,7 +308,9 @@ class _TrophyVisual extends StatelessWidget {
                 height: 72,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFFBA6A37).withValues(alpha: glow.value),
+                  color: AppColors.textPrimary.withValues(
+                    alpha: glow.value * 0.4,
+                  ),
                 ),
               ),
             ),
@@ -323,12 +320,13 @@ class _TrophyVisual extends StatelessWidget {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFBA6A37).withValues(alpha: 0.15),
+                  color: AppColors.surface,
                   borderRadius: BorderRadius.circular(22),
+                  boxShadow: AppColors.cardShadow,
                 ),
                 child: const Icon(
                   Icons.emoji_events_rounded,
-                  color: Color(0xFFBA6A37),
+                  color: AppColors.textPrimary,
                   size: 40,
                 ),
               ),
@@ -370,8 +368,9 @@ class _LabelVisual extends StatelessWidget {
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
             decoration: BoxDecoration(
-              color: const Color(0xFF151520),
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(14),
+              boxShadow: AppColors.cardShadow,
               border: Border.all(
                 color: const Color(0xFF4D9A6A).withValues(alpha: 0.45),
               ),
@@ -385,7 +384,7 @@ class _LabelVisual extends StatelessWidget {
                   style: GoogleFonts.inter(
                     fontSize: 10,
                     letterSpacing: 1.6,
-                    color: Colors.grey[500],
+                    color: AppColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -454,7 +453,7 @@ class _OcrPair extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const color = Color(0xFFE6AC00);
+    const color = Color(0xFFB38600);
     final showingTo = t > 0.5;
     final fadeT = showingTo ? (t - 0.5) * 2 : 1.0 - t * 2;
     final char = showingTo ? to : from;
@@ -487,7 +486,7 @@ class _OcrPair extends StatelessWidget {
             label,
             style: GoogleFonts.inter(
               fontSize: 9,
-              color: color.withValues(alpha: 0.55),
+              color: color.withValues(alpha: 0.8),
             ),
           ),
         ],
@@ -566,7 +565,8 @@ class _BarcodePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withValues(alpha: 0.18);
+    final paint = Paint()
+      ..color = AppColors.textPrimary.withValues(alpha: 0.8);
     final scale = (size.width - 16) / bars.fold(0.0, (s, w) => s + w * 6 + 2);
     double x = 8;
     bool dark = true;
@@ -678,16 +678,24 @@ class _PressableButtonState extends State<_PressableButton> {
           width: double.infinity,
           height: 56,
           decoration: BoxDecoration(
-            color: const Color(0xFFBA6A37),
-            borderRadius: BorderRadius.circular(14),
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: _pressed ? 0.06 : 0.12),
+                blurRadius: _pressed ? 6 : 12,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
           alignment: Alignment.center,
           child: Text(
             widget.label,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
+              letterSpacing: -0.5,
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: AppColors.textPrimary,
             ),
           ),
         ),

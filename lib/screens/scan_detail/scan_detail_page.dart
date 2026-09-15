@@ -13,6 +13,7 @@ import '../../services/nike_colorway_utils.dart';
 import '../../services/review_prompt_service.dart';
 import 'widgets/info_card.dart';
 import 'widgets/profit_calculator.dart';
+import '../../theme/app_theme.dart';
 
 /// Set to true to re-enable the Firebase product cache (read + write).
 const bool kProductCacheEnabled = false;
@@ -138,8 +139,10 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             );
             final savedStockXSlug = scanDataMap['stockxSlug'] as String?;
             final savedGoatSlug = scanDataMap['goatSlug'] as String?;
-            final savedSelectedStockXSize = scanDataMap['selectedStockXSize'] as String?;
-            final savedSelectedGoatSize = scanDataMap['selectedGoatSize'] as String?;
+            final savedSelectedStockXSize =
+                scanDataMap['selectedStockXSize'] as String?;
+            final savedSelectedGoatSize =
+                scanDataMap['selectedGoatSize'] as String?;
             final savedStockXColorways = scanDataMap['stockxColorways'];
             final savedGoatColorways = scanDataMap['goatColorways'];
             final savedStockXSizeMap = scanDataMap['stockxSizeMap'];
@@ -168,10 +171,12 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               if (savedGoatSlug != null && savedGoatSlug.isNotEmpty) {
                 _goatSlug = savedGoatSlug;
               }
-              if (savedSelectedStockXSize != null && savedSelectedStockXSize.isNotEmpty) {
+              if (savedSelectedStockXSize != null &&
+                  savedSelectedStockXSize.isNotEmpty) {
                 _selectedStockXSize = savedSelectedStockXSize;
               }
-              if (savedSelectedGoatSize != null && savedSelectedGoatSize.isNotEmpty) {
+              if (savedSelectedGoatSize != null &&
+                  savedSelectedGoatSize.isNotEmpty) {
                 _selectedGoatSize = savedSelectedGoatSize;
               }
               if (savedStockXColorways is List &&
@@ -1669,17 +1674,17 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
     // Show a spinner while we wait for the first price result on new scans.
     if (_checkingResults) {
       return Scaffold(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor: AppColors.background,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ),
         body: const Center(
-          child: CircularProgressIndicator(color: Color(0xFFBA6A37)),
+          child: CircularProgressIndicator(color: AppColors.accent),
         ),
       );
     }
@@ -1699,19 +1704,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
             onPressed: () => Navigator.of(context).pop(),
           ),
           title: const Text('Scan Details'),
         ),
         bottomNavigationBar: Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF121212),
-            border: Border(
-              top: BorderSide(color: const Color(0xFF2A2A2A), width: 1),
-            ),
-          ),
+          color: AppColors.background,
           child: SafeArea(
             child: SizedBox(
               width: double.infinity,
@@ -1721,14 +1721,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 },
                 icon: const Icon(Icons.qr_code_scanner),
                 label: const Text('Scan Another'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFBA6A37),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
               ),
             ),
           ),
@@ -1741,10 +1733,13 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                     Icon(
                       Icons.error_outline,
                       size: 64,
-                      color: Colors.grey[600],
+                      color: AppColors.textSecondary,
                     ),
                     const SizedBox(height: 16),
-                    Text(_error!, style: TextStyle(color: Colors.grey[500])),
+                    Text(
+                      _error!,
+                      style: TextStyle(color: AppColors.textSecondary),
+                    ),
                     const SizedBox(height: 16),
                     ElevatedButton(
                       onPressed: _loadProductInfo,
@@ -1763,14 +1758,15 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                       width: double.infinity,
                       height: 200,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1A1A1A),
-                        borderRadius: BorderRadius.circular(12),
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: AppColors.cardShadow,
                       ),
                       child:
                           _productInfo?['images'] is List &&
                               (_productInfo!['images'] as List).isNotEmpty
                           ? ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(16),
                               child: Image.network(
                                 _productInfo!['images'][0],
                                 fit: BoxFit.contain,
@@ -1788,10 +1784,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                           (widget.scanData.displayName.isNotEmpty
                               ? widget.scanData.displayName
                               : 'Scanned Product'),
-                      style: GoogleFonts.poppins(
+                      style: GoogleFonts.inter(
+                        letterSpacing: -0.5,
                         fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -1810,15 +1807,13 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFFBA6A37,
-                            ).withValues(alpha: 0.2),
+                            color: AppColors.selectedPill,
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             badgeBrand,
                             style: GoogleFonts.inter(
-                              color: const Color(0xFFBA6A37),
+                              color: AppColors.accent,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -1836,10 +1831,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                         _productInfo!['description'].toString().isNotEmpty) ...[
                       Text(
                         'Description',
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.inter(
+                          letterSpacing: -0.5,
                           fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -1847,7 +1843,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                         _productInfo!['description'],
                         style: GoogleFonts.inter(
                           fontSize: 14,
-                          color: Colors.grey[400],
+                          color: AppColors.textSecondary,
                           height: 1.5,
                         ),
                       ),
@@ -1884,12 +1880,14 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                               _stockXPrice = _stockXSizeMap![size];
                               _stockXPriceIsLowest = false;
                             } else if (_stockXSizeMap != null) {
-                              final sorted = _stockXSizeMap!.values
-                                  .where((p) => p > 0)
-                                  .toList()
-                                ..sort();
-                              _stockXPrice =
-                                  sorted.isEmpty ? null : sorted.first;
+                              final sorted =
+                                  _stockXSizeMap!.values
+                                      .where((p) => p > 0)
+                                      .toList()
+                                    ..sort();
+                              _stockXPrice = sorted.isEmpty
+                                  ? null
+                                  : sorted.first;
                               _stockXPriceIsLowest = true;
                             }
                           });
@@ -1902,12 +1900,12 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                               _goatPrice = _goatSizeMap![size];
                               _goatPriceIsLowest = false;
                             } else if (_goatSizeMap != null) {
-                              final sorted = _goatSizeMap!.values
-                                  .where((p) => p > 0)
-                                  .toList()
-                                ..sort();
-                              _goatPrice =
-                                  sorted.isEmpty ? null : sorted.first;
+                              final sorted =
+                                  _goatSizeMap!.values
+                                      .where((p) => p > 0)
+                                      .toList()
+                                    ..sort();
+                              _goatPrice = sorted.isEmpty ? null : sorted.first;
                               _goatPriceIsLowest = true;
                             }
                           });
@@ -1996,11 +1994,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.directions_run, size: 64, color: Colors.grey[700]),
+          Icon(Icons.directions_run, size: 64, color: AppColors.textSecondary),
           const SizedBox(height: 8),
           Text(
             'No image available',
-            style: TextStyle(color: Colors.grey[600], fontSize: 14),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
           ),
         ],
       ),
@@ -2012,22 +2010,22 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF3A3A2A), width: 1),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppColors.cardShadow,
       ),
       child: Row(
         children: [
           Icon(
             Icons.warning_amber_rounded,
-            color: Colors.orange[400],
+            color: Colors.orange[700],
             size: 20,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               'The app was closed while prices were loading. Re-scan to fetch pricing.',
-              style: GoogleFonts.inter(fontSize: 12, color: Colors.orange[300]),
+              style: GoogleFonts.inter(fontSize: 12, color: Colors.orange[900]),
             ),
           ),
         ],
