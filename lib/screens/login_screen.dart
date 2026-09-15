@@ -235,15 +235,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2E),
-        title: const Text(
-          'Link Accounts',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: const Text('Link Accounts'),
         content: const Text(
           'This Apple ID\'s email is already associated with a Google account. '
           'Sign in with Google to link both accounts — your scan history will be preserved.',
-          style: TextStyle(color: Colors.grey),
         ),
         actions: [
           TextButton(
@@ -252,10 +247,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Sign in with Google',
-              style: TextStyle(color: Color(0xFFBA6A37)),
-            ),
+            child: const Text('Sign in with Google'),
           ),
         ],
       ),
@@ -297,18 +289,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => DarkThemeScope(builder: _buildDark);
-
-  Widget _buildDark(BuildContext context) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1A1A2E), Color(0xFF242424)],
-          ),
-        ),
+      backgroundColor: AppColors.background,
+      body: SizedBox.expand(
         child: SafeArea(
           child: Center(
             child: Padding(
@@ -320,22 +304,24 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 100,
                     height: 100,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFBA6A37).withValues(alpha: 0.15),
+                      color: AppColors.surface,
                       borderRadius: BorderRadius.circular(25),
+                      boxShadow: AppColors.cardShadow,
                     ),
                     child: const Icon(
                       Icons.directions_run_rounded,
                       size: 48,
-                      color: Color(0xFFBA6A37),
+                      color: AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 32),
                   Text(
                     'SneakScan',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
+                      letterSpacing: -0.5,
                       fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -344,7 +330,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: GoogleFonts.inter(
                       fontSize: 15,
                       fontWeight: FontWeight.w400,
-                      color: Colors.grey[500],
+                      color: AppColors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 48),
@@ -352,14 +338,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _signInWithGoogle,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black87,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
+
                       child: _googleLoading
                           ? const SizedBox(
                               width: 24,
@@ -394,14 +373,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _signInWithApple,
+                        // Apple's guidance for light backgrounds: black button.
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.black,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            side: const BorderSide(color: Colors.white24),
-                          ),
+                          side: BorderSide.none,
                         ),
                         child: _appleLoading
                             ? const SizedBox(

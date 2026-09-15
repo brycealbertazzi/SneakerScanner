@@ -680,13 +680,8 @@ class _PressableButtonState extends State<_PressableButton> {
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(999),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: _pressed ? 0.06 : 0.12),
-                blurRadius: _pressed ? 6 : 12,
-                offset: const Offset(0, 3),
-              ),
-            ],
+            border: Border.all(color: AppColors.buttonBorder),
+            boxShadow: AppColors.buttonShadow(pressed: _pressed),
           ),
           alignment: Alignment.center,
           child: Text(

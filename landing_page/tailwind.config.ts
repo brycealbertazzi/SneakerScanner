@@ -5,8 +5,8 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // SneakScan's in-app accent (0xFFBA6A37, used throughout lib/).
-        brand: "#BA6A37",
+        // SneakScan's in-app accent (AppColors.brand, 0xFFE66B25, in lib/).
+        brand: "#e66b25",
         page: "#F2F2F7",
       },
       borderRadius: {

@@ -385,7 +385,12 @@ class _HistoryPageState extends State<HistoryPage> {
           decoration: BoxDecoration(
             color: isSelected ? AppColors.textPrimary : AppColors.surface,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: isSelected ? null : AppColors.cardShadow,
+            border: Border.all(
+              color: isSelected
+                  ? AppColors.textPrimary
+                  : AppColors.buttonBorder,
+            ),
+            boxShadow: isSelected ? null : AppColors.buttonShadow(),
           ),
           child: Text(
             label,
@@ -421,7 +426,12 @@ class _HistoryPageState extends State<HistoryPage> {
           decoration: BoxDecoration(
             color: isSelected ? AppColors.textPrimary : AppColors.surface,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: isSelected ? null : AppColors.cardShadow,
+            border: Border.all(
+              color: isSelected
+                  ? AppColors.textPrimary
+                  : AppColors.buttonBorder,
+            ),
+            boxShadow: isSelected ? null : AppColors.buttonShadow(),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

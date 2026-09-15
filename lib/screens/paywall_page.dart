@@ -171,7 +171,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: _darkDialog((ctx) {
+      builder: (ctx) {
         Future.delayed(const Duration(seconds: 2), () {
           if (ctx.mounted) Navigator.of(ctx).pop();
         });
@@ -180,12 +180,8 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: Colors.blue.withValues(alpha: 0.4),
-                width: 1,
-              ),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -207,17 +203,18 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                 Text(
                   'No Previous Purchases Found',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
+                    letterSpacing: -0.5,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                   ),
                 ),
               ],
             ),
           ),
         );
-      }),
+      },
     );
   }
 
@@ -226,81 +223,70 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     _restoredDialogShowing = true;
     showDialog(
       context: context,
-      builder: _darkDialog(
-        (ctx) => Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF333333), width: 1),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: const Icon(
-                    Icons.check_circle_rounded,
-                    color: Colors.green,
-                    size: 28,
-                  ),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(28),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'Purchase Restored',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.green,
+                  size: 28,
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  'You\'re already subscribed!',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: Colors.grey[400],
-                    height: 1.5,
-                  ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Purchase Restored',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  letterSpacing: -0.5,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
                 ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      _restoredDialogShowing = false;
-                      Navigator.of(ctx).pop();
-                      if (mounted) _dismissPaywall();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      'OK',
-                      style: GoogleFonts.inter(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'You\'re already subscribed!',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: AppColors.textSecondary,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    _restoredDialogShowing = false;
+                    Navigator.of(ctx).pop();
+                    if (mounted) _dismissPaywall();
+                  },
+                  child: Text(
+                    'OK',
+                    style: GoogleFonts.inter(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -314,71 +300,60 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: _darkDialog(
-        (ctx) => Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF333333), width: 1),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: const Icon(
-                    Icons.check_circle_rounded,
-                    color: Colors.green,
-                    size: 28,
-                  ),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(28),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  'Thank you for subscribing to SneakScan!',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: Colors.green,
+                  size: 28,
                 ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      _successDialogShowing = false;
-                      Navigator.of(ctx).pop();
-                      if (mounted) _dismissPaywall();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      'Close',
-                      style: GoogleFonts.inter(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Thank you for subscribing to SneakScan!',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  letterSpacing: -0.5,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    _successDialogShowing = false;
+                    Navigator.of(ctx).pop();
+                    if (mounted) _dismissPaywall();
+                  },
+                  child: Text(
+                    'Close',
+                    style: GoogleFonts.inter(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -419,103 +394,85 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
 
     showDialog<void>(
       context: context,
-      builder: _darkDialog(
-        (dialogContext) => StatefulBuilder(
-          builder: (dialogContext, setDialogState) => Dialog(
-            backgroundColor: Colors.transparent,
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF333333)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Access Code',
+                  style: GoogleFonts.inter(
+                    letterSpacing: -0.5,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.characters,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  style: GoogleFonts.robotoMono(
+                    fontSize: 15,
+                    color: AppColors.textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: AppColors.background,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: const BorderSide(color: AppColors.accent),
+                    ),
+                  ),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 10),
                   Text(
-                    'Access Code',
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                    error!,
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      color: Colors.red[700],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: controller,
-                    autofocus: true,
-                    textCapitalization: TextCapitalization.characters,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    style: GoogleFonts.robotoMono(
-                      fontSize: 15,
-                      color: Colors.white,
-                    ),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: const Color(0xFF252525),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: Color(0xFFBA6A37)),
+                ],
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: const Text('Cancel'),
                       ),
                     ),
-                  ),
-                  if (error != null) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      error!,
-                      style: GoogleFonts.inter(
-                        fontSize: 12.5,
-                        color: Colors.redAccent,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => _submitAccessCode(
+                          dialogContext,
+                          controller.text,
+                          (message) => setDialogState(() => error = message),
+                        ),
+                        child: const Text('Unlock'),
                       ),
                     ),
                   ],
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(dialogContext).pop(),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.grey[400],
-                            side: BorderSide(color: Colors.grey[600]!),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          child: const Text('Cancel'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () => _submitAccessCode(
-                            dialogContext,
-                            controller.text,
-                            (message) => setDialogState(() => error = message),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFBA6A37),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          child: const Text('Unlock'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -589,24 +546,14 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
       width: 180,
       height: 15,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: AppColors.textPrimary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(4),
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context) => DarkThemeScope(builder: _buildDark);
-
-  /// Dialogs are shown from this State's context, which sits above the
-  /// [DarkThemeScope] in [build], so they need the dark theme applied again.
-  WidgetBuilder _darkDialog(WidgetBuilder builder) =>
-      (_) => Theme(
-        data: AppTheme.dark,
-        child: Builder(builder: builder),
-      );
-
-  Widget _buildDark(BuildContext context) {
+  Widget build(BuildContext context) {
     final isStatusLoading = _sub.status == SubscriptionStatus.loading;
     final pending = _sub.purchasePending || isStatusLoading;
     // The RevenueCat price experiment decides which product this user buys, so
@@ -625,31 +572,12 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
         : 'How Your Free Trial Works';
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
+      // Bottom inset is handled by the white CTA bar so it runs to the screen edge.
       body: SafeArea(
+        bottom: false,
         child: Stack(
           children: [
-            // Top-center brand glow
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                height: 280,
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment.topCenter,
-                    radius: 1.0,
-                    colors: [
-                      const Color(0xFFBA6A37).withValues(alpha: 0.18),
-                      const Color(0xFFBA6A37).withValues(alpha: 0.07),
-                      Colors.transparent,
-                    ],
-                    stops: const [0.0, 0.45, 1.0],
-                  ),
-                ),
-              ),
-            ),
             Column(
               children: [
                 // Scrollable content
@@ -670,10 +598,11 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                         Text(
                           headline,
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(
+                          style: GoogleFonts.inter(
+                            letterSpacing: -0.5,
                             fontSize: 30,
                             fontWeight: FontWeight.w800,
-                            color: Colors.white,
+                            color: AppColors.textPrimary,
                             height: 1.2,
                           ),
                         ),
@@ -684,48 +613,65 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                         // of the feature list: the onboarding priming screen
                         // just pitched the features, and what's actually unclear
                         // at this point is when they get charged.
-                        if (_sub.isLapsedSubscriber || _sub.isSubscribed) ...[
-                          PaywallFeatureRow(
-                            icon: Icons.all_inclusive_rounded,
-                            iconColor: const Color(0xFFBA6A37),
-                            text: 'Unlimited scans',
-                          ),
-                          const SizedBox(height: 22),
-                          PaywallFeatureRow(
-                            icon: Icons.show_chart_rounded,
-                            iconColor: Colors.green,
-                            text: 'Live StockX & GOAT market prices',
-                          ),
-                          const SizedBox(height: 22),
-                          PaywallFeatureRow(
-                            icon: Icons.sell_rounded,
-                            iconColor: Colors.orange,
-                            text: 'eBay sold listings with fees',
-                          ),
-                          const SizedBox(height: 22),
-                          PaywallFeatureRow(
-                            icon: Icons.camera_alt_rounded,
-                            iconColor: Colors.blue,
-                            text: 'OCR label & barcode scanning',
-                          ),
-                        ] else
-                          const TrialTimeline(),
+                        AppCard(
+                          outlined: true,
+                          padding: const EdgeInsets.all(20),
+                          child: (_sub.isLapsedSubscriber || _sub.isSubscribed)
+                              ? const Column(
+                                  children: [
+                                    PaywallFeatureRow(
+                                      icon: Icons.all_inclusive_rounded,
+                                      text: 'Unlimited scans',
+                                    ),
+                                    SizedBox(height: 22),
+                                    PaywallFeatureRow(
+                                      icon: Icons.show_chart_rounded,
+                                      text: 'Live StockX & GOAT market prices',
+                                    ),
+                                    SizedBox(height: 22),
+                                    PaywallFeatureRow(
+                                      icon: Icons.sell_rounded,
+                                      text: 'eBay sold listings with fees',
+                                    ),
+                                    SizedBox(height: 22),
+                                    PaywallFeatureRow(
+                                      icon: Icons.camera_alt_rounded,
+                                      text: 'OCR label & barcode scanning',
+                                    ),
+                                  ],
+                                )
+                              : const TrialTimeline(),
+                        ),
 
-                        const SizedBox(height: 40),
+                        const SizedBox(height: 28),
+
+                        const _SellingPointChecklist(),
+
+                        const SizedBox(height: 32),
                       ],
                     ),
                   ),
                 ),
 
-                // Pinned bottom section
+                // Pinned bottom section — solid white so the CTA sits on its
+                // own surface, clear of the scrolling content above.
                 Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1A1A1A),
-                    border: Border(
-                      top: BorderSide(color: const Color(0xFF333333), width: 1),
-                    ),
+                    color: AppColors.surface,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 16,
+                        offset: const Offset(0, -4),
+                      ),
+                    ],
                   ),
-                  padding: const EdgeInsets.fromLTRB(28, 14, 28, 24),
+                  padding: EdgeInsets.fromLTRB(
+                    28,
+                    16,
+                    28,
+                    16 + MediaQuery.paddingOf(context).bottom,
+                  ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -748,8 +694,8 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           width: double.infinity,
                           height: 56,
                           decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(14),
+                            color: Colors.green.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(999),
                             border: Border.all(
                               color: Colors.green.withValues(alpha: 0.4),
                               width: 1.5,
@@ -758,18 +704,19 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.check_circle_rounded,
-                                color: Colors.green,
+                                color: Colors.green[700],
                                 size: 22,
                               ),
                               const SizedBox(width: 10),
                               Text(
                                 'You\'re subscribed',
-                                style: GoogleFonts.poppins(
+                                style: GoogleFonts.inter(
+                                  letterSpacing: -0.5,
                                   fontSize: 17,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.green,
+                                  color: Colors.green[800],
                                 ),
                               ),
                             ],
@@ -781,22 +728,9 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           onPointerMove: _onSubscribePointerMove,
                           onPointerUp: (_) => _cancelHold(),
                           onPointerCancel: (_) => _cancelHold(),
-                          child: Container(
+                          child: SizedBox(
                             width: double.infinity,
                             height: 64,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              color: const Color(0xFFBA6A37),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFFBA6A37,
-                                  ).withValues(alpha: 0.45),
-                                  blurRadius: 18,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
                             child: ElevatedButton(
                               // priceLoading also disables: buying before the
                               // A/B variant resolves would charge a price the
@@ -815,17 +749,16 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                                       );
                                       _sub.buyAnnual();
                                     },
+                              // Brand orange: the one filled color on the
+                              // paywall, so the purchase is unmistakable.
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.transparent,
+                                backgroundColor: AppColors.brand,
                                 foregroundColor: Colors.white,
-                                disabledBackgroundColor: const Color(
-                                  0xFFBA6A37,
-                                ).withValues(alpha: 0.5),
-                                shadowColor: Colors.transparent,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                elevation: 0,
+                                disabledBackgroundColor: AppColors.brand
+                                    .withValues(alpha: 0.5),
+                                disabledForegroundColor: Colors.white
+                                    .withValues(alpha: 0.85),
+                                side: BorderSide.none,
                               ),
                               child: (pending && !_isRestoring)
                                   ? const SizedBox(
@@ -838,7 +771,8 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                                     )
                                   : Text(
                                       buttonLabel ?? 'Get Unlimited Scans',
-                                      style: GoogleFonts.poppins(
+                                      style: GoogleFonts.inter(
+                                        letterSpacing: -0.5,
                                         fontSize: 18,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -858,7 +792,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                             '${_priceLabel()}/year - Cancel Anytime',
                             style: GoogleFonts.inter(
                               fontSize: 12,
-                              color: Colors.grey[600],
+                              color: AppColors.textSecondary,
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -875,7 +809,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                             '$kTrialDays day free trial then ${_priceLabel()}/year',
                             style: GoogleFonts.inter(
                               fontSize: 12,
-                              color: Colors.grey[600],
+                              color: AppColors.textSecondary,
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -890,7 +824,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           textAlign: TextAlign.center,
                           style: GoogleFonts.inter(
                             fontSize: 12,
-                            color: Colors.grey[600],
+                            color: AppColors.textSecondary,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -932,12 +866,12 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                                 style: GoogleFonts.inter(
                                   fontSize: 13,
                                   color: _restorePressed
-                                      ? Colors.white
-                                      : Colors.grey[500],
+                                      ? AppColors.textPrimary
+                                      : AppColors.textSecondary,
                                   decoration: TextDecoration.underline,
                                   decorationColor: _restorePressed
-                                      ? Colors.white
-                                      : Colors.grey[500],
+                                      ? AppColors.textPrimary
+                                      : AppColors.textSecondary,
                                 ),
                               ),
                             ),
@@ -1004,7 +938,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                       : () => Navigator.of(context).pop(false),
                   icon: Icon(
                     Icons.close_rounded,
-                    color: Colors.grey[600],
+                    color: AppColors.textSecondary,
                     size: 28,
                   ),
                 ),
@@ -1016,19 +950,65 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
   }
 }
 
+/// SneakScan's selling points. The priming screen's feature rows and the
+/// paywall's checklist both read from this list so the two never drift apart.
+const kSellingPoints = <({IconData icon, String text})>[
+  (icon: Icons.all_inclusive_rounded, text: 'Unlimited scans'),
+  (icon: Icons.show_chart_rounded, text: 'Live StockX & GOAT market prices'),
+  (icon: Icons.sell_rounded, text: 'eBay sold comps with fees included'),
+  (icon: Icons.camera_alt_rounded, text: 'Label OCR & barcode scanning'),
+  (icon: Icons.payments_rounded, text: 'Instant profit estimate per size'),
+  (icon: Icons.history_rounded, text: 'Full history of every scan'),
+];
+
+/// Orange check-circle list of [kSellingPoints], shown under the paywall's
+/// timeline or feature card.
+class _SellingPointChecklist extends StatelessWidget {
+  const _SellingPointChecklist();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Column(
+        children: [
+          for (final point in kSellingPoints)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: AppColors.brand,
+                    size: 22,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      point.text,
+                      style: GoogleFonts.inter(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// A single icon-tile + label row. Public so the onboarding paywall priming
 /// screen can pitch the app in an identical visual language.
 class PaywallFeatureRow extends StatelessWidget {
   final IconData icon;
-  final Color iconColor;
   final String text;
 
-  const PaywallFeatureRow({
-    super.key,
-    required this.icon,
-    required this.iconColor,
-    required this.text,
-  });
+  const PaywallFeatureRow({super.key, required this.icon, required this.text});
 
   @override
   Widget build(BuildContext context) {
@@ -1038,10 +1018,10 @@ class PaywallFeatureRow extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.15),
+            color: AppColors.background,
             borderRadius: BorderRadius.circular(11),
           ),
-          child: Icon(icon, color: iconColor, size: 22),
+          child: Icon(icon, color: AppColors.textPrimary, size: 22),
         ),
         const SizedBox(width: 16),
         // Expanded so a long label wraps instead of overflowing the row. The
@@ -1052,7 +1032,7 @@ class PaywallFeatureRow extends StatelessWidget {
             text,
             style: GoogleFonts.inter(
               fontSize: 17,
-              color: Colors.white,
+              color: AppColors.textPrimary,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -1070,7 +1050,7 @@ class PaywallFeatureRow extends StatelessWidget {
 class TrialTimeline extends StatelessWidget {
   const TrialTimeline({super.key});
 
-  static const _brand = Color(0xFFBA6A37);
+  static const _ink = AppColors.textPrimary;
 
   @override
   Widget build(BuildContext context) {
@@ -1078,7 +1058,7 @@ class TrialTimeline extends StatelessWidget {
       children: [
         const _TimelineNode(
           icon: Icons.lock_open_rounded,
-          color: _brand,
+          color: _ink,
           title: 'Today',
           body: 'Your free trial starts',
         ),
@@ -1088,7 +1068,7 @@ class TrialTimeline extends StatelessWidget {
         const _TimelineConnector(fromAlpha: 1.0, toAlpha: 0.6),
         _TimelineNode(
           icon: Icons.notifications_active_rounded,
-          color: _brand,
+          color: _ink,
           title: 'In ${kTrialDays - 1} days',
           body: 'We\'ll remind you 1 day before your free trial ends',
         ),
@@ -1134,12 +1114,14 @@ class _TimelineNode extends StatelessWidget {
           width: 58,
           height: 58,
           decoration: BoxDecoration(
-            color: accent == null
-                ? Colors.white.withValues(alpha: 0.06)
-                : accent.withValues(alpha: 0.15),
+            color: accent ?? AppColors.background,
             borderRadius: BorderRadius.circular(15),
           ),
-          child: Icon(icon, color: accent ?? Colors.grey[500], size: 30),
+          child: Icon(
+            icon,
+            color: accent == null ? AppColors.outline : Colors.white,
+            size: 30,
+          ),
         ),
         const SizedBox(width: 18),
         // Expanded so the long middle line wraps instead of overflowing.
@@ -1149,10 +1131,11 @@ class _TimelineNode extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
+                  letterSpacing: -0.5,
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 4),
@@ -1161,7 +1144,7 @@ class _TimelineNode extends StatelessWidget {
                 style: GoogleFonts.inter(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
-                  color: Colors.white.withValues(alpha: 0.65),
+                  color: AppColors.textPrimary.withValues(alpha: 0.65),
                   height: 1.35,
                 ),
               ),
@@ -1195,8 +1178,8 @@ class _TimelineConnector extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                TrialTimeline._brand.withValues(alpha: fromAlpha),
-                TrialTimeline._brand.withValues(alpha: toAlpha),
+                TrialTimeline._ink.withValues(alpha: fromAlpha),
+                TrialTimeline._ink.withValues(alpha: toAlpha),
               ],
             ),
           ),
@@ -1215,9 +1198,8 @@ class _TimelineConnector extends StatelessWidget {
 class PaywallSocialProof extends StatelessWidget {
   const PaywallSocialProof({super.key});
 
-  /// Amber rather than the brand orange: the top glow and the CTA are both
-  /// #BA6A37, so orange stars would blend into them and stop reading as a
-  /// rating at all.
+  /// Gold — the one warm color left on the black-and-white paywall, so the
+  /// rating reads at a glance.
   static const _star = Color(0xFFFFC107);
 
   @override
@@ -1241,7 +1223,7 @@ class PaywallSocialProof extends StatelessWidget {
           style: GoogleFonts.inter(
             fontSize: 16,
             fontWeight: FontWeight.w600,
-            color: Colors.white.withValues(alpha: 0.92),
+            color: AppColors.textPrimary.withValues(alpha: 0.92),
           ),
         ),
       ],
@@ -1270,7 +1252,7 @@ class _ReassuranceLine extends StatelessWidget {
             style: GoogleFonts.inter(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: Colors.grey[400],
+              color: AppColors.textSecondary,
             ),
           ),
         ),
@@ -1305,9 +1287,11 @@ class _LinkText extends StatelessWidget {
         label,
         style: GoogleFonts.inter(
           fontSize: 13,
-          color: pressed ? Colors.white : Colors.grey[500],
+          color: pressed ? AppColors.textPrimary : AppColors.textSecondary,
           decoration: TextDecoration.underline,
-          decorationColor: pressed ? Colors.white : Colors.grey[500],
+          decorationColor: pressed
+              ? AppColors.textPrimary
+              : AppColors.textSecondary,
         ),
       ),
     );
@@ -1323,7 +1307,7 @@ class _Dot extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Text(
         '·',
-        style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[600]),
+        style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
       ),
     );
   }

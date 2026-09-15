@@ -19,6 +19,19 @@ class AppColors {
   /// Profit green that stays legible on white.
   static const profit = Color(0xFF1E8E3E);
 
+  /// Hairline around white buttons so their edge reads on every side, not
+  /// just where the drop shadow falls.
+  static const buttonBorder = Color(0xFFDADADA);
+
+  /// Soft, nearly centred shadow for white buttons, visible all the way around.
+  static List<BoxShadow> buttonShadow({bool pressed = false}) => [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: pressed ? 0.06 : 0.10),
+      blurRadius: pressed ? 6 : 12,
+      offset: Offset(0, pressed ? 1 : 2),
+    ),
+  ];
+
   static final cardShadow = [
     BoxShadow(
       color: Colors.black.withValues(alpha: 0.06),
@@ -27,9 +40,9 @@ class AppColors {
     ),
   ];
 
-  /// Legacy dark-theme brand accent, still used by onboarding, login, splash
-  /// and the paywall.
-  static const legacyAccent = Color(0xFFBA6A37);
+  /// SneakScan brand orange. Used sparingly: card outlines on the paywall and
+  /// onboarding, and selected onboarding answers.
+  static const brand = Color(0xFFE66B25);
 }
 
 class AppTheme {
@@ -105,7 +118,16 @@ class AppTheme {
             Colors.black.withValues(alpha: 0.05),
           ),
           elevation: WidgetStateProperty.resolveWith(
-            (states) => states.contains(WidgetState.disabled) ? 0 : 2,
+            (states) => states.contains(WidgetState.disabled) ? 0 : 1,
+          ),
+          // White-on-gray needs an edge on every side; elevation alone only
+          // shades the bottom. Colored buttons opt out with BorderSide.none.
+          side: WidgetStateProperty.resolveWith(
+            (states) => BorderSide(
+              color: states.contains(WidgetState.disabled)
+                  ? AppColors.buttonBorder.withValues(alpha: 0.5)
+                  : AppColors.buttonBorder,
+            ),
           ),
           shadowColor: WidgetStatePropertyAll(
             Colors.black.withValues(alpha: 0.35),
@@ -207,48 +229,6 @@ class AppTheme {
       ),
     );
   }
-
-  /// The original dark theme, kept for onboarding, login, splash and paywall.
-  static ThemeData get dark => ThemeData.dark().copyWith(
-    primaryColor: AppColors.legacyAccent,
-    scaffoldBackgroundColor: const Color(0xFF121212),
-    colorScheme: const ColorScheme.dark(
-      primary: AppColors.legacyAccent,
-      secondary: Color(0xFF535BF2),
-      surface: Color(0xFF1E1E1E),
-    ),
-    textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-    appBarTheme: AppBarTheme(
-      surfaceTintColor: Colors.transparent,
-      scrolledUnderElevation: 0,
-      systemOverlayStyle: SystemUiOverlayStyle.light,
-      titleTextStyle: GoogleFonts.poppins(
-        fontSize: 20,
-        fontWeight: FontWeight.w600,
-        color: Colors.white,
-      ),
-    ),
-  );
-}
-
-/// Keeps a screen on the original dark theme (with light status bar icons)
-/// inside the otherwise light app. Dialogs and sheets opened from within
-/// inherit it, since `showDialog`/`showModalBottomSheet` capture the theme.
-class DarkThemeScope extends StatelessWidget {
-  const DarkThemeScope({super.key, required this.builder});
-
-  final WidgetBuilder builder;
-
-  @override
-  Widget build(BuildContext context) {
-    return Theme(
-      data: AppTheme.dark,
-      child: AnnotatedRegion<SystemUiOverlayStyle>(
-        value: SystemUiOverlayStyle.light,
-        child: Builder(builder: builder),
-      ),
-    );
-  }
 }
 
 /// White rounded card with a soft shadow — the main-app content block.
@@ -260,6 +240,7 @@ class AppCard extends StatelessWidget {
     this.margin,
     this.radius = 16,
     this.onTap,
+    this.outlined = false,
   });
 
   final Widget child;
@@ -268,13 +249,13 @@ class AppCard extends StatelessWidget {
   final double radius;
   final VoidCallback? onTap;
 
+  /// Adds the brand-orange outline used on paywall and onboarding cards.
+  final bool outlined;
+
   @override
   Widget build(BuildContext context) {
     final borderRadius = BorderRadius.circular(radius);
-    Widget content = Padding(
-      padding: padding ?? EdgeInsets.zero,
-      child: child,
-    );
+    Widget content = Padding(padding: padding ?? EdgeInsets.zero, child: child);
     if (onTap != null) {
       content = Material(
         color: Colors.transparent,
@@ -291,6 +272,9 @@ class AppCard extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: borderRadius,
         boxShadow: AppColors.cardShadow,
+        border: outlined
+            ? Border.all(color: AppColors.brand, width: 1.5)
+            : null,
       ),
       child: content,
     );

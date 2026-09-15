@@ -141,6 +141,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
+                        side: BorderSide.none,
                       ),
                       child: Text(
                         'Delete',
@@ -243,6 +244,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
+                        side: BorderSide.none,
                       ),
                       child: Text(
                         'Sign Out',

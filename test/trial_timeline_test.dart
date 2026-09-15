@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:sneakscan/screens/paywall_page.dart';
+import 'package:sneakscan/theme/app_theme.dart';
 import 'package:sneakscan/services/subscription_service.dart';
 
 void main() {
@@ -55,17 +56,11 @@ void main() {
       return (container.decoration! as BoxDecoration).color!;
     }
 
-    const brand = Color(0xFFBA6A37);
-    expect(tileColorBehind(Icons.lock_open_rounded).withAlpha(255), brand);
-    expect(
-      tileColorBehind(Icons.notifications_active_rounded).withAlpha(255),
-      brand,
-    );
-    // The charge hasn't happened yet, so this one must not read as brand.
-    expect(
-      tileColorBehind(Icons.workspace_premium_rounded).withAlpha(255),
-      isNot(brand),
-    );
+    const active = AppColors.textPrimary;
+    expect(tileColorBehind(Icons.lock_open_rounded), active);
+    expect(tileColorBehind(Icons.notifications_active_rounded), active);
+    // The charge hasn't happened yet, so this one must not read as active.
+    expect(tileColorBehind(Icons.workspace_premium_rounded), isNot(active));
   });
 
   testWidgets('nodes are sized to carry the screen, not sit in a list', (

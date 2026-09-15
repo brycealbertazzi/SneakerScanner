@@ -121,11 +121,9 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   @override
-  Widget build(BuildContext context) => DarkThemeScope(builder: _buildDark);
-
-  Widget _buildDark(BuildContext context) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: AppColors.background,
       body: Container(
         child: Center(
           child: AnimatedBuilder(
@@ -142,10 +140,9 @@ class _SplashScreenState extends State<SplashScreen>
                         width: 120,
                         height: 120,
                         decoration: BoxDecoration(
-                          color: const Color(
-                            0xFFBA6A37,
-                          ).withValues(alpha: 0.15),
+                          color: AppColors.surface,
                           borderRadius: BorderRadius.circular(30),
+                          boxShadow: AppColors.cardShadow,
                         ),
                         child: Stack(
                           alignment: Alignment.center,
@@ -153,14 +150,12 @@ class _SplashScreenState extends State<SplashScreen>
                             Icon(
                               Icons.qr_code_scanner_rounded,
                               size: 64,
-                              color: const Color(
-                                0xFFBA6A37,
-                              ).withValues(alpha: 0.3),
+                              color: AppColors.accent.withValues(alpha: 0.3),
                             ),
                             const Icon(
                               Icons.directions_run_rounded,
                               size: 48,
-                              color: Color(0xFFBA6A37),
+                              color: AppColors.accent,
                             ),
                           ],
                         ),
@@ -168,11 +163,11 @@ class _SplashScreenState extends State<SplashScreen>
                       const SizedBox(height: 32),
                       Text(
                         'SneakScan',
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.inter(
                           fontSize: 32,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                          letterSpacing: -0.5,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -181,7 +176,7 @@ class _SplashScreenState extends State<SplashScreen>
                         style: GoogleFonts.inter(
                           fontSize: 14,
                           fontWeight: FontWeight.w400,
-                          color: Colors.grey[500],
+                          color: AppColors.textSecondary,
                           letterSpacing: 3,
                         ),
                       ),
@@ -192,7 +187,7 @@ class _SplashScreenState extends State<SplashScreen>
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            const Color(0xFFBA6A37).withValues(alpha: 0.7),
+                            AppColors.accent.withValues(alpha: 0.7),
                           ),
                         ),
                       ),

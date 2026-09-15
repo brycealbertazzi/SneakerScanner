@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:sneakscan/screens/paywall_page.dart';
+import 'package:sneakscan/theme/app_theme.dart';
 
 void main() {
   Widget harness() => const MaterialApp(
@@ -20,9 +21,9 @@ void main() {
     final stars = find.byIcon(Icons.star_rounded);
     expect(stars, findsNWidgets(5));
 
-    // Amber, not the brand orange — orange would disappear into the paywall's
-    // glow and CTA and stop reading as a rating.
-    const brand = Color(0xFFBA6A37);
+    // Amber, not the brand orange, so the stars read as a rating rather than
+    // blending into the paywall's orange card outline.
+    const brand = AppColors.brand;
     for (final icon in tester.widgetList<Icon>(stars)) {
       expect(icon.color, const Color(0xFFFFC107));
       expect(icon.color, isNot(brand));

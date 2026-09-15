@@ -293,15 +293,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   Widget _buildFooter() {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 14, 24, 24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0D1A),
-        border: Border(
-          top: BorderSide(
-            color: Colors.white.withValues(alpha: 0.08),
-            width: 0.5,
-          ),
-        ),
-      ),
+      color: AppColors.background,
       child: _PressableButton(
         label: 'Continue',
         enabled: _canContinue,
@@ -328,11 +320,13 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                     child: Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white.withValues(alpha: 0.10),
+                        color: AppColors.surface,
+                        border: Border.all(color: AppColors.buttonBorder),
+                        boxShadow: AppColors.buttonShadow(),
                       ),
                       child: Icon(
                         Icons.arrow_back_rounded,
-                        color: Colors.white.withValues(alpha: 0.75),
+                        color: AppColors.textPrimary,
                         size: 20,
                       ),
                     ),
@@ -351,8 +345,8 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                 child: LinearProgressIndicator(
                   value: value,
                   minHeight: 3,
-                  backgroundColor: Colors.white.withValues(alpha: 0.08),
-                  valueColor: const AlwaysStoppedAnimation(Color(0xFFBA6A37)),
+                  backgroundColor: AppColors.divider,
+                  valueColor: const AlwaysStoppedAnimation(AppColors.brand),
                 ),
               ),
             ),
@@ -363,9 +357,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   }
 
   @override
-  Widget build(BuildContext context) => DarkThemeScope(builder: _buildDark);
-
-  Widget _buildDark(BuildContext context) {
+  Widget build(BuildContext context) {
     // Analysis screen stands alone — no progress bar
     if (_showAnalysis) {
       return _AnalysisScreen(onComplete: _completeOnboarding);
@@ -385,7 +377,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     // Single persistent scaffold so the TweenAnimationBuilder keeps its state
     // across the questions→pages phase transition (no reset to 0%).
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -470,7 +462,7 @@ class _IntroScreenState extends State<_IntroScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -492,10 +484,10 @@ class _IntroScreenState extends State<_IntroScreen>
               const SizedBox(height: 36),
               Text(
                 'SneakScan',
-                style: GoogleFonts.poppins(
+                style: GoogleFonts.inter(
                   fontSize: 40,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -505,7 +497,7 @@ class _IntroScreenState extends State<_IntroScreen>
                 style: GoogleFonts.inter(
                   fontSize: 18,
                   fontWeight: FontWeight.w400,
-                  color: Colors.white.withValues(alpha: 0.55),
+                  color: AppColors.textPrimary.withValues(alpha: 0.55),
                 ),
               ),
               const Spacer(flex: 4),
@@ -517,17 +509,10 @@ class _IntroScreenState extends State<_IntroScreen>
                     HapticFeedback.heavyImpact();
                     widget.onGetStarted();
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFBA6A37),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    elevation: 0,
-                  ),
                   child: Text(
                     'Get Started',
-                    style: GoogleFonts.poppins(
+                    style: GoogleFonts.inter(
+                      letterSpacing: -0.5,
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
@@ -676,10 +661,11 @@ class _QuestionScreenState extends State<_QuestionScreen> {
           const SizedBox(height: 48),
           Text(
             widget.question.question,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
+              letterSpacing: -0.5,
               fontSize: 26,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
               height: 1.25,
             ),
           ),
@@ -703,16 +689,15 @@ class _QuestionScreenState extends State<_QuestionScreen> {
                         vertical: 16,
                       ),
                       decoration: BoxDecoration(
-                        color: isSelected
-                            ? const Color(0xFFBA6A37)
-                            : Colors.transparent,
+                        color: isSelected ? AppColors.brand : AppColors.surface,
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: isSelected
-                              ? const Color(0xFFBA6A37)
-                              : Colors.white.withValues(alpha: 0.15),
+                              ? AppColors.brand
+                              : AppColors.divider,
                           width: 1.5,
                         ),
+                        boxShadow: isSelected ? null : AppColors.cardShadow,
                       ),
                       child: Row(
                         children: [
@@ -726,7 +711,7 @@ class _QuestionScreenState extends State<_QuestionScreen> {
                                     : FontWeight.w400,
                                 color: isSelected
                                     ? Colors.white
-                                    : Colors.white.withValues(alpha: 0.75),
+                                    : AppColors.textPrimary,
                               ),
                             ),
                           ),
@@ -781,10 +766,11 @@ class _OnboardingPageLayout extends StatelessWidget {
           Text(
             title,
             textAlign: TextAlign.center,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
+              letterSpacing: -0.5,
               fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
               height: 1.25,
             ),
           ),
@@ -794,7 +780,7 @@ class _OnboardingPageLayout extends StatelessWidget {
             textAlign: TextAlign.center,
             style: GoogleFonts.inter(
               fontSize: 15,
-              color: Colors.grey[400],
+              color: AppColors.textSecondary,
               height: 1.6,
             ),
           ),
@@ -909,9 +895,10 @@ class _ViewfinderWidget extends StatelessWidget {
               width: w,
               height: h,
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A2E),
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white12),
+                border: Border.all(color: AppColors.divider),
+                boxShadow: AppColors.cardShadow,
               ),
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -921,14 +908,14 @@ class _ViewfinderWidget extends StatelessWidget {
                     children: [
                       const Icon(
                         Icons.directions_run_rounded,
-                        color: Color(0xFFBA6A37),
+                        color: AppColors.accent,
                         size: 14,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         'NIKE AIR JORDAN 1',
                         style: GoogleFonts.inter(
-                          color: Colors.white70,
+                          color: AppColors.textSecondary,
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.5,
@@ -940,7 +927,7 @@ class _ViewfinderWidget extends StatelessWidget {
                   Text(
                     'STYLE: 553558-174',
                     style: GoogleFonts.inter(
-                      color: Colors.white54,
+                      color: AppColors.textSecondary,
                       fontSize: 10,
                       letterSpacing: 0.3,
                     ),
@@ -949,7 +936,7 @@ class _ViewfinderWidget extends StatelessWidget {
                   Text(
                     'COLOR: WHITE/BLACK-RED',
                     style: GoogleFonts.inter(
-                      color: Colors.white38,
+                      color: AppColors.outline,
                       fontSize: 9,
                       letterSpacing: 0.3,
                     ),
@@ -965,9 +952,9 @@ class _ViewfinderWidget extends StatelessWidget {
                           child: Container(
                             margin: const EdgeInsets.symmetric(horizontal: 0.4),
                             color: i % 3 == 0
-                                ? Colors.white.withValues(alpha: 0.55)
+                                ? AppColors.textPrimary.withValues(alpha: 0.55)
                                 : i % 2 == 0
-                                ? Colors.white.withValues(alpha: 0.25)
+                                ? AppColors.textPrimary.withValues(alpha: 0.25)
                                 : Colors.transparent,
                           ),
                         ),
@@ -979,7 +966,7 @@ class _ViewfinderWidget extends StatelessWidget {
                     child: Text(
                       '036204133593',
                       style: GoogleFonts.inter(
-                        color: Colors.white38,
+                        color: AppColors.outline,
                         fontSize: 8,
                         letterSpacing: 1,
                       ),
@@ -994,7 +981,7 @@ class _ViewfinderWidget extends StatelessWidget {
             child: CustomPaint(
               painter: _BracketPainter(
                 progress: bracketProgress,
-                color: const Color(0xFFBA6A37),
+                color: AppColors.accent,
               ),
             ),
           ),
@@ -1012,13 +999,13 @@ class _ViewfinderWidget extends StatelessWidget {
                     gradient: const LinearGradient(
                       colors: [
                         Colors.transparent,
-                        Color(0xFFBA6A37),
+                        AppColors.accent,
                         Colors.transparent,
                       ],
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFBA6A37).withValues(alpha: 0.5),
+                        color: AppColors.accent.withValues(alpha: 0.5),
                         blurRadius: 6,
                       ),
                     ],
@@ -1092,9 +1079,9 @@ class _PlatformData {
 }
 
 const _kPlatforms = [
-  _PlatformData('StockX', 247, Color(0xFF22C55E), Icons.trending_up_rounded),
+  _PlatformData('StockX', 247, AppColors.profit, Icons.trending_up_rounded),
   _PlatformData('GOAT', 215, Color(0xFFE63946), Icons.directions_run_rounded),
-  _PlatformData('eBay', 189, Color(0xFFE6AC00), Icons.local_offer_rounded),
+  _PlatformData('eBay', 189, Color(0xFFB38600), Icons.local_offer_rounded),
 ];
 
 class _Page2 extends StatefulWidget {
@@ -1161,9 +1148,10 @@ class _Page2State extends State<_Page2> with SingleTickerProviderStateMixin {
                         vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1A1A2E),
+                        color: AppColors.surface,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white10),
+                        border: Border.all(color: AppColors.divider),
+                        boxShadow: AppColors.cardShadow,
                       ),
                       child: Row(
                         children: [
@@ -1186,8 +1174,9 @@ class _Page2State extends State<_Page2> with SingleTickerProviderStateMixin {
                           Expanded(
                             child: Text(
                               _kPlatforms[i].name,
-                              style: GoogleFonts.poppins(
-                                color: Colors.white,
+                              style: GoogleFonts.inter(
+                                letterSpacing: -0.5,
+                                color: AppColors.textPrimary,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 15,
                               ),
@@ -1195,7 +1184,8 @@ class _Page2State extends State<_Page2> with SingleTickerProviderStateMixin {
                           ),
                           Text(
                             '\$$displayPrice',
-                            style: GoogleFonts.poppins(
+                            style: GoogleFonts.inter(
+                              letterSpacing: -0.5,
                               color: _kPlatforms[i].color,
                               fontWeight: FontWeight.w700,
                               fontSize: 18,
@@ -1298,10 +1288,11 @@ class _Page3State extends State<_Page3> with SingleTickerProviderStateMixin {
                     children: [
                       Text(
                         '+\$127',
-                        style: GoogleFonts.poppins(
+                        style: GoogleFonts.inter(
+                          letterSpacing: -0.5,
                           fontSize: 64,
                           fontWeight: FontWeight.w800,
-                          color: const Color(0xFF22C55E),
+                          color: AppColors.profit,
                           height: 1,
                         ),
                       ),
@@ -1310,7 +1301,7 @@ class _Page3State extends State<_Page3> with SingleTickerProviderStateMixin {
                         'EST. PROFIT',
                         style: GoogleFonts.inter(
                           fontSize: 12,
-                          color: const Color(0xFF22C55E).withValues(alpha: 0.7),
+                          color: AppColors.profit.withValues(alpha: 0.7),
                           fontWeight: FontWeight.w600,
                           letterSpacing: 2,
                         ),
@@ -1347,20 +1338,24 @@ class _PriceChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A2E),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: AppColors.divider),
+        boxShadow: AppColors.cardShadow,
       ),
       child: RichText(
         text: TextSpan(
-          style: GoogleFonts.inter(fontSize: 14, color: Colors.white54),
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            color: AppColors.textSecondary,
+          ),
           children: [
             TextSpan(text: '$label  →  '),
             TextSpan(
               text: value,
               style: GoogleFonts.inter(
                 fontSize: 14,
-                color: Colors.white,
+                color: AppColors.textPrimary,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -1433,22 +1428,23 @@ class _Page4State extends State<_Page4> with SingleTickerProviderStateMixin {
                 opacity: statEased,
                 child: Text(
                   '\$40 – \$120',
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
+                    letterSpacing: -0.5,
                     fontSize: 52,
                     fontWeight: FontWeight.w800,
-                    color: const Color(0xFF22C55E),
+                    color: AppColors.profit,
                     height: 1,
                     shadows: [
                       Shadow(
-                        color: const Color(
-                          0xFF22C55E,
-                        ).withValues(alpha: 0.55 * statEased),
+                        color: AppColors.profit.withValues(
+                          alpha: 0.22 * statEased,
+                        ),
                         blurRadius: 24,
                       ),
                       Shadow(
-                        color: const Color(
-                          0xFF22C55E,
-                        ).withValues(alpha: 0.25 * statEased),
+                        color: AppColors.profit.withValues(
+                          alpha: 0.10 * statEased,
+                        ),
                         blurRadius: 48,
                       ),
                     ],
@@ -1474,9 +1470,10 @@ class _Page4State extends State<_Page4> with SingleTickerProviderStateMixin {
                         vertical: 11,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1A1A2E),
+                        color: AppColors.surface,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white10),
+                        border: Border.all(color: AppColors.divider),
+                        boxShadow: AppColors.cardShadow,
                       ),
                       child: Row(
                         children: [
@@ -1484,14 +1481,12 @@ class _Page4State extends State<_Page4> with SingleTickerProviderStateMixin {
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: const Color(
-                                0xFF22C55E,
-                              ).withValues(alpha: 0.12),
+                              color: AppColors.profit.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Icon(
                               Icons.directions_run_rounded,
-                              color: Color(0xFF22C55E),
+                              color: AppColors.profit,
                               size: 16,
                             ),
                           ),
@@ -1500,7 +1495,7 @@ class _Page4State extends State<_Page4> with SingleTickerProviderStateMixin {
                             child: Text(
                               _kFlipCards[i].name,
                               style: GoogleFonts.inter(
-                                color: Colors.white,
+                                color: AppColors.textPrimary,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -1508,8 +1503,9 @@ class _Page4State extends State<_Page4> with SingleTickerProviderStateMixin {
                           ),
                           Text(
                             _kFlipCards[i].profit,
-                            style: GoogleFonts.poppins(
-                              color: const Color(0xFF22C55E),
+                            style: GoogleFonts.inter(
+                              letterSpacing: -0.5,
+                              color: AppColors.profit,
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
                             ),
@@ -1554,11 +1550,11 @@ class _PressableButtonState extends State<_PressableButton> {
   @override
   Widget build(BuildContext context) {
     final bgColor = widget.enabled
-        ? const Color(0xFFBA6A37)
-        : const Color(0xFFBA6A37).withValues(alpha: 0.30);
+        ? AppColors.surface
+        : AppColors.surface.withValues(alpha: 0.6);
     final textColor = widget.enabled
-        ? Colors.white
-        : Colors.white.withValues(alpha: 0.40);
+        ? AppColors.textPrimary
+        : AppColors.textSecondary;
 
     return GestureDetector(
       onTapDown: widget.enabled ? (_) => setState(() => _pressed = true) : null,
@@ -1580,12 +1576,21 @@ class _PressableButtonState extends State<_PressableButton> {
           height: 56,
           decoration: BoxDecoration(
             color: bgColor,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: widget.enabled
+                  ? AppColors.buttonBorder
+                  : AppColors.buttonBorder.withValues(alpha: 0.5),
+            ),
+            boxShadow: widget.enabled
+                ? AppColors.buttonShadow(pressed: _pressed)
+                : null,
           ),
           alignment: Alignment.center,
           child: Text(
             widget.label,
-            style: GoogleFonts.poppins(
+            style: GoogleFonts.inter(
+              letterSpacing: -0.5,
               fontSize: 17,
               fontWeight: FontWeight.w700,
               color: textColor,
@@ -1669,7 +1674,7 @@ class _AnalysisScreenState extends State<_AnalysisScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -1682,12 +1687,12 @@ class _AnalysisScreenState extends State<_AnalysisScreen>
                   width: 72,
                   height: 72,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFBA6A37).withValues(alpha: 0.15),
+                    color: AppColors.accent.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: const Icon(
                     Icons.directions_run_rounded,
-                    color: Color(0xFFBA6A37),
+                    color: AppColors.accent,
                     size: 36,
                   ),
                 ),
@@ -1695,10 +1700,11 @@ class _AnalysisScreenState extends State<_AnalysisScreen>
                 Text(
                   'Scanning sneaker\ndatabase…',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(
+                  style: GoogleFonts.inter(
+                    letterSpacing: -0.5,
                     fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
                     height: 1.3,
                   ),
                 ),
@@ -1711,9 +1717,9 @@ class _AnalysisScreenState extends State<_AnalysisScreen>
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
                         value: _progressCtrl.value,
-                        backgroundColor: const Color(0xFF1A1A2E),
+                        backgroundColor: AppColors.divider,
                         valueColor: const AlwaysStoppedAnimation(
-                          Color(0xFFBA6A37),
+                          AppColors.accent,
                         ),
                         minHeight: 6,
                       ),
@@ -1758,7 +1764,7 @@ class _AnalysisStep extends StatelessWidget {
             children: [
               const Icon(
                 Icons.check_circle_rounded,
-                color: Color(0xFF22C55E),
+                color: AppColors.profit,
                 size: 20,
               ),
               const SizedBox(width: 12),
@@ -1766,7 +1772,7 @@ class _AnalysisStep extends StatelessWidget {
                 label,
                 style: GoogleFonts.inter(
                   fontSize: 15,
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                   fontWeight: FontWeight.w500,
                 ),
               ),

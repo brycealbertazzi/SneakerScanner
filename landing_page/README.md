@@ -35,7 +35,7 @@ Nearly all copy lives in two files; the components are just layout.
 
 Set in `tailwind.config.ts`:
 
-- `brand` `#BA6A37` — SneakScan's in-app accent (`0xFFBA6A37` in `lib/`)
+- `brand` `#E66B25` — SneakScan's in-app accent (`AppColors.brand` in `lib/theme/app_theme.dart`)
 - `page` `#F2F2F7` — page background behind the white cards
 
 `components/PhoneFrame.tsx` is the device bezel used six times across the page. It takes
