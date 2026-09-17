@@ -12,6 +12,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../services/mixpanel_service.dart';
 import '../services/subscription_service.dart';
+import '../widgets/pulsing_app_icon.dart';
 import 'main_screen.dart';
 import 'paywall_page.dart';
 import '../theme/app_theme.dart';
@@ -300,20 +301,7 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(25),
-                      boxShadow: AppColors.cardShadow,
-                    ),
-                    child: const Icon(
-                      Icons.directions_run_rounded,
-                      size: 48,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
+                  const PulsingAppIcon(size: 100),
                   const SizedBox(height: 32),
                   Text(
                     'SneakScan',
