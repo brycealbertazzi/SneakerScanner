@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 
-/** Aspect ratio (width / height) of a 1284x2778 iPhone screenshot. */
-export const SCREENSHOT_ASPECT = 1284 / 2778;
+/** Aspect ratio (width / height) of a 1206x2622 iPhone screenshot. */
+export const SCREENSHOT_ASPECT = 1206 / 2622;
 /**
  * Aspect ratio of the demo recording (886x1920).
  *
- * Sourced from assets/SSASCUpdatedDemoFinalized.mp4, NOT assets/SSDemo19201080.mp4 —
- * the latter is the same 19s recording center-cropped to 9:16, which cuts the app's
- * top bar and its entire bottom button row out of frame.
+ * Sourced from assets/LightThemeSneakScanAssets/SSLightThemeDemoASCResized.mp4, which
+ * is already the full app frame. Do not swap in a 9:16 crop — that cuts the app's top
+ * bar and its entire bottom button row out of frame.
  */
 export const VIDEO_ASPECT = 886 / 1920;
 

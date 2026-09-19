@@ -48,30 +48,31 @@ screenshots, `VIDEO_ASPECT` (9:16) for the hero demo.
 
 ```bash
 OUT=landing_page/public
-SRC="ios/App Store Connect Assets/orange"
+SRC="assets/LightThemeSneakScanAssets/ScreenShots/Uncut"
 
-# Screenshots → WebP at 660px wide
-ffmpeg -y -i "$SRC/HomePage.PNG"    -vf scale=660:-2 -quality 82 $OUT/scan-screen.webp
-ffmpeg -y -i "$SRC/ScanDetails.PNG" -vf scale=660:-2 -quality 82 $OUT/details-screen.webp
-ffmpeg -y -i "$SRC/GOAT.PNG"        -vf scale=660:-2 -quality 82 $OUT/market-screen.webp
-ffmpeg -y -i "$SRC/ScanHistory.PNG" -vf scale=660:-2 -quality 82 $OUT/history-screen.webp
+# Screenshots → WebP at 660px wide. Sources are 1206x2622 (light theme) —
+# SCREENSHOT_ASPECT in components/PhoneFrame.tsx must match.
+ffmpeg -y -i "$SRC/Home.PNG"         -vf scale=660:-2 -quality 82 $OUT/scan-screen.webp
+ffmpeg -y -i "$SRC/PriceDetails.PNG" -vf scale=660:-2 -quality 82 $OUT/details-screen.webp
+ffmpeg -y -i "$SRC/GOAT.PNG"         -vf scale=660:-2 -quality 82 $OUT/market-screen.webp
+ffmpeg -y -i "$SRC/History.PNG"      -vf scale=660:-2 -quality 82 $OUT/history-screen.webp
 
 # Demo video. The source is HEVC/H.265, which Chrome and Firefox refuse to play in a
 # <video> tag — it MUST be transcoded. -an because the hero autoplays muted.
-ffmpeg -y -i assets/SSASCUpdatedDemoFinalized.mp4 -vf scale=720:-2 -c:v libx264 -profile:v high \
+ffmpeg -y -i assets/LightThemeSneakScanAssets/SSLightThemeDemoASCResized.mp4 -vf scale=720:-2 -c:v libx264 -profile:v high \
   -crf 26 -preset slow -pix_fmt yuv420p -an -movflags +faststart $OUT/demo.mp4
-ffmpeg -y -i assets/SSASCUpdatedDemoFinalized.mp4 -vf scale=720:-2 -c:v libvpx-vp9 \
+ffmpeg -y -i assets/LightThemeSneakScanAssets/SSLightThemeDemoASCResized.mp4 -vf scale=720:-2 -c:v libvpx-vp9 \
   -crf 34 -b:v 0 -an -row-mt 1 $OUT/demo.webm
-ffmpeg -y -i assets/SSASCUpdatedDemoFinalized.mp4 -ss 0.5 -frames:v 1 -vf scale=660:-2 $OUT/demo-poster.webp
+ffmpeg -y -i assets/LightThemeSneakScanAssets/SSLightThemeDemoASCResized.mp4 -ss 0.5 -frames:v 1 -vf scale=660:-2 $OUT/demo-poster.webp
 ```
 
 Total `public/` weight is ~3.5 MB, dominated by the two video encodes.
 
-> **Use `assets/SSASCUpdatedDemoFinalized.mp4` (886×1920), not
-> `assets/SSDemo19201080.mp4`.** They are the same 19-second recording, but the latter
-> was center-cropped to 9:16 — it cuts off the app's top bar and its entire bottom
-> button row. That crop is baked into the file and cannot be undone by resizing the
-> phone frame. `VIDEO_ASPECT` in `components/PhoneFrame.tsx` is 886/1920 to match.
+> **Use `assets/LightThemeSneakScanAssets/SSLightThemeDemoASCResized.mp4` (886×1920,
+> 16s), not a 9:16 crop such as `assets/SSDemo19201080.mp4`.** A center crop cuts off
+> the app's top bar and its entire bottom button row, and it cannot be undone by
+> resizing the phone frame. `VIDEO_ASPECT` in `components/PhoneFrame.tsx` is 886/1920
+> to match.
 
 ## Deploying
 
