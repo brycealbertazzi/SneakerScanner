@@ -90,10 +90,7 @@ class SimilarResultsSection extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
                 'No similar results found',
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: Colors.grey[600],
-                ),
+                style: GoogleFonts.inter(fontSize: 13, color: Colors.grey[600]),
               ),
             ),
           ),
@@ -136,19 +133,14 @@ class SimilarResultsSection extends StatelessWidget {
           const Center(
             child: Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
-              child: CircularProgressIndicator(
-                color: Color(0xFFBA6A37),
-              ),
+              child: CircularProgressIndicator(color: Color(0xFFBA6A37)),
             ),
           ),
           const SizedBox(height: 8),
           Center(
             child: Text(
               'Searching for similar results...',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: Colors.grey[500],
-              ),
+              style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[500]),
             ),
           ),
         ],
@@ -189,10 +181,7 @@ class SimilarResultsSection extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Products similar to your scan:',
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              color: Colors.grey[500],
-            ),
+            style: GoogleFonts.inter(fontSize: 12, color: Colors.grey[500]),
           ),
           const SizedBox(height: 12),
           ...candidates.map((candidate) {
@@ -211,7 +200,10 @@ class SimilarResultsSection extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: const Color(0xFF252525),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFF333333), width: 1),
+                    border: Border.all(
+                      color: const Color(0xFF333333),
+                      width: 1,
+                    ),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,

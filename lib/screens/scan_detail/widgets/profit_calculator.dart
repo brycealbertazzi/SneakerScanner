@@ -33,6 +33,9 @@ class ProfitCalculator extends StatefulWidget {
   final String? stockXProductId;
   final String? goatProductId;
 
+  /// Full shoe name shown on the Recent Sales pages.
+  final String? productTitle;
+
   const ProfitCalculator({
     super.key,
     required this.productInfo,
@@ -61,6 +64,7 @@ class ProfitCalculator extends StatefulWidget {
     required this.onSavePrices,
     this.stockXProductId,
     this.goatProductId,
+    this.productTitle,
   });
 
   @override
@@ -360,7 +364,8 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             onSizeSelected: widget.onStockXSizeSelected,
             salesPlatform: 'stockx',
             salesProductId: widget.stockXProductId,
-            productTitle: widget.productInfo?['title']?.toString(),
+            productTitle:
+                widget.productTitle ?? widget.productInfo?['title']?.toString(),
           ),
           const SizedBox(height: 12),
 
@@ -388,7 +393,8 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             onSizeSelected: widget.onGoatSizeSelected,
             salesPlatform: 'goat',
             salesProductId: widget.goatProductId,
-            productTitle: widget.productInfo?['title']?.toString(),
+            productTitle:
+                widget.productTitle ?? widget.productInfo?['title']?.toString(),
           ),
         ],
       ),

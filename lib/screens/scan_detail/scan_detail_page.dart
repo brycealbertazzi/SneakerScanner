@@ -2102,6 +2102,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                     if (hasPrices) ...[
                       ProfitCalculator(
                         productInfo: _productInfo,
+                        productTitle: _resolvedTitle,
                         manualRetailPrice: _manualRetailPrice,
                         ebayAveragePrice: _ebayAveragePrice,
                         stockXPrice: _stockXPrice,

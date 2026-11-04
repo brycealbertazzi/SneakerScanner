@@ -752,7 +752,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                     )
                   else
                     Text(
-                      'Retail price not found',
+                      'Please Enter Retail Price',
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         color: AppColors.textSecondary,

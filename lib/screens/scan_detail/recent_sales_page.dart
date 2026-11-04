@@ -73,11 +73,14 @@ class RecentSalesPage extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (productTitle != null && productTitle!.isNotEmpty)
             Text(
               productTitle!,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.inter(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
@@ -86,14 +89,18 @@ class RecentSalesPage extends StatelessWidget {
             ),
           const SizedBox(height: 4),
           Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, size: 14, color: iconColor),
               const SizedBox(width: 6),
-              Text(
-                '${sales.length} recent sale${sales.length == 1 ? '' : 's'} on $platformLabel',
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
+              Flexible(
+                child: Text(
+                  '${sales.length} recent sale${sales.length == 1 ? '' : 's'} on $platformLabel',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
             ],
