@@ -483,6 +483,22 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           continue;
         }
 
+        // Product id for /sales. Done before the price check so sales still
+        // load when a platform has no current asks. StockX sales need the
+        // product UUID and GOAT needs the numeric id, so never use the slug.
+        // SKU items carry it as `source_product_id`; GTIN items as `product_id`.
+        final productId = (item['source_product_id'] ?? item['product_id'])
+            ?.toString();
+        if (productId != null && productId.isNotEmpty) {
+          if (shopName == 'stockx' && _stockXProductId == null) {
+            _stockXProductId = productId;
+            SalesService.fetch('stockx', productId);
+          } else if (shopName == 'goat' && _goatProductId == null) {
+            _goatProductId = productId;
+            SalesService.fetch('goat', productId);
+          }
+        }
+
         // SKU unified items have `prices` as a size→price map.
         // GTIN items have `price` as a direct number.
         final pricesRaw = item['prices'];
@@ -505,21 +521,6 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         if (price == null || price <= 0) continue;
 
         final slug = (item['slug'] ?? item['id'] ?? item['name'])?.toString();
-
-        // Product id for /sales. Captured even when a saved price already
-        // exists (reopened scans), and prefetched so it loads alongside the
-        // rest of the page. StockX accepts a slug too, so fall back to it.
-        final productId = (item['id'] ?? item['product_id'] ?? item['slug'])
-            ?.toString();
-        if (productId != null && productId.isNotEmpty) {
-          if (shopName == 'stockx' && _stockXProductId == null) {
-            _stockXProductId = productId;
-            SalesService.fetch('stockx', productId);
-          } else if (shopName == 'goat' && _goatProductId == null) {
-            _goatProductId = productId;
-            SalesService.fetch('goat', productId);
-          }
-        }
 
         if (shopName == 'stockx' && _stockXPrice == null) {
           debugPrint(
@@ -564,6 +565,89 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
           if (img != null) {
             productInfo['images'] = [img];
             break;
+          }
+        }
+      }
+
+      // ── Step 1b: Exact-SKU lookup on the platform endpoints ───────────
+      // The unified endpoint often has no StockX/GOAT entry for a SKU that
+      // the platform endpoints do have. Runs for any brand, before the
+      // colorway fallback, so an exact match always wins over a variant.
+      if (sku != null && sku.isNotEmpty) {
+        final missing = [
+          if (_stockXPrice == null) 'stockx',
+          if (_goatPrice == null) 'goat',
+        ];
+        if (missing.isNotEmpty) {
+          debugPrint('═══ STEP 1b: Exact SKU on ${missing.join(', ')} ═══');
+        }
+        final matches = await Future.wait(
+          missing.map((p) => _fetchExactPlatformMatch(p, sku, size)),
+        );
+        for (var i = 0; i < missing.length; i++) {
+          final match = matches[i];
+          if (match == null) continue;
+          final platform = missing[i];
+
+          if (match.productId != null) {
+            if (platform == 'stockx' && _stockXProductId == null) {
+              _stockXProductId = match.productId;
+              SalesService.fetch('stockx', match.productId!);
+            } else if (platform == 'goat' && _goatProductId == null) {
+              _goatProductId = match.productId;
+              SalesService.fetch('goat', match.productId!);
+            }
+          }
+
+          if (platform == 'stockx') {
+            _stockXPrice = match.price;
+            _stockXSlug = match.slug;
+            _stockXPriceIsLowest = match.isLowest;
+            if (match.sizeMap != null) {
+              _stockXSizeMap = match.sizeMap;
+              if (size != null && match.sizeMap!.containsKey(size)) {
+                _selectedStockXSize = size;
+              }
+            }
+          } else {
+            _goatPrice = match.price;
+            _goatSlug = match.slug;
+            _goatPriceIsLowest = match.isLowest;
+            if (match.sizeMap != null) {
+              _goatSizeMap = match.sizeMap;
+              if (size != null && match.sizeMap!.containsKey(size)) {
+                _selectedGoatSize = size;
+              }
+            }
+          }
+
+          // Unified returns similar products, so its identity (title, image)
+          // can belong to a neighbouring SKU (e.g. -100 for a -101 lookup).
+          // An exact platform match replaces it.
+          final identitySku = (productInfo?['sku'] ?? '').toString();
+          final identityIsExact =
+              productInfo != null &&
+              identitySku
+                      .replaceAll(RegExp(r'[^A-Za-z0-9]'), '')
+                      .toUpperCase() ==
+                  sku.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+          if (!identityIsExact && match.title != null) {
+            setState(() {
+              _resolvedTitle = match.title;
+              if (match.brand != null) _resolvedBrand = match.brand;
+            });
+            productInfo = {
+              'title': match.title,
+              'brand': match.brand ?? '',
+              'sku': match.sku,
+              'styleCode': match.sku,
+              'retailPrice': null,
+              'images': match.image != null ? [match.image] : [],
+              'model': match.model ?? '',
+              'slug': match.slug ?? '',
+              'category': '',
+            };
+            confirmed = true;
           }
         }
       }
@@ -1384,6 +1468,129 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         productId: map['productId']?.toString(),
       );
     }).toList();
+  }
+
+  /// Look up [sku] on a platform-specific KicksDB endpoint ('stockx' or
+  /// 'goat') and return the product whose SKU matches exactly, ignoring
+  /// spaces and dashes. Null when there's no exact match or no price.
+  Future<
+    ({
+      double price,
+      bool isLowest,
+      Map<String, double>? sizeMap,
+      String? productId,
+      String? slug,
+      String? title,
+      String? brand,
+      String? model,
+      String? image,
+      String sku,
+    })?
+  >
+  _fetchExactPlatformMatch(String platform, String sku, String? size) async {
+    final uri = Uri(
+      scheme: 'https',
+      host: 'api.kicks.dev',
+      path: '/v3/$platform/products',
+      queryParameters: {
+        'query': sku,
+        'limit': '5',
+        'display[prices]': 'true',
+        'display[variants]': 'true',
+      },
+    );
+    debugPrint('[KicksDB $platform exact] Request: $uri');
+
+    String norm(String s) =>
+        s.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toUpperCase();
+    // GOAT can send sizes as numbers (10.0); match the unified keys ("10").
+    String sizeKey(dynamic s) {
+      final str = s.toString().trim();
+      return str.endsWith('.0') ? str.substring(0, str.length - 2) : str;
+    }
+
+    try {
+      final response = await http
+          .get(
+            uri,
+            headers: {'Authorization': 'Bearer ${ApiKeys.kicksDbApiKey}'},
+          )
+          .timeout(const Duration(seconds: 10));
+      debugPrint('[KicksDB $platform exact] Status: ${response.statusCode}');
+      if (response.statusCode != 200) return null;
+
+      final body = jsonDecode(response.body);
+      final data = body is Map<String, dynamic> ? body['data'] : body;
+      final products = data is List
+          ? data.whereType<Map<String, dynamic>>().toList()
+          : data is Map<String, dynamic>
+          ? [data]
+          : <Map<String, dynamic>>[];
+
+      for (final product in products) {
+        final apiSku = (product['sku'] ?? product['style_id'] ?? '').toString();
+        if (apiSku.isEmpty || norm(apiSku) != norm(sku)) continue;
+
+        // Size → lowest ask, from the per-size variants.
+        final sizeMap = <String, double>{};
+        final variants = product['variants'];
+        if (variants is List) {
+          for (final v in variants.whereType<Map>()) {
+            final s = v['size'];
+            final ask = double.tryParse((v['lowest_ask'] ?? '').toString());
+            if (s != null && ask != null && ask > 0) {
+              sizeMap[sizeKey(s)] = ask;
+            }
+          }
+        }
+
+        double? price;
+        bool isLowest = false;
+        if (size != null && sizeMap.containsKey(size)) {
+          price = sizeMap[size];
+        } else if (sizeMap.isNotEmpty) {
+          price = sizeMap.values.reduce((a, b) => a < b ? a : b);
+          isLowest = true;
+        } else {
+          price = _extractOldFormatPrice(product);
+          isLowest = true;
+        }
+        if (price == null || price <= 0) {
+          debugPrint('[KicksDB $platform exact] "$apiSku" matched, no price');
+          return null;
+        }
+
+        final images = product['images'];
+        final image = _normalizeImageUrl(
+          (product['image'] ??
+                  product['image_url'] ??
+                  (images is List && images.isNotEmpty ? images.first : null))
+              ?.toString(),
+        );
+        final id = product['id']?.toString();
+        debugPrint(
+          '[KicksDB $platform exact] Match "$apiSku": '
+          '\$${price.toStringAsFixed(2)}, id=$id',
+        );
+        return (
+          price: price,
+          isLowest: isLowest,
+          sizeMap: sizeMap.isEmpty ? null : sizeMap,
+          productId: (id != null && id.isNotEmpty) ? id : null,
+          slug: product['slug']?.toString(),
+          title: (product['title'] ?? product['name'])?.toString(),
+          brand: product['brand']?.toString(),
+          model: product['model']?.toString(),
+          image: image,
+          sku: apiSku,
+        );
+      }
+      debugPrint('[KicksDB $platform exact] No exact SKU match');
+      return null;
+    } catch (e) {
+      debugPrint('[KicksDB $platform exact] Error: $e');
+      return null;
+    }
   }
 
   /// Fetch colorway variants from a platform-specific KicksDB endpoint.

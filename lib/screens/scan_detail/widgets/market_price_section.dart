@@ -151,9 +151,9 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
   /// Product id to pull sales for: the selected colorway's, or the exact match.
   String? get _salesId {
     if (widget.salesPlatform == null) return null;
+    // No slug fallback: StockX sales need the UUID and GOAT the numeric id.
     final id = _hasColorways
-        ? (widget.colorways![_selectedColorwayIndex].productId ??
-              widget.colorways![_selectedColorwayIndex].slug)
+        ? widget.colorways![_selectedColorwayIndex].productId
         : widget.salesProductId;
     return (id != null && id.isNotEmpty) ? id : null;
   }
