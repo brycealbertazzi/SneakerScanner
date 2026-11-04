@@ -8,6 +8,9 @@ class ColorwayVariant {
   final double price;
   final String? slug;
 
+  /// KicksDB product id, used for the /sales endpoint. Falls back to [slug].
+  final String? productId;
+
   const ColorwayVariant({
     required this.sku,
     required this.colorCode,
@@ -15,6 +18,7 @@ class ColorwayVariant {
     required this.displayColor,
     required this.price,
     this.slug,
+    this.productId,
   });
 }
 

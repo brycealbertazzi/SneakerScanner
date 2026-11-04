@@ -30,6 +30,8 @@ class ProfitCalculator extends StatefulWidget {
   final ValueChanged<String?>? onGoatSizeSelected;
   final ValueChanged<double?> onRetailPriceChanged;
   final VoidCallback onSavePrices;
+  final String? stockXProductId;
+  final String? goatProductId;
 
   const ProfitCalculator({
     super.key,
@@ -57,6 +59,8 @@ class ProfitCalculator extends StatefulWidget {
     this.onGoatSizeSelected,
     required this.onRetailPriceChanged,
     required this.onSavePrices,
+    this.stockXProductId,
+    this.goatProductId,
   });
 
   @override
@@ -354,6 +358,9 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             sizeMap: widget.stockXSizeMap,
             selectedSize: widget.selectedStockXSize,
             onSizeSelected: widget.onStockXSizeSelected,
+            salesPlatform: 'stockx',
+            salesProductId: widget.stockXProductId,
+            productTitle: widget.productInfo?['title']?.toString(),
           ),
           const SizedBox(height: 12),
 
@@ -379,6 +386,9 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             sizeMap: widget.goatSizeMap,
             selectedSize: widget.selectedGoatSize,
             onSizeSelected: widget.onGoatSizeSelected,
+            salesPlatform: 'goat',
+            salesProductId: widget.goatProductId,
+            productTitle: widget.productInfo?['title']?.toString(),
           ),
         ],
       ),

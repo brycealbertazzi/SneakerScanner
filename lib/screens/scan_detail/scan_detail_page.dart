@@ -11,6 +11,7 @@ import '../../models/scan_data.dart';
 import '../../services/ebay_auth_service.dart';
 import '../../services/nike_colorway_utils.dart';
 import '../../services/review_prompt_service.dart';
+import '../../services/sales_service.dart';
 import 'widgets/info_card.dart';
 import 'widgets/profit_calculator.dart';
 import '../../theme/app_theme.dart';
@@ -76,6 +77,11 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
   String? _selectedStockXSize;
   String? _selectedGoatSize;
 
+  // KicksDB product ids for the exact-SKU match, used for /sales.
+  // Null when the platform had no result — then no sales call is made.
+  String? _stockXProductId;
+  String? _goatProductId;
+
   // Colorway variants (Nike/Jordan fallback)
   List<ColorwayVariant>? _stockXColorways;
   List<ColorwayVariant>? _goatColorways;
@@ -139,6 +145,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             );
             final savedStockXSlug = scanDataMap['stockxSlug'] as String?;
             final savedGoatSlug = scanDataMap['goatSlug'] as String?;
+            final savedStockXProductId = scanDataMap['stockxProductId']
+                ?.toString();
+            final savedGoatProductId = scanDataMap['goatProductId']?.toString();
             final savedSelectedStockXSize =
                 scanDataMap['selectedStockXSize'] as String?;
             final savedSelectedGoatSize =
@@ -170,6 +179,13 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               }
               if (savedGoatSlug != null && savedGoatSlug.isNotEmpty) {
                 _goatSlug = savedGoatSlug;
+              }
+              if (savedStockXProductId != null &&
+                  savedStockXProductId.isNotEmpty) {
+                _stockXProductId = savedStockXProductId;
+              }
+              if (savedGoatProductId != null && savedGoatProductId.isNotEmpty) {
+                _goatProductId = savedGoatProductId;
               }
               if (savedSelectedStockXSize != null &&
                   savedSelectedStockXSize.isNotEmpty) {
@@ -489,6 +505,21 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         if (price == null || price <= 0) continue;
 
         final slug = (item['slug'] ?? item['id'] ?? item['name'])?.toString();
+
+        // Product id for /sales. Captured even when a saved price already
+        // exists (reopened scans), and prefetched so it loads alongside the
+        // rest of the page. StockX accepts a slug too, so fall back to it.
+        final productId = (item['id'] ?? item['product_id'] ?? item['slug'])
+            ?.toString();
+        if (productId != null && productId.isNotEmpty) {
+          if (shopName == 'stockx' && _stockXProductId == null) {
+            _stockXProductId = productId;
+            SalesService.fetch('stockx', productId);
+          } else if (shopName == 'goat' && _goatProductId == null) {
+            _goatProductId = productId;
+            SalesService.fetch('goat', productId);
+          }
+        }
 
         if (shopName == 'stockx' && _stockXPrice == null) {
           debugPrint(
@@ -1350,6 +1381,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
         displayColor: color,
         price: double.tryParse(map['price']?.toString() ?? '') ?? 0,
         slug: map['slug']?.toString(),
+        productId: map['productId']?.toString(),
       );
     }).toList();
   }
@@ -1470,6 +1502,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             displayColor: color,
             price: price,
             slug: slug,
+            productId: product['id']?.toString(),
           ),
         );
       }
@@ -1558,6 +1591,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       if (_stockXSlug != null && _stockXSlug!.isNotEmpty) {
         updateData['stockxSlug'] = _stockXSlug;
       }
+      if (_stockXProductId != null && _stockXProductId!.isNotEmpty) {
+        updateData['stockxProductId'] = _stockXProductId;
+      }
       if (_selectedStockXSize != null && _selectedStockXSize!.isNotEmpty) {
         updateData['selectedStockXSize'] = _selectedStockXSize;
       }
@@ -1567,6 +1603,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       }
       if (_goatSlug != null && _goatSlug!.isNotEmpty) {
         updateData['goatSlug'] = _goatSlug;
+      }
+      if (_goatProductId != null && _goatProductId!.isNotEmpty) {
+        updateData['goatProductId'] = _goatProductId;
       }
       if (_selectedGoatSize != null && _selectedGoatSize!.isNotEmpty) {
         updateData['selectedGoatSize'] = _selectedGoatSize;
@@ -1581,6 +1620,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 'colorFamily': v.colorFamily,
                 'price': v.price,
                 'slug': v.slug,
+                'productId': v.productId,
               },
             )
             .toList();
@@ -1595,6 +1635,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                 'colorFamily': v.colorFamily,
                 'price': v.price,
                 'slug': v.slug,
+                'productId': v.productId,
               },
             )
             .toList();
@@ -1915,6 +1956,8 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                           setState(() => _manualRetailPrice = value);
                         },
                         onSavePrices: _savePricesToDatabase,
+                        stockXProductId: _stockXProductId,
+                        goatProductId: _goatProductId,
                       ),
                       const SizedBox(height: 24),
                     ],

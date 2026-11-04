@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../services/nike_colorway_utils.dart';
 import '../../../theme/app_theme.dart';
+import 'recent_sales_row.dart';
 
 class MarketPriceSection extends StatefulWidget {
   final String label;
@@ -50,6 +51,16 @@ class MarketPriceSection extends StatefulWidget {
   /// Called when the user picks a size from the dropdown.
   final ValueChanged<String?>? onSizeSelected;
 
+  /// 'stockx' or 'goat' to show recent sales; null hides them (eBay).
+  final String? salesPlatform;
+
+  /// KicksDB product id for the exact-SKU match. Colorway variants use their
+  /// own id instead. When neither exists, no sales call is made.
+  final String? salesProductId;
+
+  /// Shown at the top of the Recent Sales page.
+  final String? productTitle;
+
   const MarketPriceSection({
     super.key,
     required this.label,
@@ -73,6 +84,9 @@ class MarketPriceSection extends StatefulWidget {
     this.sizeMap,
     this.selectedSize,
     this.onSizeSelected,
+    this.salesPlatform,
+    this.salesProductId,
+    this.productTitle,
   });
 
   @override
@@ -132,6 +146,16 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
     if (_hasColorways) return false;
     if (_hasSizeMap) return _selectedSize == null;
     return widget.isLowestAsk;
+  }
+
+  /// Product id to pull sales for: the selected colorway's, or the exact match.
+  String? get _salesId {
+    if (widget.salesPlatform == null) return null;
+    final id = _hasColorways
+        ? (widget.colorways![_selectedColorwayIndex].productId ??
+              widget.colorways![_selectedColorwayIndex].slug)
+        : widget.salesProductId;
+    return (id != null && id.isNotEmpty) ? id : null;
   }
 
   double? get _sellerFeeAmount {
@@ -737,6 +761,24 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
                     ),
                 ],
               ),
+            ),
+          ],
+
+          // Recent sales (StockX / GOAT)
+          if (price != null && !widget.isLoading && _salesId != null) ...[
+            const SizedBox(height: 8),
+            RecentSalesRow(
+              platform: widget.salesPlatform!,
+              label: widget.label,
+              icon: widget.icon,
+              iconColor: widget.iconColor,
+              productId: _salesId!,
+              productTitle: _hasColorways
+                  ? widget.colorways![_selectedColorwayIndex].sku
+                  : widget.productTitle,
+              highlightSize: _hasColorways
+                  ? widget.scannedSize
+                  : (_selectedSize ?? widget.scannedSize),
             ),
           ],
         ],
