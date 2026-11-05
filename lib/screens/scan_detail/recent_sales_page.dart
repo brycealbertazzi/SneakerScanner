@@ -202,16 +202,6 @@ class _SaleCard extends StatelessWidget {
                     ),
                   ),
                 ),
-              if (date != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  relativeSaleTime(date),
-                  style: GoogleFonts.inter(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
             ],
           ),
         ],
