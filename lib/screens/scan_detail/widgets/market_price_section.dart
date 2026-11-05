@@ -51,15 +51,17 @@ class MarketPriceSection extends StatefulWidget {
   /// Called when the user picks a size from the dropdown.
   final ValueChanged<String?>? onSizeSelected;
 
-  /// 'stockx' or 'goat' to show recent sales; null hides them (eBay).
+  /// 'stockx', 'goat' or 'ebay' to show recent sales; null hides them.
   final String? salesPlatform;
 
-  /// KicksDB product id for the exact-SKU match. Colorway variants use their
-  /// own id instead. When neither exists, no sales call is made.
+  /// KicksDB product id for the exact-SKU match (eBay: the CompsAPI search
+  /// text). Colorway variants use their own id instead. When neither exists,
+  /// no sales call is made.
   final String? salesProductId;
 
   /// Shown at the top of the Recent Sales page.
   final String? productTitle;
+  final String? productImage;
 
   const MarketPriceSection({
     super.key,
@@ -87,6 +89,7 @@ class MarketPriceSection extends StatefulWidget {
     this.salesPlatform,
     this.salesProductId,
     this.productTitle,
+    this.productImage,
   });
 
   @override
@@ -764,7 +767,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
             ),
           ],
 
-          // Recent sales (StockX / GOAT)
+          // Recent sales (StockX / GOAT / eBay)
           if (price != null && !widget.isLoading && _salesId != null) ...[
             const SizedBox(height: 8),
             RecentSalesRow(
@@ -776,6 +779,7 @@ class _MarketPriceSectionState extends State<MarketPriceSection> {
               productTitle: _hasColorways
                   ? widget.colorways![_selectedColorwayIndex].sku
                   : widget.productTitle,
+              productImage: widget.productImage,
               highlightSize: _hasColorways
                   ? widget.scannedSize
                   : (_selectedSize ?? widget.scannedSize),

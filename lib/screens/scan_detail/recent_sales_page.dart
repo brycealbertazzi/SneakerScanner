@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/sales_service.dart';
 import '../../theme/app_theme.dart';
 
-String formatSaleAmount(SaleRecord sale) => sale.currency == 'USD'
-    ? '\$${sale.amount.toStringAsFixed(2)}'
-    : '${sale.amount.toStringAsFixed(2)} ${sale.currency}';
+String formatSaleAmount(SaleRecord sale) =>
+    formatPrice(sale.amount, sale.currency);
+
+String formatPrice(double amount, String currency) => currency == 'USD'
+    ? '\$${amount.toStringAsFixed(2)}'
+    : '${amount.toStringAsFixed(2)} $currency';
 
 /// Full list of recent sales for one platform, opened from the profit
 /// calculator. Back returns to the scan detail page.
@@ -15,6 +19,9 @@ class RecentSalesPage extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final String? productTitle;
+
+  /// Same shoe image as the scan detail page; hidden when null or broken.
+  final String? productImage;
   final List<SaleRecord> sales;
 
   /// Sales in this size get highlighted (GOAT only — StockX has no sizes).
@@ -27,6 +34,7 @@ class RecentSalesPage extends StatelessWidget {
     required this.iconColor,
     required this.sales,
     this.productTitle,
+    this.productImage,
     this.highlightSize,
   });
 
@@ -75,6 +83,29 @@ class RecentSalesPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          if (productImage != null && productImage!.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              height: 160,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: AppColors.cardShadow,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.network(
+                  productImage!,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => Icon(
+                    Icons.image_not_supported_outlined,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (productTitle != null && productTitle!.isNotEmpty)
             Text(
               productTitle!,
@@ -105,9 +136,81 @@ class RecentSalesPage extends StatelessWidget {
               ),
             ],
           ),
+          if (sales.isNotEmpty) ...[const SizedBox(height: 14), _priceStats()],
+          if (_dateRange() case final range?) ...[
+            const SizedBox(height: 8),
+            Text(
+              range,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  /// Average and max sale price across the listed sales. Max is green.
+  Widget _priceStats() {
+    final amounts = sales.map((s) => s.amount).toList();
+    final currency = sales.first.currency;
+    final max = amounts.reduce((a, b) => a > b ? a : b);
+    final avg = amounts.reduce((a, b) => a + b) / amounts.length;
+
+    Widget stat(String label, double value, {Color? color}) => Expanded(
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              formatPrice(value, currency),
+              style: GoogleFonts.inter(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: color ?? AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: AppColors.cardShadow,
+      ),
+      child: Row(
+        children: [
+          stat('Avg', avg),
+          stat('Max', max, color: AppColors.profit),
+        ],
+      ),
+    );
+  }
+
+  /// "Oct 2, 2026 – Nov 3, 2026" covering the listed sales, or null when
+  /// no sale has a date.
+  String? _dateRange() {
+    final dates = sales.map((s) => s.date).whereType<DateTime>().toList();
+    if (dates.isEmpty) return null;
+    dates.sort();
+    final first = formatSaleDate(dates.first);
+    final last = formatSaleDate(dates.last);
+    return first == last ? 'Sales from $first' : 'Sales from $first – $last';
   }
 }
 
@@ -128,7 +231,9 @@ class _SaleCard extends StatelessWidget {
     final details = <String>[
       if (sale.location != null) sale.location!,
       if (sale.isOffer) 'Accepted offer',
+      if (sale.isAuction) 'Auction',
     ];
+    final url = sale.url;
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -174,6 +279,42 @@ class _SaleCard extends StatelessWidget {
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+                if (sale.title != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    sale.title!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+                if (url != null) ...[
+                  const SizedBox(height: 6),
+                  InkWell(
+                    onTap: () => launchUrl(
+                      Uri.parse(url),
+                      mode: LaunchMode.platformDefault,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'View on eBay',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: iconColor,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.open_in_new, size: 14, color: iconColor),
+                      ],
                     ),
                   ),
                 ],

@@ -14,6 +14,7 @@ class ApiKeys {
   static String stockXApiKey = '';
   static String stockXClientId = '';
   static String stockXClientSecret = '';
+  static String compsApiKey = '';
 
   // NOT secrets — stay hardcoded
   static const String stockXRedirectUri = 'sneakerscanner://stockx-callback';
@@ -59,6 +60,7 @@ class ApiKeys {
       stockXApiKey = data['stockXApiKey'] as String? ?? '';
       stockXClientId = data['stockXClientId'] as String? ?? '';
       stockXClientSecret = data['stockXClientSecret'] as String? ?? '';
+      compsApiKey = data['compsApiKey'] as String? ?? '';
       _loaded = true;
       debugPrint('[ApiKeys] Loaded successfully via Cloud Function');
       return true;

@@ -105,7 +105,11 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Step two'), findsOneWidget);
-    expect(find.text('Next'), findsNothing, reason: 'action steps have no Next');
+    expect(
+      find.text('Next'),
+      findsNothing,
+      reason: 'action steps have no Next',
+    );
 
     // Even on an action step, only the spotlit widget is live — every other
     // control in the app stays sealed off.

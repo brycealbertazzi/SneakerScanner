@@ -164,10 +164,13 @@ class _TutorialSheetState extends State<_TutorialSheet> {
 
             // Footer button
             Container(
-              padding: EdgeInsets.fromLTRB(24, 14, 24, 32 + MediaQuery.of(context).padding.bottom),
-              decoration: BoxDecoration(
-                color: AppColors.background,
+              padding: EdgeInsets.fromLTRB(
+                24,
+                14,
+                24,
+                32 + MediaQuery.of(context).padding.bottom,
               ),
+              decoration: BoxDecoration(color: AppColors.background),
               child: _PressableButton(
                 label: isLast ? 'Got it' : 'Next',
                 onPressed: _next,
@@ -191,7 +194,8 @@ class _TipCard extends StatefulWidget {
   State<_TipCard> createState() => _TipCardState();
 }
 
-class _TipCardState extends State<_TipCard> with SingleTickerProviderStateMixin {
+class _TipCardState extends State<_TipCard>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
 
   @override
@@ -200,24 +204,29 @@ class _TipCardState extends State<_TipCard> with SingleTickerProviderStateMixin 
     switch (widget.index) {
       case 0:
         _ctrl = AnimationController(
-            vsync: this, duration: const Duration(milliseconds: 1400))
-          ..repeat(reverse: true);
+          vsync: this,
+          duration: const Duration(milliseconds: 1400),
+        )..repeat(reverse: true);
       case 1:
         _ctrl = AnimationController(
-            vsync: this, duration: const Duration(milliseconds: 2800))
-          ..repeat();
+          vsync: this,
+          duration: const Duration(milliseconds: 2800),
+        )..repeat();
       case 2:
         _ctrl = AnimationController(
-            vsync: this, duration: const Duration(milliseconds: 1800))
-          ..repeat(reverse: true);
+          vsync: this,
+          duration: const Duration(milliseconds: 1800),
+        )..repeat(reverse: true);
       case 3:
         _ctrl = AnimationController(
-            vsync: this, duration: const Duration(milliseconds: 2000))
-          ..repeat();
+          vsync: this,
+          duration: const Duration(milliseconds: 2000),
+        )..repeat();
       default:
         _ctrl = AnimationController(
-            vsync: this, duration: const Duration(milliseconds: 2000))
-          ..repeat();
+          vsync: this,
+          duration: const Duration(milliseconds: 2000),
+        )..repeat();
     }
   }
 
@@ -234,11 +243,7 @@ class _TipCardState extends State<_TipCard> with SingleTickerProviderStateMixin 
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SizedBox(
-            height: 130,
-            width: double.infinity,
-            child: _buildVisual(),
-          ),
+          SizedBox(height: 130, width: double.infinity, child: _buildVisual()),
           const SizedBox(height: 28),
           Text(
             widget.tip.title,
@@ -290,10 +295,14 @@ class _TrophyVisual extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scale = Tween<double>(begin: 0.90, end: 1.10)
-        .animate(CurvedAnimation(parent: ctrl, curve: Curves.easeInOut));
-    final glow = Tween<double>(begin: 0.0, end: 0.22)
-        .animate(CurvedAnimation(parent: ctrl, curve: Curves.easeInOut));
+    final scale = Tween<double>(
+      begin: 0.90,
+      end: 1.10,
+    ).animate(CurvedAnimation(parent: ctrl, curve: Curves.easeInOut));
+    final glow = Tween<double>(
+      begin: 0.0,
+      end: 0.22,
+    ).animate(CurvedAnimation(parent: ctrl, curve: Curves.easeInOut));
 
     return Center(
       child: AnimatedBuilder(
@@ -502,8 +511,26 @@ class _BarcodeVisual extends StatelessWidget {
   const _BarcodeVisual({required this.ctrl});
 
   static const _bars = [
-    3.0, 1.0, 2.0, 1.0, 4.0, 1.0, 2.0, 3.0, 1.0, 2.0,
-    1.0, 3.0, 2.0, 1.0, 4.0, 1.0, 2.0, 1.0, 3.0, 2.0,
+    3.0,
+    1.0,
+    2.0,
+    1.0,
+    4.0,
+    1.0,
+    2.0,
+    3.0,
+    1.0,
+    2.0,
+    1.0,
+    3.0,
+    2.0,
+    1.0,
+    4.0,
+    1.0,
+    2.0,
+    1.0,
+    3.0,
+    2.0,
   ];
 
   @override
@@ -541,7 +568,9 @@ class _BarcodeVisual extends StatelessWidget {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF64B5F6).withValues(alpha: 0.5),
+                            color: const Color(
+                              0xFF64B5F6,
+                            ).withValues(alpha: 0.5),
                             blurRadius: 8,
                             spreadRadius: 2,
                           ),
@@ -565,8 +594,7 @@ class _BarcodePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = AppColors.textPrimary.withValues(alpha: 0.8);
+    final paint = Paint()..color = AppColors.textPrimary.withValues(alpha: 0.8);
     final scale = (size.width - 16) / bars.fold(0.0, (s, w) => s + w * 6 + 2);
     double x = 8;
     bool dark = true;
@@ -609,7 +637,9 @@ class _SunVisual extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                        color: Colors.orange.withValues(alpha: 0.6), width: 1.5),
+                      color: Colors.orange.withValues(alpha: 0.6),
+                      width: 1.5,
+                    ),
                   ),
                 ),
               ),
@@ -623,7 +653,9 @@ class _SunVisual extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: Colors.orange.withValues(alpha: 0.06),
                     border: Border.all(
-                        color: Colors.orange.withValues(alpha: 0.4), width: 1),
+                      color: Colors.orange.withValues(alpha: 0.4),
+                      width: 1,
+                    ),
                   ),
                 ),
               ),
@@ -635,8 +667,11 @@ class _SunVisual extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: Colors.orange.withValues(alpha: 0.15),
                 ),
-                child: const Icon(Icons.wb_sunny_rounded,
-                    color: Colors.orange, size: 34),
+                child: const Icon(
+                  Icons.wb_sunny_rounded,
+                  color: Colors.orange,
+                  size: 34,
+                ),
               ),
             ],
           );

@@ -6,7 +6,7 @@ import '../../../theme/app_theme.dart';
 import '../recent_sales_page.dart';
 
 /// Recent-sales summary inside a StockX/GOAT profit section: either
-/// "No recent sales on X", or the last sale plus a link to the full list.
+/// "No recent sales on X", or the highest sale plus a link to the full list.
 /// Fetches (via the cached [SalesService]) whenever [productId] changes, so
 /// switching colorways loads that colorway's sales.
 class RecentSalesRow extends StatefulWidget {
@@ -17,6 +17,7 @@ class RecentSalesRow extends StatefulWidget {
   final Color iconColor;
   final String productId;
   final String? productTitle;
+  final String? productImage;
   final String? highlightSize;
 
   const RecentSalesRow({
@@ -27,6 +28,7 @@ class RecentSalesRow extends StatefulWidget {
     required this.iconColor,
     required this.productId,
     this.productTitle,
+    this.productImage,
     this.highlightSize,
   });
 
@@ -60,6 +62,7 @@ class _RecentSalesRowState extends State<RecentSalesRow> {
           icon: widget.icon,
           iconColor: widget.iconColor,
           productTitle: widget.productTitle,
+          productImage: widget.productImage,
           sales: sales,
           highlightSize: widget.highlightSize,
         ),
@@ -104,9 +107,9 @@ class _RecentSalesRowState extends State<RecentSalesRow> {
   );
 
   Widget _salesLink(List<SaleRecord> sales) {
-    final last = sales.first;
-    final when = last.date != null ? ' · ${relativeSaleTime(last.date!)}' : '';
-    final sizeText = last.size != null ? ' · US ${last.size}' : '';
+    final top = sales.reduce((a, b) => b.amount > a.amount ? b : a);
+    final when = top.date != null ? ' · ${relativeSaleTime(top.date!)}' : '';
+    final sizeText = top.size != null ? ' · US ${top.size}' : '';
     return InkWell(
       onTap: () => _openList(sales),
       child: Row(
@@ -116,7 +119,7 @@ class _RecentSalesRowState extends State<RecentSalesRow> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Last sale ${formatSaleAmount(last)}$sizeText$when',
+                  'Highest sale ${formatSaleAmount(top)}$sizeText$when',
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,

@@ -61,9 +61,7 @@ ProductDetails trialOffer() => _offer(
 ProductDetails basePlanOffer() => _offer(
   basePlanId: 'annual',
   offerIdToken: 'BASE_TOKEN',
-  phases: <PricingPhaseWrapper>[
-    _phase(micros: 59990000, formatted: r'$59.99'),
-  ],
+  phases: <PricingPhaseWrapper>[_phase(micros: 59990000, formatted: r'$59.99')],
 );
 
 void main() {

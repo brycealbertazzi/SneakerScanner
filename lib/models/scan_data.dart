@@ -56,9 +56,7 @@ class ScanData {
       // For style code scans, code is the SKU (unless code == labelName,
       // meaning no real code was found)
       final hasRealCode = labelName == null || code != labelName;
-      return ScanData(
-        sku: hasRealCode ? code : null,
-      );
+      return ScanData(sku: hasRealCode ? code : null);
     } else {
       // Legacy barcode format — treat as no SKU
       return ScanData();

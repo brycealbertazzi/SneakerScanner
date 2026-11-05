@@ -4,14 +4,16 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../api_keys.dart';
+import 'ebay_query_builder.dart';
 
-/// One completed sale from the KicksDB StockX or GOAT /sales endpoint.
+/// One completed sale: StockX/GOAT from KicksDB, or eBay from CompsAPI.
 class SaleRecord {
   final double amount;
   final String currency;
   final DateTime? date;
 
-  /// US size. GOAT only — StockX sales only carry a variant id.
+  /// US size. GOAT from the API, eBay read from the listing title; StockX
+  /// sales only carry a variant id.
   final String? size;
 
   /// GOAT only, e.g. "Athens, US".
@@ -20,6 +22,13 @@ class SaleRecord {
   /// GOAT only: true when the sale was an accepted offer rather than Buy Now.
   final bool isOffer;
 
+  /// eBay only: the sold listing's title and link.
+  final String? title;
+  final String? url;
+
+  /// eBay only: true when the listing sold at auction.
+  final bool isAuction;
+
   const SaleRecord({
     required this.amount,
     required this.currency,
@@ -27,6 +36,9 @@ class SaleRecord {
     this.size,
     this.location,
     this.isOffer = false,
+    this.title,
+    this.url,
+    this.isAuction = false,
   });
 
   static SaleRecord? fromJson(Map<String, dynamic> json) {
@@ -44,6 +56,24 @@ class SaleRecord {
       isOffer: json['type']?.toString() == 'PURCHASE_TYPE_OFFER_CLOSED',
     );
   }
+
+  /// One item from CompsAPI's /v1/sold response.
+  static SaleRecord? fromCompsJson(Map<String, dynamic> json) {
+    final amount = double.tryParse((json['price'] ?? '').toString());
+    if (amount == null || amount <= 0) return null;
+    final rawDate = (json['last_sold'] ?? json['ended_at'])?.toString();
+    final title = json['title']?.toString();
+    final url = json['url']?.toString();
+    return SaleRecord(
+      amount: amount,
+      currency: 'USD',
+      date: rawDate != null ? DateTime.tryParse(rawDate)?.toLocal() : null,
+      title: (title != null && title.isNotEmpty) ? title : null,
+      size: title != null ? parseUsSize(title) : null,
+      url: (url != null && url.isNotEmpty) ? url : null,
+      isAuction: json['format']?.toString() == 'AUCTION',
+    );
+  }
 }
 
 /// Fetches recent sales from KicksDB. Requests are cached per product for the
@@ -54,7 +84,8 @@ class SalesService {
 
   static final Map<String, Future<List<SaleRecord>>> _cache = {};
 
-  /// [platform] is 'stockx' or 'goat'. Returns sales newest first, or an
+  /// [platform] is 'stockx', 'goat' or 'ebay'. For eBay, [productId] is the
+  /// search text (see [buildEbaySalesQuery]). Returns sales newest first, or an
   /// empty list when there are none or the request fails.
   static Future<List<SaleRecord>> fetch(String platform, String productId) {
     final key = '$platform:$productId';
@@ -70,6 +101,7 @@ class SalesService {
     String platform,
     String productId,
   ) async {
+    if (platform == 'ebay') return _requestEbay(productId);
     final uri = Uri(
       scheme: 'https',
       host: 'api.kicks.dev',
@@ -96,15 +128,45 @@ class SalesService {
           .map((e) => SaleRecord.fromJson(Map<String, dynamic>.from(e)))
           .whereType<SaleRecord>()
           .toList();
-      sales.sort((a, b) {
-        if (a.date == null || b.date == null) return 0;
-        return b.date!.compareTo(a.date!);
-      });
-      return sales;
+      return _newestFirst(sales);
     } catch (e) {
       debugPrint('[Sales $platform] Error: $e');
       return null;
     }
+  }
+
+  /// eBay sold listings from CompsAPI. Every word in [query] must appear in a
+  /// listing's title for it to match.
+  static Future<List<SaleRecord>?> _requestEbay(String query) async {
+    final uri = Uri.https('api.compsapi.com', '/v1/sold', {'q': query});
+    debugPrint('[Sales ebay] Request: $uri');
+    try {
+      final response = await http
+          .get(uri, headers: {'x-api-key': ApiKeys.compsApiKey})
+          .timeout(const Duration(seconds: 15));
+      debugPrint('[Sales ebay] Status: ${response.statusCode}');
+      if (response.statusCode != 200) return null;
+      final body = jsonDecode(response.body);
+      final items = body is Map<String, dynamic> ? body['items'] : null;
+      if (items is! List) return const [];
+      final sales = items
+          .whereType<Map>()
+          .map((e) => SaleRecord.fromCompsJson(Map<String, dynamic>.from(e)))
+          .whereType<SaleRecord>()
+          .toList();
+      return _newestFirst(sales);
+    } catch (e) {
+      debugPrint('[Sales ebay] Error: $e');
+      return null;
+    }
+  }
+
+  static List<SaleRecord> _newestFirst(List<SaleRecord> sales) {
+    sales.sort((a, b) {
+      if (a.date == null || b.date == null) return 0;
+      return b.date!.compareTo(a.date!);
+    });
+    return sales;
   }
 }
 

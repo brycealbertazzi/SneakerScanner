@@ -14,6 +14,7 @@ const ebayClientSecret = defineSecret("EBAY_CLIENT_SECRET");
 const stockXApiKey = defineSecret("STOCKX_API_KEY");
 const stockXClientId = defineSecret("STOCKX_CLIENT_ID");
 const stockXClientSecret = defineSecret("STOCKX_CLIENT_SECRET");
+const compsApiKey = defineSecret("COMPS_API_KEY");
 const appleSharedSecret = defineSecret("APPLE_SHARED_SECRET");
 const googleServiceAccountJson = defineSecret("GOOGLE_SERVICE_ACCOUNT_JSON");
 
@@ -26,6 +27,7 @@ export const getApiKeys = onCall(
       stockXApiKey,
       stockXClientId,
       stockXClientSecret,
+      compsApiKey,
     ],
     region: "us-central1",
     memory: "256MiB",
@@ -44,6 +46,7 @@ export const getApiKeys = onCall(
       stockXApiKey: stockXApiKey.value(),
       stockXClientId: stockXClientId.value(),
       stockXClientSecret: stockXClientSecret.value(),
+      compsApiKey: compsApiKey.value(),
     };
   }
 );
@@ -63,8 +66,7 @@ export const validatePurchase = onCall(
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Must be signed in.");
     }
-    const uid = request.auth.uid;
-    const {platform, productId, receiptData, purchaseToken, transactionId, androidId} =
+    const {platform, productId, receiptData, purchaseToken, androidId} =
       request.data as {
         platform: string;
         productId: string;

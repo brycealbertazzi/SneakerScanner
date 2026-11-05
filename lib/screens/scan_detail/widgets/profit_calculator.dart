@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../services/nike_colorway_utils.dart';
+import '../../../services/ebay_query_builder.dart';
 import 'market_price_section.dart';
 import '../../../theme/app_theme.dart';
 
@@ -36,6 +37,12 @@ class ProfitCalculator extends StatefulWidget {
   /// Full shoe name shown on the Recent Sales pages.
   final String? productTitle;
 
+  /// Product image URL shown on the Recent Sales pages.
+  final String? productImage;
+
+  /// eBay listing title, used to build the eBay sold search.
+  final String? ebayListingTitle;
+
   const ProfitCalculator({
     super.key,
     required this.productInfo,
@@ -65,6 +72,8 @@ class ProfitCalculator extends StatefulWidget {
     this.stockXProductId,
     this.goatProductId,
     this.productTitle,
+    this.productImage,
+    this.ebayListingTitle,
   });
 
   @override
@@ -73,6 +82,7 @@ class ProfitCalculator extends StatefulWidget {
 
 class _ProfitCalculatorState extends State<ProfitCalculator> {
   late TextEditingController _retailPriceController;
+  final FocusNode _retailFocusNode = FocusNode();
   bool _showRetailEntry = false;
 
   @override
@@ -107,7 +117,21 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
   @override
   void dispose() {
     _retailPriceController.dispose();
+    _retailFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Tapping anywhere on the Retail Price row opens the field (or refocuses
+  /// it if the keyboard was dismissed) so the user can type a price.
+  void _startRetailEntry(double? currentPrice) {
+    if (_showRetailEntry) {
+      _retailFocusNode.requestFocus();
+      return;
+    }
+    if (currentPrice != null) {
+      _retailPriceController.text = currentPrice.toStringAsFixed(2);
+    }
+    setState(() => _showRetailEntry = true);
   }
 
   @override
@@ -119,6 +143,13 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
     final ebayFeeRate = ebayPrice != null
         ? (ebayPrice >= 150 ? 0.08 : 0.136)
         : null;
+
+    // CompsAPI search text; also shown as the eBay Recent Sales page title.
+    final ebaySalesQuery = buildEbaySalesQuery(
+      ebayTitle: widget.ebayListingTitle,
+      fallbackTitle:
+          widget.productTitle ?? widget.productInfo?['title']?.toString(),
+    );
 
     return Container(
       width: double.infinity,
@@ -148,124 +179,122 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
           ),
           const SizedBox(height: 16),
 
-          // Retail Price Row — always editable
-          Row(
-            children: [
-              Icon(Icons.sell, size: 16, color: AppColors.profit),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Retail Price',
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        color: AppColors.textSecondary,
+          // Retail Price Row — tap anywhere to edit
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _startRetailEntry(retailPrice),
+            child: Row(
+              children: [
+                Icon(Icons.sell, size: 16, color: AppColors.profit),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Retail Price',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
-                    ),
-                    if (_showRetailEntry)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 100,
-                            height: 36,
-                            child: TextField(
-                              controller: _retailPriceController,
-                              keyboardType:
-                                  const TextInputType.numberWithOptions(
-                                    decimal: true,
-                                  ),
-                              textInputAction: TextInputAction.done,
-                              autofocus: true,
-                              style: GoogleFonts.inter(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                              textAlign: TextAlign.right,
-                              decoration: InputDecoration(
-                                hintText: '0.00',
-                                hintStyle: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  color: AppColors.textSecondary,
-                                ),
-                                prefixText: '\$ ',
-                                prefixStyle: GoogleFonts.inter(
+                      if (_showRetailEntry)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 100,
+                              height: 36,
+                              child: TextField(
+                                controller: _retailPriceController,
+                                focusNode: _retailFocusNode,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                textInputAction: TextInputAction.done,
+                                autofocus: true,
+                                style: GoogleFonts.inter(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   color: AppColors.textPrimary,
                                 ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                                filled: true,
-                                fillColor: AppColors.background,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide.none,
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: BorderSide(
-                                    color: AppColors.profit,
-                                    width: 1,
+                                textAlign: TextAlign.right,
+                                decoration: InputDecoration(
+                                  hintText: '0.00',
+                                  hintStyle: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  prefixText: '\$ ',
+                                  prefixStyle: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                  filled: true,
+                                  fillColor: AppColors.background,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide(
+                                      color: AppColors.profit,
+                                      width: 1,
+                                    ),
                                   ),
                                 ),
+                                onChanged: (value) {
+                                  widget.onRetailPriceChanged(
+                                    double.tryParse(value),
+                                  );
+                                },
+                                onSubmitted: (value) {
+                                  final parsed = double.tryParse(value);
+                                  widget.onRetailPriceChanged(parsed);
+                                  if (parsed != null) {
+                                    setState(() => _showRetailEntry = false);
+                                    widget.onSavePrices();
+                                  }
+                                },
                               ),
-                              onChanged: (value) {
-                                widget.onRetailPriceChanged(
-                                  double.tryParse(value),
+                            ),
+                            const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () {
+                                final parsed = double.tryParse(
+                                  _retailPriceController.text,
                                 );
-                              },
-                              onSubmitted: (value) {
-                                final parsed = double.tryParse(value);
                                 widget.onRetailPriceChanged(parsed);
                                 if (parsed != null) {
                                   setState(() => _showRetailEntry = false);
                                   widget.onSavePrices();
                                 }
                               },
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          GestureDetector(
-                            onTap: () {
-                              final parsed = double.tryParse(
-                                _retailPriceController.text,
-                              );
-                              widget.onRetailPriceChanged(parsed);
-                              if (parsed != null) {
-                                setState(() => _showRetailEntry = false);
-                                widget.onSavePrices();
-                              }
-                            },
-                            child: Container(
-                              width: 40,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: Colors.green.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                Icons.check,
-                                color: AppColors.profit,
-                                size: 20,
+                              child: Container(
+                                width: 40,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  Icons.check,
+                                  color: AppColors.profit,
+                                  size: 20,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      )
-                    else if (retailPrice != null)
-                      GestureDetector(
-                        onTap: () {
-                          _retailPriceController.text = retailPrice
-                              .toStringAsFixed(2);
-                          setState(() => _showRetailEntry = true);
-                        },
-                        child: Row(
+                          ],
+                        )
+                      else if (retailPrice != null)
+                        Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
@@ -283,15 +312,11 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
                               color: AppColors.textSecondary,
                             ),
                           ],
-                        ),
-                      )
-                    else
-                      Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () =>
-                                setState(() => _showRetailEntry = true),
-                            child: Container(
+                        )
+                      else
+                        Row(
+                          children: [
+                            Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 4,
@@ -309,13 +334,13 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
                                 ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                  ],
+                          ],
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
 
           // Divider
@@ -337,6 +362,10 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             productFound: ebayPrice != null,
             onOpenMarketplace: ebayPrice != null ? widget.onOpenEbay : null,
             sellerFeeRate: ebayFeeRate,
+            salesPlatform: 'ebay',
+            salesProductId: ebaySalesQuery,
+            productTitle: ebaySalesQuery,
+            productImage: widget.productImage,
           ),
           const SizedBox(height: 12),
 
@@ -366,6 +395,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             salesProductId: widget.stockXProductId,
             productTitle:
                 widget.productTitle ?? widget.productInfo?['title']?.toString(),
+            productImage: widget.productImage,
           ),
           const SizedBox(height: 12),
 
@@ -395,6 +425,7 @@ class _ProfitCalculatorState extends State<ProfitCalculator> {
             salesProductId: widget.goatProductId,
             productTitle:
                 widget.productTitle ?? widget.productInfo?['title']?.toString(),
+            productImage: widget.productImage,
           ),
         ],
       ),

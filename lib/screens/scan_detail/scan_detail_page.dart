@@ -143,6 +143,7 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
             final savedEbayPrice = double.tryParse(
               (scanDataMap['ebayPrice'] as String?) ?? '',
             );
+            final savedEbayTitle = scanDataMap['ebayTitle'] as String?;
             final savedStockXSlug = scanDataMap['stockxSlug'] as String?;
             final savedGoatSlug = scanDataMap['goatSlug'] as String?;
             final savedStockXProductId = scanDataMap['stockxProductId']
@@ -173,6 +174,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
               if (savedEbayPrice != null) {
                 _ebayAveragePrice = savedEbayPrice;
                 _isLoadingEbayPrices = false;
+              }
+              if (savedEbayTitle != null && savedEbayTitle.isNotEmpty) {
+                _ebayTitle = savedEbayTitle;
               }
               if (savedStockXSlug != null && savedStockXSlug.isNotEmpty) {
                 _stockXSlug = savedStockXSlug;
@@ -1791,6 +1795,9 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
       if (_ebayAveragePrice != null) {
         updateData['ebayPrice'] = _ebayAveragePrice!.toStringAsFixed(2);
       }
+      if (_ebayTitle != null && _ebayTitle!.isNotEmpty) {
+        updateData['ebayTitle'] = _ebayTitle;
+      }
 
       if (_stockXPrice != null) {
         updateData['stockxPrice'] = _stockXPrice!.toStringAsFixed(2);
@@ -2103,6 +2110,12 @@ class _ScanDetailPageState extends State<ScanDetailPage> {
                       ProfitCalculator(
                         productInfo: _productInfo,
                         productTitle: _resolvedTitle,
+                        productImage:
+                            _productInfo?['images'] is List &&
+                                (_productInfo!['images'] as List).isNotEmpty
+                            ? _productInfo!['images'][0]?.toString()
+                            : null,
+                        ebayListingTitle: _ebayTitle,
                         manualRetailPrice: _manualRetailPrice,
                         ebayAveragePrice: _ebayAveragePrice,
                         stockXPrice: _stockXPrice,
