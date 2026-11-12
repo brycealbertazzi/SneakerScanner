@@ -24,6 +24,16 @@ class MainScreen extends StatefulWidget {
 }
 
 class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
+  /// The home screen that's currently mounted, if any. Lets a screen pushed on
+  /// top (e.g. the paywall) return to it instead of building a second one —
+  /// two home screens means two scanners fighting over the one camera, which
+  /// is what left the preview broken after switching plans.
+  static MainScreenState? _current;
+  static MainScreenState? get current {
+    final home = _current;
+    return home != null && home.mounted ? home : null;
+  }
+
   int _currentIndex = 0;
   late AppLinks _appLinks;
   final ValueNotifier<bool> _scannerActive = ValueNotifier(true);
@@ -32,6 +42,7 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _current = this;
     _wasSubscribed = SubscriptionService.instance.canScan;
     SubscriptionService.instance.addListener(_onSubChanged);
     WidgetsBinding.instance.addObserver(this);
@@ -128,10 +139,21 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    if (_current == this) _current = null;
     WidgetsBinding.instance.removeObserver(this);
     SubscriptionService.instance.removeListener(_onSubChanged);
     _scannerActive.dispose();
     super.dispose();
+  }
+
+  /// Pops every route above this home screen and shows the scanner tab.
+  /// The scanner restarts its own camera when it's uncovered (didPopNext).
+  void returnHome() {
+    final route = ModalRoute.of(context);
+    if (route != null) {
+      Navigator.of(context).popUntil((r) => r == route);
+    }
+    switchToTab(0);
   }
 
   void switchToTab(int index) {

@@ -105,6 +105,10 @@ class _ScannerPageState extends State<ScannerPage>
 
   @override
   void didPopNext() {
+    // Also fires while this route is itself being removed (routes above it
+    // cleared by pushAndRemoveUntil). Restarting the camera then grabs it from
+    // whichever scanner replaces this one, so only restart when we're on top.
+    if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
     _startCamera();
   }
 

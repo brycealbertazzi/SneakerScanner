@@ -92,13 +92,6 @@ void main() {
     });
   });
 
-  group('perMonthPriceLabel', () {
-    test('spreads the annual price over twelve months', () {
-      expect(perMonthPriceLabel(79.99, r'$'), r'$6.67');
-      expect(perMonthPriceLabel(89.99, r'$'), r'$7.50');
-    });
-  });
-
   group('annualSavingsAmount', () {
     test(r'$79.99/yr vs $14.99/mo saves $99.89', () {
       expect(annualSavingsAmount(annual: 79.99, monthly: 14.99), 99.89);
@@ -114,10 +107,42 @@ void main() {
     });
   });
 
-  group('priceLabel', () {
-    test('two decimals with the store symbol', () {
-      expect(priceLabel(99.89, r'$'), r'$99.89');
-      expect(priceLabel(179.88, '€'), '€179.88');
+  group('formatLikeStorePrice', () {
+    test('keeps the symbol and its position', () {
+      expect(formatLikeStorePrice(r'$79.99', 6.6658), r'$6.67');
+      expect(formatLikeStorePrice('79,99 €', 6.6658), '6,67 €');
+      expect(formatLikeStorePrice('€79.99', 99.89), '€99.89');
+    });
+
+    test('currencies without decimals stay whole', () {
+      expect(formatLikeStorePrice('¥1,200', 100), '¥100');
+    });
+  });
+
+  group('perMonthPriceLabel', () {
+    test(r'iOS-style product: $79.99/yr → $6.67', () {
+      final annual = ProductDetails(
+        id: 'sneakscan_annual_ab_7999',
+        title: 'Annual',
+        description: '',
+        price: r'$79.99',
+        rawPrice: 79.99,
+        currencyCode: 'USD',
+        currencySymbol: r'$',
+      );
+      expect(perMonthPriceLabel(annual), r'$6.67');
+    });
+
+    test('Play trial offer: no "Free" leaking into the price', () {
+      // The regression: on a free-trial offer the plugin's currencySymbol is
+      // read from the "Free" phase, which rendered "Free6.67/mo".
+      final annual = _playOffer(
+        productId: 'sneakscan_annual_ab_7999',
+        phases: [_phase(0, 'Free', 'P7D'), _phase(79990000, r'$79.99', 'P1Y')],
+      );
+      expect(annual.currencySymbol, 'Free');
+      expect(perMonthPriceLabel(annual), r'$6.67');
+      expect(priceLabelFor(annual, 99.89), r'$99.89');
     });
   });
 

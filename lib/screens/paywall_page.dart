@@ -249,8 +249,19 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
           duration: const Duration(seconds: 4),
         ),
       );
-    // Clears Settings and the paywall off the stack — the same exit the hard
-    // paywall uses after a purchase.
+    _goHome();
+  }
+
+  /// Back to the home screen. Returns to the one already underneath when there
+  /// is one — building a second would leave two scanners competing for the
+  /// camera — and only builds a fresh one when the paywall is the app's root
+  /// (launch, or after the lapse kick-out cleared the stack).
+  void _goHome() {
+    final home = MainScreenState.current;
+    if (home != null) {
+      home.returnHome();
+      return;
+    }
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const MainScreen()),
       (route) => false,
@@ -604,10 +615,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
           (route) => false,
         );
       } else {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const MainScreen()),
-          (route) => false,
-        );
+        _goHome();
       }
     } else {
       Navigator.of(context).pop();
@@ -679,7 +687,6 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
   Widget _buildUpgrade({required bool pending}) {
     final monthly = _sub.activeMonthlyProduct!;
     final annual = _sub.upgradeAnnualProduct!;
-    final symbol = annual.currencySymbol;
     final monthlyAmount = recurringPriceAmount(monthly);
     final annualAmount = recurringPriceAmount(annual);
     final savings = annualSavingsAmount(
@@ -690,7 +697,9 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
       annual: annualAmount,
       monthly: monthlyAmount,
     );
-    final savingsLabel = savings != null ? priceLabel(savings, symbol) : null;
+    final savingsLabel = savings != null
+        ? priceLabelFor(annual, savings)
+        : null;
     final annualLabel = recurringPriceLabel(annual) ?? annual.price;
     final busy = pending || _upgradeInFlight;
 
@@ -765,12 +774,10 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           monthlyPrice:
                               recurringPriceLabel(monthly) ?? monthly.price,
                           monthlyYearly: monthlyAmount != null
-                              ? priceLabel(monthlyAmount * 12, symbol)
+                              ? priceLabelFor(monthly, monthlyAmount * 12)
                               : null,
                           annualPrice: annualLabel,
-                          annualPerMonth: annualAmount != null
-                              ? perMonthPriceLabel(annualAmount, symbol)
-                              : null,
+                          annualPerMonth: perMonthPriceLabel(annual),
                           savingsPercent: savingsPercent,
                         ),
                         const SizedBox(height: 24),
@@ -1688,9 +1695,10 @@ class _PlanPicker extends StatelessWidget {
               // Per-month rate, so the two cards compare like for like, with
               // the billed amount on the line below. Falls back to the billed
               // price when the store gave no number to divide.
-              price: annualAmount != null
-                  ? '${perMonthPriceLabel(annualAmount, annual.currencySymbol)}/mo'
-                  : '$annualLabel/yr',
+              price: switch (perMonthPriceLabel(annual)) {
+                final perMonth? => '$perMonth/mo',
+                null => '$annualLabel/yr',
+              },
               caption: annualCaption,
               captionSize: captionSize,
               badge: savings != null ? 'SAVE $savings%' : null,
