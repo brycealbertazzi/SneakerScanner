@@ -267,7 +267,16 @@ class _SettingsPageState extends State<SettingsPage> {
   String _planLabel() {
     switch (_sub.status) {
       case SubscriptionStatus.active:
-        return 'Annual Plan';
+        // The plan the store reports as active, so it follows a monthly ↔
+        // annual switch. Generic when it's a product we can't classify.
+        switch (_sub.activePlan) {
+          case SubscriptionPlan.annual:
+            return 'Annual';
+          case SubscriptionPlan.monthly:
+            return 'Monthly';
+          case null:
+            return 'Active';
+        }
       case SubscriptionStatus.freeTrial:
         return 'No Active Plan';
       case SubscriptionStatus.expired:

@@ -45,10 +45,7 @@ void main() {
     test('reads past a Play free-trial phase to the renewal price', () {
       final monthly = _playOffer(
         productId: 'sneakscan_monthly_1499',
-        phases: [
-          _phase(0, 'Free', 'P7D'),
-          _phase(14990000, r'$14.99', 'P1M'),
-        ],
+        phases: [_phase(0, 'Free', 'P7D'), _phase(14990000, r'$14.99', 'P1M')],
       );
       // rawPrice is the first (free) phase — the trap this function avoids.
       expect(monthly.rawPrice, 0);
@@ -99,6 +96,28 @@ void main() {
     test('spreads the annual price over twelve months', () {
       expect(perMonthPriceLabel(79.99, r'$'), r'$6.67');
       expect(perMonthPriceLabel(89.99, r'$'), r'$7.50');
+    });
+  });
+
+  group('annualSavingsAmount', () {
+    test(r'$79.99/yr vs $14.99/mo saves $99.89', () {
+      expect(annualSavingsAmount(annual: 79.99, monthly: 14.99), 99.89);
+    });
+
+    test(r'$89.99/yr vs $19.99/mo saves $149.89', () {
+      expect(annualSavingsAmount(annual: 89.99, monthly: 19.99), 149.89);
+    });
+
+    test('null when annual is not cheaper or a price is missing', () {
+      expect(annualSavingsAmount(annual: 120, monthly: 10), isNull);
+      expect(annualSavingsAmount(annual: null, monthly: 10), isNull);
+    });
+  });
+
+  group('priceLabel', () {
+    test('two decimals with the store symbol', () {
+      expect(priceLabel(99.89, r'$'), r'$99.89');
+      expect(priceLabel(179.88, '€'), '€179.88');
     });
   });
 

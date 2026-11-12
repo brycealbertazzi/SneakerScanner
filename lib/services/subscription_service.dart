@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_android/billing_client_wrappers.dart'
+    show ReplacementMode;
+import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:in_app_purchase_storekit/store_kit_2_wrappers.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:purchases_flutter/purchases_flutter.dart' as rc;
@@ -112,6 +115,18 @@ class SubscriptionService extends ChangeNotifier {
   /// instead of racing the query it depends on.
   Completer<void>? _productsQueried;
 
+  /// The subscription the store last reported as active, and the purchase
+  /// behind it. Drives the monthly → annual upgrade offer; on Android the
+  /// purchase itself is required to replace the old plan instead of stacking
+  /// a second subscription on top of it.
+  String? _activeProductId;
+  PurchaseDetails? _activePurchase;
+
+  /// The product of the most recent completed (non-restore) purchase, so a
+  /// screen can tell that *its* purchase landed even when the user was
+  /// already subscribed and the status never changes.
+  String? _lastPurchasedProductId;
+
   bool _purchasePending = false;
   bool _purchaseCancelled = false;
   String? _purchaseError;
@@ -173,6 +188,38 @@ class SubscriptionService extends ChangeNotifier {
 
   ProductDetails? productFor(SubscriptionPlan plan) =>
       plan == SubscriptionPlan.monthly ? monthlyProduct : annualProduct;
+
+  String? get activeProductId => _activeProductId;
+  String? get lastPurchasedProductId => _lastPurchasedProductId;
+
+  /// Which plan the active subscription is on, or null when unknown (not
+  /// subscribed, review access, or a product we don't recognise).
+  SubscriptionPlan? get activePlan {
+    final id = _activeProductId;
+    if (id == null || !isSubscribed) return null;
+    if (isMonthlyVariantProductId(id)) return SubscriptionPlan.monthly;
+    if (isAnnualVariantProductId(id)) return SubscriptionPlan.annual;
+    return null;
+  }
+
+  /// The monthly product the user is actually paying for — which may not be
+  /// the one their current offering would sell them, if prices moved since.
+  ProductDetails? get activeMonthlyProduct {
+    if (activePlan != SubscriptionPlan.monthly) return null;
+    return pickOffer(_products[_activeProductId] ?? const [], wantTrial: false);
+  }
+
+  /// The annual offer a monthly subscriber would switch to. Never a trial
+  /// offer: they've already subscribed.
+  ProductDetails? get upgradeAnnualProduct =>
+      pickOffer(_annualOffers, wantTrial: false);
+
+  /// True when the soft paywall should pitch switching to annual.
+  bool get canUpgradeToAnnual =>
+      !ReviewAccess.instance.isGranted &&
+      activePlan == SubscriptionPlan.monthly &&
+      activeMonthlyProduct != null &&
+      upgradeAnnualProduct != null;
 
   /// False until RevenueCat has had its say. The paywall skeletons the price
   /// and blocks the subscribe button while this is false, so nobody can buy at
@@ -819,6 +866,51 @@ class SubscriptionService extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    await _startPurchase(product, PurchaseParam(productDetails: product));
+  }
+
+  /// Switches a monthly subscriber to annual.
+  ///
+  /// iOS: buying another product in the same subscription group *is* the
+  /// switch — StoreKit replaces the old plan and handles any credit.
+  /// Android: Play needs the old purchase named explicitly, or it sells the
+  /// annual plan alongside the monthly one and the user pays for both.
+  /// `withTimeProration` switches immediately and credits unused monthly time.
+  Future<void> upgradeToAnnual() async {
+    final product = upgradeAnnualProduct;
+    if (product == null) {
+      _purchaseError =
+          'Annual plan not available. Check your connection and try again.';
+      notifyListeners();
+      return;
+    }
+    PurchaseParam param = PurchaseParam(productDetails: product);
+    if (Platform.isAndroid) {
+      final old = _activePurchase;
+      if (old is! GooglePlayPurchaseDetails) {
+        // Without it Play would double-bill — refuse rather than risk that.
+        _purchaseError =
+            'Couldn\'t find your current subscription. Tap Restore Purchases '
+            'and try again.';
+        notifyListeners();
+        return;
+      }
+      param = GooglePlayPurchaseParam(
+        productDetails: product,
+        changeSubscriptionParam: ChangeSubscriptionParam(
+          oldPurchaseDetails: old,
+          replacementMode: ReplacementMode.withTimeProration,
+        ),
+      );
+    }
+    await _startPurchase(product, param);
+  }
+
+  Future<void> _startPurchase(
+    ProductDetails product,
+    PurchaseParam param,
+  ) async {
+    _lastPurchasedProductId = null;
     _purchaseError = null;
     _purchaseCancelled = false;
     _purchasePending = true;
@@ -829,7 +921,6 @@ class SubscriptionService extends ChangeNotifier {
     // unfinished transaction, so clear any stragglers first.
     await _finishUnfinishedIosTransactions(productId: product.id);
 
-    final param = PurchaseParam(productDetails: product);
     try {
       await InAppPurchase.instance.buyNonConsumable(purchaseParam: param);
     } on PlatformException catch (e) {
@@ -926,7 +1017,38 @@ class SubscriptionService extends ChangeNotifier {
     }
   }
 
+  /// Remembers which subscription is active from a batch of store updates.
+  ///
+  /// During a launch check only `restored` events count — `purchased` ones
+  /// there are stale transactions being drained. Annual wins over monthly if
+  /// both show up, since that's the plan the user ends up on after a switch.
+  void _noteActivePurchases(List<PurchaseDetails> purchases) {
+    final active = purchases.where(
+      (p) =>
+          p.status == PurchaseStatus.restored ||
+          (!_isLaunchCheck && p.status == PurchaseStatus.purchased),
+    );
+    if (active.isEmpty) return;
+    final chosen =
+        active
+            .where((p) => isAnnualVariantProductId(p.productID))
+            .firstOrNull ??
+        active.first;
+    _activeProductId = chosen.productID;
+    _activePurchase = chosen;
+    // Price the plan they're on, for the upgrade's savings maths. It may be
+    // a monthly SKU this session's offering never loaded.
+    if (isMonthlyVariantProductId(chosen.productID)) {
+      unawaited(
+        _loadProducts({chosen.productID}).catchError((Object e) {
+          debugPrint('[IAP] Could not price active plan: $e');
+        }),
+      );
+    }
+  }
+
   void _onPurchaseUpdate(List<PurchaseDetails> purchases) {
+    _noteActivePurchases(purchases);
     for (final purchase in purchases) {
       if (purchase.status == PurchaseStatus.pending) {
         _purchasePending = true;
@@ -954,6 +1076,9 @@ class SubscriptionService extends ChangeNotifier {
           // current subscription status rather than trusting the event alone.
           _lastActivationWasRestore =
               purchase.status == PurchaseStatus.restored;
+          if (purchase.status == PurchaseStatus.purchased) {
+            _lastPurchasedProductId = purchase.productID;
+          }
           _purchaseInitiated = false;
           _validateInBackground(purchase);
           _syncPurchaseToRevenueCat(purchase);
@@ -1118,6 +1243,9 @@ class SubscriptionService extends ChangeNotifier {
     _purchaseError = null;
     _purchaseInitiated = false;
     _isEligibleForTrial = null;
+    _activeProductId = null;
+    _activePurchase = null;
+    _lastPurchasedProductId = null;
   }
 
   @override

@@ -63,6 +63,14 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
   /// [SubscriptionService.hasMonthlyPlan] is true — see [_effectivePlan].
   SubscriptionPlan _selectedPlan = SubscriptionPlan.annual;
 
+  /// A monthly → annual switch started from the upgrade view. Needed because
+  /// the user is already subscribed, so status never changes to tell us the
+  /// purchase landed, was cancelled or failed.
+  bool _upgradeInFlight = false;
+
+  /// One `Upgrade Paywall Viewed` per display.
+  bool _upgradeViewTracked = false;
+
   /// One RevenueCat impression per display, however many rebuilds happen.
   bool _impressionTracked = false;
 
@@ -151,6 +159,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     if (!mounted) return;
     _cancelFallbackTimer?.cancel();
     _cancelFallbackTimer = null;
+    if (_upgradeInFlight && _handleUpgradeUpdate()) return;
     if (_sub.status == SubscriptionStatus.active) {
       if (_isRestoring) {
         // User explicitly tapped Restore Purchases — show confirmation (iOS only).
@@ -182,6 +191,70 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
       _showError(_sub.purchaseError!);
       _sub.clearError();
     }
+  }
+
+  /// Settles an in-flight monthly → annual switch. Returns true when it did,
+  /// so the regular purchase handling (which ignores already-subscribed users)
+  /// doesn't run too.
+  bool _handleUpgradeUpdate() {
+    final bought = _sub.lastPurchasedProductId;
+    if (bought != null &&
+        isAnnualVariantProductId(bought) &&
+        !_sub.purchasePending) {
+      _upgradeInFlight = false;
+      MixpanelService.instance.track('Upgrade To Annual Completed');
+      _finishUpgrade();
+      return true;
+    }
+    if (_sub.purchaseCancelled) {
+      _upgradeInFlight = false;
+      _sub.clearCancelled();
+      setState(() {});
+      return true;
+    }
+    final error = _sub.purchaseError;
+    if (error != null) {
+      _upgradeInFlight = false;
+      _showError(error);
+      _sub.clearError();
+      setState(() {});
+      return true;
+    }
+    return false;
+  }
+
+  void _startUpgrade() {
+    MixpanelService.instance.track(
+      'Upgrade To Annual Tapped',
+      properties: {'from_product_id': ?_sub.activeProductId},
+    );
+    setState(() => _upgradeInFlight = true);
+    _sub.upgradeToAnnual();
+  }
+
+  /// After a successful switch: straight back to the home screen, with a
+  /// brief confirmation. The snackbar lives on the app-level messenger, so it
+  /// survives the route change and shows over home.
+  void _finishUpgrade() {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            'You\'re switching to Annual. You won\'t be charged for both plans.',
+            style: GoogleFonts.inter(color: Colors.white),
+          ),
+          backgroundColor: Colors.green[700],
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    // Clears Settings and the paywall off the stack — the same exit the hard
+    // paywall uses after a purchase.
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const MainScreen()),
+      (route) => false,
+    );
   }
 
   void _showNoRestoreFound() {
@@ -598,10 +671,273 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     );
   }
 
+  /// The monthly → annual upgrade view.
+  ///
+  /// Deliberately sparse: no feature list (they already have every feature),
+  /// one number to care about (the yearly saving), a side-by-side cost
+  /// comparison to make it concrete, one primary action and an easy way out.
+  Widget _buildUpgrade({required bool pending}) {
+    final monthly = _sub.activeMonthlyProduct!;
+    final annual = _sub.upgradeAnnualProduct!;
+    final symbol = annual.currencySymbol;
+    final monthlyAmount = recurringPriceAmount(monthly);
+    final annualAmount = recurringPriceAmount(annual);
+    final savings = annualSavingsAmount(
+      annual: annualAmount,
+      monthly: monthlyAmount,
+    );
+    final savingsPercent = annualSavingsPercent(
+      annual: annualAmount,
+      monthly: monthlyAmount,
+    );
+    final savingsLabel = savings != null ? priceLabel(savings, symbol) : null;
+    final annualLabel = recurringPriceLabel(annual) ?? annual.price;
+    final busy = pending || _upgradeInFlight;
+
+    if (!_upgradeViewTracked) {
+      _upgradeViewTracked = true;
+      MixpanelService.instance.track(
+        'Upgrade Paywall Viewed',
+        properties: {
+          'from_product_id': ?_sub.activeProductId,
+          'to_product_id': annual.id,
+          'savings_percent': ?savingsPercent,
+        },
+      );
+    }
+
+    final headlineStyle = GoogleFonts.inter(
+      letterSpacing: -0.8,
+      fontSize: 30,
+      fontWeight: FontWeight.w800,
+      color: AppColors.textPrimary,
+      height: 1.15,
+    );
+
+    return Scaffold(
+      backgroundColor: AppColors.surface,
+      body: SafeArea(
+        bottom: false,
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 40),
+                        const _PaywallHeaderImage(size: 64),
+                        const SizedBox(height: 20),
+                        // The saving is the whole pitch, so it's in the
+                        // headline itself, in the accent color.
+                        Text.rich(
+                          TextSpan(
+                            style: headlineStyle,
+                            children: [
+                              const TextSpan(text: 'Switch to Annual'),
+                              if (savingsLabel != null) ...[
+                                const TextSpan(text: ' and save '),
+                                TextSpan(
+                                  text: savingsLabel,
+                                  style: const TextStyle(color: _accent),
+                                ),
+                                const TextSpan(text: ' a year'),
+                              ],
+                            ],
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'Same unlimited access, billed once a year.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+                        _UpgradeComparison(
+                          monthlyPrice:
+                              recurringPriceLabel(monthly) ?? monthly.price,
+                          monthlyYearly: monthlyAmount != null
+                              ? priceLabel(monthlyAmount * 12, symbol)
+                              : null,
+                          annualPrice: annualLabel,
+                          annualPerMonth: annualAmount != null
+                              ? perMonthPriceLabel(annualAmount, symbol)
+                              : null,
+                          savingsPercent: savingsPercent,
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Same pinned white bar as the main paywall.
+                Container(
+                  decoration: const BoxDecoration(
+                    color: AppColors.surface,
+                    border: Border(top: BorderSide(color: AppColors.divider)),
+                  ),
+                  padding: EdgeInsets.fromLTRB(
+                    20,
+                    16,
+                    20,
+                    12 + MediaQuery.paddingOf(context).bottom,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        height: 60,
+                        child: ElevatedButton(
+                          onPressed: busy ? null : _startUpgrade,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _accent,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: _accent.withValues(
+                              alpha: 0.5,
+                            ),
+                            disabledForegroundColor: Colors.white.withValues(
+                              alpha: 0.85,
+                            ),
+                            side: BorderSide.none,
+                            elevation: 0,
+                            // The fixed height does the vertical spacing; the
+                            // theme's own padding would crowd the larger label.
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            overlayColor: Colors.white.withValues(alpha: 0.12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: busy
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : Text(
+                                  'Switch to Annual',
+                                  style: GoogleFonts.inter(
+                                    letterSpacing: -0.5,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      // A plain, equally easy way out — best practice for an
+                      // upsell to someone who's already paying.
+                      TextButton(
+                        onPressed: busy
+                            ? null
+                            : () {
+                                MixpanelService.instance.track(
+                                  'Upgrade Paywall Dismissed',
+                                );
+                                Navigator.of(context).pop(false);
+                              },
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.textSecondary,
+                        ),
+                        child: Text(
+                          'Keep Monthly',
+                          style: GoogleFonts.inter(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      // Billing disclosure: what's charged and that the plans
+                      // don't stack.
+                      Text(
+                        '$annualLabel billed yearly. Your annual plan replaces '
+                        'your monthly one, so you\'re never charged for both. '
+                        'Cancel anytime.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildLinks(pending: busy),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            Positioned(
+              top: 8,
+              right: 16,
+              child: _CloseButton(
+                onPressed: busy ? null : () => Navigator.of(context).pop(false),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Restore (iOS) · Terms · Privacy — accent text, no separators.
+  Widget _buildLinks({required bool pending}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        if (Platform.isIOS) ...[
+          _LinkText(
+            label: 'Restore Purchases',
+            pressed: _restorePressed,
+            onTap: pending
+                ? null
+                : () {
+                    setState(() => _isRestoring = true);
+                    _sub.restorePurchases();
+                  },
+            onPressedChanged: (v) => setState(() => _restorePressed = v),
+          ),
+          const SizedBox(width: 28),
+        ],
+        _LinkText(
+          label: 'Terms',
+          pressed: _termsPressed,
+          onTap: () => _openInApp('https://sneakscan.com/terms'),
+          onPressedChanged: (v) => setState(() => _termsPressed = v),
+        ),
+        const SizedBox(width: 28),
+        _LinkText(
+          label: 'Privacy',
+          pressed: _privacyPressed,
+          onTap: () => _openInApp('https://sneakscan.com/privacy'),
+          onPressedChanged: (v) => setState(() => _privacyPressed = v),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isStatusLoading = _sub.status == SubscriptionStatus.loading;
     final pending = _sub.purchasePending || isStatusLoading;
+    // A monthly subscriber opening the soft paywall gets a focused pitch to
+    // switch to annual instead of the feature list they've already bought.
+    if (widget.isCloseable && _sub.canUpgradeToAnnual) {
+      return _buildUpgrade(pending: pending);
+    }
     // The RevenueCat price experiment decides which product this user buys, so
     // the price isn't final until both the store query and the offerings fetch
     // land. Both are time-capped, so this can't stick on forever.
@@ -896,44 +1232,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                         const SizedBox(height: 12),
                       ],
 
-                      // Links row — accent text, no separators.
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (Platform.isIOS) ...[
-                            _LinkText(
-                              label: 'Restore Purchases',
-                              pressed: _restorePressed,
-                              onTap: pending
-                                  ? null
-                                  : () {
-                                      setState(() => _isRestoring = true);
-                                      _sub.restorePurchases();
-                                    },
-                              onPressedChanged: (v) =>
-                                  setState(() => _restorePressed = v),
-                            ),
-                            const SizedBox(width: 28),
-                          ],
-                          _LinkText(
-                            label: 'Terms',
-                            pressed: _termsPressed,
-                            onTap: () =>
-                                _openInApp('https://sneakscan.com/terms'),
-                            onPressedChanged: (v) =>
-                                setState(() => _termsPressed = v),
-                          ),
-                          const SizedBox(width: 28),
-                          _LinkText(
-                            label: 'Privacy',
-                            pressed: _privacyPressed,
-                            onTap: () =>
-                                _openInApp('https://sneakscan.com/privacy'),
-                            onPressedChanged: (v) =>
-                                setState(() => _privacyPressed = v),
-                          ),
-                        ],
-                      ),
+                      _buildLinks(pending: pending),
                     ],
                   ),
                 ),
@@ -1650,6 +1949,170 @@ class _PlanRadio extends StatelessWidget {
       child: selected
           ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
           : null,
+    );
+  }
+}
+
+/// Current monthly cost vs annual, stacked, for the upgrade view. The monthly
+/// row shows what they pay over a year, struck through, so the gap to the
+/// annual price is visible at a glance.
+class _UpgradeComparison extends StatelessWidget {
+  final String monthlyPrice;
+  final String? monthlyYearly;
+  final String annualPrice;
+  final String? annualPerMonth;
+  final int? savingsPercent;
+
+  const _UpgradeComparison({
+    required this.monthlyPrice,
+    required this.monthlyYearly,
+    required this.annualPrice,
+    required this.annualPerMonth,
+    required this.savingsPercent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _row(
+          label: 'Monthly',
+          tag: 'Your plan',
+          price: monthlyYearly != null ? '$monthlyYearly/yr' : monthlyPrice,
+          detail: monthlyYearly != null ? '$monthlyPrice/mo' : null,
+          highlighted: false,
+        ),
+        const SizedBox(height: 14),
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            _row(
+              label: 'Annual',
+              price: '$annualPrice/yr',
+              detail: annualPerMonth != null ? '$annualPerMonth/mo' : null,
+              highlighted: true,
+            ),
+            if (savingsPercent != null)
+              Positioned(
+                top: -12,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _accent,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      'SAVE $savingsPercent%',
+                      style: GoogleFonts.inter(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _row({
+    required String label,
+    String? tag,
+    required String price,
+    String? detail,
+    required bool highlighted,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: highlighted ? _accent : AppColors.outline,
+          width: 2,
+        ),
+        boxShadow: highlighted
+            ? [
+                BoxShadow(
+                  color: _accent.withValues(alpha: 0.18),
+                  blurRadius: 12,
+                  offset: const Offset(0, 3),
+                ),
+              ]
+            : null,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    letterSpacing: -0.3,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                if (tag != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    tag,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                price,
+                style: GoogleFonts.inter(
+                  letterSpacing: -0.3,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  // The current plan's yearly cost, struck through: the
+                  // number the annual plan beats.
+                  color: highlighted
+                      ? AppColors.textPrimary
+                      : AppColors.textSecondary,
+                  decoration: highlighted ? null : TextDecoration.lineThrough,
+                  decorationColor: AppColors.textSecondary,
+                ),
+              ),
+              if (detail != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

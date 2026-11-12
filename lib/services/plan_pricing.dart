@@ -34,10 +34,28 @@ int? annualSavingsPercent({required double? annual, required double? monthly}) {
   return percent > 0 ? percent : null;
 }
 
-/// [annual] spread over twelve months, e.g. "$6.67".
+/// [amount] as a price, e.g. "$99.89".
 ///
 /// [currencySymbol] comes from the store product, so a non-US storefront gets
 /// its own symbol; the decimal format stays plain since the app ships no
 /// locale formatting package.
+String priceLabel(double amount, String currencySymbol) =>
+    '$currencySymbol${amount.toStringAsFixed(2)}';
+
+/// [annual] spread over twelve months, e.g. "$6.67".
 String perMonthPriceLabel(double annual, String currencySymbol) =>
-    '$currencySymbol${(annual / 12).toStringAsFixed(2)}';
+    priceLabel(annual / 12, currencySymbol);
+
+/// Money saved per year by paying [annual] instead of [monthly] twelve times,
+/// rounded down to the cent so it's never overstated. Null when there's no
+/// saving.
+double? annualSavingsAmount({
+  required double? annual,
+  required double? monthly,
+}) {
+  if (annual == null || monthly == null || annual <= 0 || monthly <= 0) {
+    return null;
+  }
+  final cents = ((monthly * 12 - annual) * 100 + 1e-6).floor();
+  return cents > 0 ? cents / 100 : null;
+}
