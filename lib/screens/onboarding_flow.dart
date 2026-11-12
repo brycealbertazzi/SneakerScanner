@@ -517,6 +517,7 @@ const _kQuestions = [
     '30+',
   ]),
   _OnboardingQuestion('Where do you primarily sell?', [
+    'None / I\'m just starting out',
     'StockX',
     'GOAT',
     'eBay',
@@ -528,7 +529,7 @@ const _kQuestions = [
     'Knowing which shoes to buy',
     'Identifying fakes',
     'Keeping track of inventory',
-    'Other',
+    'Other/I don\'t know',
   ]),
   _OnboardingQuestion('What\'s your main goal with SneakScan?', [
     'Find as many shoes as possible to flip',
@@ -542,6 +543,7 @@ const _kQuestions = [
     'How fast it will sell',
     'The resale price',
     'Whether it’s worth buying',
+    'Other/I don\'t know',
   ]),
   _OnboardingQuestion(
     'How much time per week do you spend researching prices?',

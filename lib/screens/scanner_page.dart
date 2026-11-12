@@ -246,14 +246,16 @@ class _ScannerPageState extends State<ScannerPage>
     final codePatterns = <RegExp>[
       // Nike/Jordan: DD1391-100, CT8012 170, FB8896/100, CW1590.100, DH9765002
       RegExp('\\b[A-Z]{2,3}\\d{4}$sep\\d{3}\\b'),
+      // New Balance: ML515BLK, WL515CB3, U9060BLK, M990GL6, M1080B12.
+      // Ahead of the all-digit patterns so a label with no readable brand
+      // prefers its NB code over other numbers on it (e.g. "312044 15").
+      _nbCodeCandidate,
       // Jordan/UA 6-digit: 555088-134, 555088 134, 3026175-001
       RegExp('\\b\\d{6,7}$sep\\d{3}\\b'),
       // Puma: 374915-01, 374915 01
       RegExp('\\b\\d{6}$sep\\d{2}\\b'),
       // Adidas: GW2871, HP5582, IF1477 (2 letters + 4 digits)
       RegExp(r'\b[A-Z]{2}\d{4}\b'),
-      // New Balance: M990GL6, ML574EVG, M1080B12
-      RegExp(r'\bM[A-Z]?\d{3,4}[A-Z]{1,3}\d{0,2}\b'),
       // Converse: 162050C
       RegExp(r'\b\d{6}C\b'),
       // Skechers: 232123/BLK, M232301-BBK, 149550 NVY, 200291W/BLK
@@ -267,6 +269,15 @@ class _ScannerPageState extends State<ScannerPage>
       if (match != null) {
         patternCandidates.add(match.group(0)!);
       }
+    }
+
+    // New Balance codes with no digits (MTTRSLK) look like ordinary words,
+    // so they're only tried on NB labels, after every other candidate, and
+    // every match is tried since words like "WARNING" can come first.
+    if (foundBrand == 'NEW BALANCE') {
+      patternCandidates.addAll(
+        _nbLetterCodeCandidate.allMatches(normalized).map((m) => m.group(0)!),
+      );
     }
 
     // --- Pick the first candidate that passes all validation ---
@@ -355,6 +366,49 @@ class _ScannerPageState extends State<ScannerPage>
       )
       .join(' ');
 
+  /// New Balance code in OCR text: M/W/U, up to 3 letters, a 3-4 digit
+  /// model number, then color/version: ML515BLK, WL515CB3, U9060BLK,
+  /// M990GL6, M1080B12.
+  static final _nbCodeCandidate = RegExp(
+    r'\b[MWU][A-Z]{0,3}\d{3,4}[A-Z][A-Z0-9]{0,4}\b',
+  );
+
+  /// Validation form of [_nbCodeCandidate].
+  static final _nbCodeSku = RegExp(
+    r'^[MWU][A-Z]{0,3}[0-9]{3,4}[A-Z][A-Z0-9]{0,4}$',
+  );
+
+  /// New Balance code with no model number: MTTRSLK. Optional trailing
+  /// version digit. Only accepted when the label's brand is New Balance.
+  static final _nbLetterCodeCandidate = RegExp(r'\b[MWU][A-Z]{6,7}\d?\b');
+  static final _nbLetterCodeSku = RegExp(r'^[MWU][A-Z]{6,7}[0-9]?$');
+
+  /// Words of [_nbLetterCodeSku]'s shape that appear on shoe labels.
+  static const _nbLetterCodeStopwords = {
+    'WARNING',
+    'WARRANTY',
+    'MATERIAL',
+    'MESSAGE',
+    'MOUNTAIN',
+    'WALKING',
+    'WEATHER',
+    'MAXIMUM',
+    'MINIMUM',
+    'UNLINED',
+    'MEMBERS',
+    'WORKOUT',
+    'MAGENTA',
+    'MIDNIGHT',
+    'MUSHROOM',
+    'MULBERRY',
+    'MARATHON',
+    'MOCCASIN',
+    'UPGRADED',
+    'UNIVERSE',
+    'WASHABLE',
+    'MACHINE',
+  };
+
   // Brand SKU patterns derived from sku_brand_awareness.json
   static final Map<String, List<RegExp>> _brandSkuPatterns = {
     'all': [
@@ -374,6 +428,7 @@ class _ScannerPageState extends State<ScannerPage>
       RegExp(r'^([0-9]{6})[\s./\-–_]+([0-9]{2,3})$'),
       RegExp(r'^(?:[MWU])([0-9]{4}[A-Z]?)([A-Z]{2,6})$'),
       RegExp(r'^([A-Z]{2}[0-9]{3})([A-Z0-9]{2,6})$'),
+      _nbCodeSku,
       RegExp(r'^([A-Z]{2})([0-9]{4})$'),
       RegExp(r'^([A-Z0-9]{6})$'),
       RegExp(r'^([A-Z][0-9]{5}[A-Z])$'),
@@ -408,6 +463,7 @@ class _ScannerPageState extends State<ScannerPage>
     'new_balance': [
       RegExp(r'^(?:[MWU])([0-9]{4}[A-Z]?)([A-Z]{2,6})$'),
       RegExp(r'^([A-Z]{2}[0-9]{3})([A-Z0-9]{2,6})$'),
+      _nbCodeSku,
     ],
     'adidas': [RegExp(r'^([A-Z0-9]{6})$'), RegExp(r'^([A-Z]{2})([0-9]{4})$')],
     'reebok': [RegExp(r'^([A-Z]{2}[0-9]{4})$'), RegExp(r'^([A-Z0-9]{6})$')],
@@ -466,6 +522,15 @@ class _ScannerPageState extends State<ScannerPage>
     final upper = code.toUpperCase();
     final alphanumOnly = upper.replaceAll(RegExp(r'[^A-Z0-9]'), '');
     if (alphanumOnly.length < 6 || alphanumOnly.length > 11) return false;
+
+    // New Balance letter-only codes (MTTRSLK) would fail the digit and
+    // all-letters checks below, so they're validated here, NB labels only.
+    if (_brandKeyFromName(brand) == 'new_balance' &&
+        _nbLetterCodeSku.hasMatch(upper)) {
+      return !_nbLetterCodeStopwords.contains(
+        upper.replaceAll(RegExp(r'[0-9]$'), ''),
+      );
+    }
 
     // Must contain at least one digit
     if (!alphanumOnly.contains(RegExp(r'[0-9]'))) return false;

@@ -4,15 +4,27 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../screens/login_screen.dart';
 import '../screens/main_screen.dart';
 import '../services/mixpanel_service.dart';
 import '../services/paywall_impression.dart';
+import '../services/plan_pricing.dart';
+import '../services/play_offers.dart';
 import '../services/review_access.dart';
 import '../services/subscription_service.dart';
 import '../theme/app_theme.dart';
+
+/// The paywall's one accent color: subscribe button, selected plan card,
+/// radio, savings badge, checkmarks and footer links. Brand orange in place of
+/// the reference design's purple, so the paywall stays on-brand.
+const _accent = AppColors.brand;
+
+/// Artwork above the headline. The app icon is a placeholder until the final
+/// header image is added to assets/ (and pubspec.yaml).
+const _kHeaderImage = 'assets/app_icon.png';
 
 class PaywallPage extends StatefulWidget {
   /// When false the close button is hidden and success/restore navigates to
@@ -45,6 +57,11 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
   bool _successDialogShowing = false;
   bool _isRestoring = false;
   Timer? _cancelFallbackTimer;
+
+  /// Which plan card is selected. Annual by default: it's the better value
+  /// and the one the savings badge points at. Only meaningful while
+  /// [SubscriptionService.hasMonthlyPlan] is true — see [_effectivePlan].
+  SubscriptionPlan _selectedPlan = SubscriptionPlan.annual;
 
   /// One RevenueCat impression per display, however many rebuilds happen.
   bool _impressionTracked = false;
@@ -524,6 +541,22 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     }
   }
 
+  /// Opens a legal page inside the app — SFSafariViewController on iOS, a
+  /// Custom Tab on Android — so the user closes it and lands back on the
+  /// paywall instead of being sent off to the browser app.
+  Future<void> _openInApp(String url) async {
+    final uri = Uri.parse(url);
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      if (opened) return;
+    } catch (e) {
+      debugPrint('[Paywall] In-app browser failed for $url: $e');
+    }
+    // No in-app browser available (rare on Android) — the external browser
+    // still beats a dead link.
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -534,10 +567,23 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     );
   }
 
-  /// The renewal price. Reads past any trial phase on Play, so a trial-eligible
-  /// Android user gets "$59.99/year" here rather than "Free" — which used to
-  /// fall through to null and leave the line on its skeleton forever.
-  String? _priceLabel() => _sub.annualPriceLabel;
+  /// The plan the button will buy. Falls back to annual whenever the offering
+  /// has no buyable monthly product, so a stale monthly selection can't
+  /// leave the button pointing at nothing.
+  SubscriptionPlan get _effectivePlan =>
+      _sub.hasMonthlyPlan ? _selectedPlan : SubscriptionPlan.annual;
+
+  /// The renewal price of the selected plan. Reads past any trial phase on
+  /// Play, so a trial-eligible Android user gets "$59.99/year" here rather than
+  /// "Free" — which used to fall through to null and leave the line on its
+  /// skeleton forever.
+  String? _priceLabel() => _effectivePlan == SubscriptionPlan.monthly
+      ? _sub.monthlyPriceLabel
+      : _sub.annualPriceLabel;
+
+  /// "/year" or "/month", matching [_priceLabel].
+  String get _pricePeriod =>
+      _effectivePlan == SubscriptionPlan.monthly ? 'month' : 'year';
 
   /// Placeholder held at the price line's own height so the real text lands
   /// without shifting the layout under the subscribe button.
@@ -572,10 +618,16 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
     final showFeatureList = _sub.isLapsedSubscriber || _sub.isSubscribed;
     final headline = showFeatureList
         ? 'Spot profits instantly with SneakScan'
-        : 'How Your Free Trial Works';
+        : 'Try SneakScan for FREE';
+    // The plan cards make the pinned bar taller, so the scrolling content is
+    // condensed to keep the pitch in view. The single-plan paywall keeps its
+    // original spacing — it's the experiment's baseline.
+    final showPlanPicker =
+        !_sub.isSubscribed && !priceLoading && _sub.hasMonthlyPlan;
+    final compact = showPlanPicker;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.surface,
       // Bottom inset is handled by the white CTA bar so it runs to the screen edge.
       body: SafeArea(
         bottom: false,
@@ -589,60 +641,48 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                     padding: const EdgeInsets.symmetric(horizontal: 28),
                     child: Column(
                       children: [
-                        const SizedBox(height: 36),
+                        SizedBox(height: compact ? 20 : 32),
 
-                        // Outside the trial/lapsed branch below — both variants
-                        // get the same trust anchor before the pitch.
-                        const PaywallSocialProof(),
+                        _PaywallHeaderImage(size: compact ? 60 : 72),
 
-                        const SizedBox(height: 28),
+                        SizedBox(height: compact ? 14 : 18),
 
                         // Headline
                         Text(
                           headline,
                           textAlign: TextAlign.center,
                           style: GoogleFonts.inter(
-                            letterSpacing: -0.5,
-                            fontSize: 30,
+                            letterSpacing: -0.8,
+                            fontSize: compact ? 28 : 32,
                             fontWeight: FontWeight.w800,
                             color: AppColors.textPrimary,
-                            height: 1.2,
+                            height: 1.15,
                           ),
                         ),
 
-                        const SizedBox(height: 32),
+                        SizedBox(height: compact ? 18 : 28),
 
-                        // Trial-eligible users get the billing timeline instead
-                        // of the feature list: the onboarding priming screen
-                        // just pitched the features, and what's actually unclear
-                        // at this point is when they get charged.
-                        AppCard(
-                          outlined: true,
-                          padding: const EdgeInsets.all(20),
-                          child: showFeatureList
-                              ? Column(
-                                  children: [
-                                    for (final (i, point)
-                                        in kSellingPoints.indexed) ...[
-                                      if (i > 0) const SizedBox(height: 22),
-                                      PaywallFeatureRow(
-                                        icon: point.icon,
-                                        text: point.text,
-                                      ),
-                                    ],
-                                  ],
-                                )
-                              : const TrialTimeline(),
-                        ),
-
-                        // The feature card above already lists every selling
-                        // point, so only the trial variant needs the checklist.
+                        // Trial-eligible users get the billing timeline above
+                        // the checklist: the onboarding priming screen just
+                        // pitched the features, and what's actually unclear at
+                        // this point is when they get charged.
                         if (!showFeatureList) ...[
-                          const SizedBox(height: 28),
-                          const _SellingPointChecklist(),
+                          _GreyPanel(
+                            padding: EdgeInsets.all(compact ? 16 : 20),
+                            child: TrialTimeline(compact: compact),
+                          ),
+                          SizedBox(height: compact ? 12 : 16),
                         ],
 
-                        const SizedBox(height: 32),
+                        _GreyPanel(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: compact ? 14 : 18,
+                          ),
+                          child: _SellingPointChecklist(compact: compact),
+                        ),
+
+                        SizedBox(height: compact ? 16 : 28),
                       ],
                     ),
                   ),
@@ -651,25 +691,46 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                 // Pinned bottom section — solid white so the CTA sits on its
                 // own surface, clear of the scrolling content above.
                 Container(
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppColors.surface,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.06),
-                        blurRadius: 16,
-                        offset: const Offset(0, -4),
-                      ),
-                    ],
+                    border: Border(top: BorderSide(color: AppColors.divider)),
                   ),
                   padding: EdgeInsets.fromLTRB(
-                    28,
+                    20,
                     16,
-                    28,
+                    20,
                     16 + MediaQuery.paddingOf(context).bottom,
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Plan picker — only when the assigned offering has a
+                      // buyable monthly product. Otherwise this is the
+                      // single-plan annual paywall, unchanged. The bar's top
+                      // padding leaves room for the badge that overhangs the
+                      // yearly card.
+                      if (showPlanPicker) ...[
+                        // Room for the badge centred on the yearly card's top
+                        // edge.
+                        const SizedBox(height: 6),
+                        _PlanPicker(
+                          annual: _sub.annualProduct!,
+                          monthly: _sub.monthlyProduct!,
+                          selected: _effectivePlan,
+                          enabled: !(pending && !_isRestoring),
+                          onSelected: (plan) {
+                            if (plan == _selectedPlan) return;
+                            HapticFeedback.selectionClick();
+                            MixpanelService.instance.track(
+                              'Paywall Plan Selected',
+                              properties: {'plan': plan.name},
+                            );
+                            setState(() => _selectedPlan = plan);
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
                       // Reassurance line — both variants get it, with the
                       // wording that fits what they're actually agreeing to.
                       // Active subscribers are excluded: they've already
@@ -690,7 +751,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           height: 56,
                           decoration: BoxDecoration(
                             color: Colors.green.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(999),
+                            borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: Colors.green.withValues(alpha: 0.4),
                               width: 1.5,
@@ -725,7 +786,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           onPointerCancel: (_) => _cancelHold(),
                           child: SizedBox(
                             width: double.infinity,
-                            height: 64,
+                            height: 56,
                             child: ElevatedButton(
                               // priceLoading also disables: buying before the
                               // A/B variant resolves would charge a price the
@@ -739,21 +800,31 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                                       // Releasing after a three-second hold must
                                       // not also open the real purchase sheet.
                                       if (_holdFired) return;
+                                      final plan = _effectivePlan;
                                       MixpanelService.instance.track(
                                         'Subscribe Button Tapped',
+                                        properties: {
+                                          'plan': plan.name,
+                                          'monthly_shown': _sub.hasMonthlyPlan,
+                                        },
                                       );
-                                      _sub.buyAnnual();
+                                      _sub.buy(plan);
                                     },
-                              // Brand orange: the one filled color on the
-                              // paywall, so the purchase is unmistakable.
+                              // The accent fill: the one solid block of color
+                              // on the paywall, so the purchase is unmistakable.
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.brand,
+                                backgroundColor: _accent,
                                 foregroundColor: Colors.white,
-                                disabledBackgroundColor: AppColors.brand
-                                    .withValues(alpha: 0.5),
+                                disabledBackgroundColor: _accent.withValues(
+                                  alpha: 0.5,
+                                ),
                                 disabledForegroundColor: Colors.white
                                     .withValues(alpha: 0.85),
                                 side: BorderSide.none,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
                               child: (pending && !_isRestoring)
                                   ? const SizedBox(
@@ -767,8 +838,8 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                                   : Text(
                                       buttonLabel ?? 'Get Unlimited Scans',
                                       style: GoogleFonts.inter(
-                                        letterSpacing: -0.5,
-                                        fontSize: 18,
+                                        letterSpacing: -0.4,
+                                        fontSize: 19,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
@@ -784,7 +855,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           const SizedBox(height: 12),
                         ] else if (_priceLabel() != null) ...[
                           Text(
-                            '${_priceLabel()}/year - Cancel Anytime',
+                            '${_priceLabel()}/$_pricePeriod - Cancel Anytime',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               color: AppColors.textSecondary,
@@ -801,7 +872,7 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                           const SizedBox(height: 12),
                         ] else if (_priceLabel() != null) ...[
                           Text(
-                            '$kTrialDays day free trial then ${_priceLabel()}/year',
+                            '$kTrialDays day free trial then ${_priceLabel()}/$_pricePeriod',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               color: AppColors.textSecondary,
@@ -825,97 +896,44 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
                         const SizedBox(height: 12),
                       ],
 
-                      // Links row
-                      if (Platform.isIOS)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
+                      // Links row — accent text, no separators.
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (Platform.isIOS) ...[
                             _LinkText(
-                              label: 'Terms',
-                              pressed: _termsPressed,
-                              onTap: () => launchUrl(
-                                Uri.parse('https://terms.sneakscan.com'),
-                                mode: LaunchMode.externalApplication,
-                              ),
-                              onTapDown: () =>
-                                  setState(() => _termsPressed = true),
-                              onTapUp: () =>
-                                  setState(() => _termsPressed = false),
-                            ),
-                            _Dot(),
-                            GestureDetector(
+                              label: 'Restore Purchases',
+                              pressed: _restorePressed,
                               onTap: pending
                                   ? null
                                   : () {
                                       setState(() => _isRestoring = true);
                                       _sub.restorePurchases();
                                     },
-                              onTapDown: (_) =>
-                                  setState(() => _restorePressed = true),
-                              onTapUp: (_) =>
-                                  setState(() => _restorePressed = false),
-                              onTapCancel: () =>
-                                  setState(() => _restorePressed = false),
-                              child: Text(
-                                'Restore Purchases',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  color: _restorePressed
-                                      ? AppColors.textPrimary
-                                      : AppColors.textSecondary,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: _restorePressed
-                                      ? AppColors.textPrimary
-                                      : AppColors.textSecondary,
-                                ),
-                              ),
+                              onPressedChanged: (v) =>
+                                  setState(() => _restorePressed = v),
                             ),
-                            _Dot(),
-                            _LinkText(
-                              label: 'Privacy',
-                              pressed: _privacyPressed,
-                              onTap: () => launchUrl(
-                                Uri.parse('https://privacy.sneakscan.com'),
-                                mode: LaunchMode.externalApplication,
-                              ),
-                              onTapDown: () =>
-                                  setState(() => _privacyPressed = true),
-                              onTapUp: () =>
-                                  setState(() => _privacyPressed = false),
-                            ),
+                            const SizedBox(width: 28),
                           ],
-                        )
-                      else
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _LinkText(
-                              label: 'Terms',
-                              pressed: _termsPressed,
-                              onTap: () => launchUrl(
-                                Uri.parse('https://terms.sneakscan.com'),
-                                mode: LaunchMode.externalApplication,
-                              ),
-                              onTapDown: () =>
-                                  setState(() => _termsPressed = true),
-                              onTapUp: () =>
-                                  setState(() => _termsPressed = false),
-                            ),
-                            _Dot(),
-                            _LinkText(
-                              label: 'Privacy',
-                              pressed: _privacyPressed,
-                              onTap: () => launchUrl(
-                                Uri.parse('https://privacy.sneakscan.com'),
-                                mode: LaunchMode.externalApplication,
-                              ),
-                              onTapDown: () =>
-                                  setState(() => _privacyPressed = true),
-                              onTapUp: () =>
-                                  setState(() => _privacyPressed = false),
-                            ),
-                          ],
-                        ),
+                          _LinkText(
+                            label: 'Terms',
+                            pressed: _termsPressed,
+                            onTap: () =>
+                                _openInApp('https://sneakscan.com/terms'),
+                            onPressedChanged: (v) =>
+                                setState(() => _termsPressed = v),
+                          ),
+                          const SizedBox(width: 28),
+                          _LinkText(
+                            label: 'Privacy',
+                            pressed: _privacyPressed,
+                            onTap: () =>
+                                _openInApp('https://sneakscan.com/privacy'),
+                            onPressedChanged: (v) =>
+                                setState(() => _privacyPressed = v),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -925,17 +943,12 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
             // Close button — only shown when paywall is dismissible
             if (widget.isCloseable)
               Positioned(
-                top: 12,
+                top: 8,
                 right: 16,
-                child: IconButton(
+                child: _CloseButton(
                   onPressed: pending
                       ? null
                       : () => Navigator.of(context).pop(false),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    color: AppColors.textSecondary,
-                    size: 28,
-                  ),
                 ),
               ),
           ],
@@ -950,48 +963,137 @@ class _PaywallPageState extends State<PaywallPage> with WidgetsBindingObserver {
 const kSellingPoints = <({IconData icon, String text})>[
   (icon: Icons.all_inclusive_rounded, text: 'Unlimited scans'),
   (icon: Icons.show_chart_rounded, text: 'Live StockX & GOAT market prices'),
-  (icon: Icons.sell_rounded, text: 'eBay sold comps with fees included'),
+  (icon: Icons.sell_rounded, text: 'Sold listings on StockX, eBay and GOAT'),
   (icon: Icons.camera_alt_rounded, text: 'Label OCR & barcode scanning'),
   (icon: Icons.payments_rounded, text: 'Instant profit estimate per size'),
   (icon: Icons.history_rounded, text: 'Full history of every scan'),
 ];
 
-/// Orange check-circle list of [kSellingPoints], shown under the free-trial
-/// timeline. The non-trial paywall lists the same points in its feature card.
+/// Accent-checkmark list of [kSellingPoints] in the paywall's grey panel.
+/// Shown on every variant — under the free-trial timeline, or on its own for
+/// lapsed and active subscribers.
 class _SellingPointChecklist extends StatelessWidget {
-  const _SellingPointChecklist();
+  /// Tighter rows for when the plan cards take room from the scroll area.
+  final bool compact;
+
+  const _SellingPointChecklist({this.compact = false});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Column(
-        children: [
-          for (final point in kSellingPoints)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.check_circle_rounded,
-                    color: AppColors.brand,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      point.text,
-                      style: GoogleFonts.inter(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                ],
+    return Column(
+      children: [
+        for (final (i, point) in kSellingPoints.indexed) ...[
+          if (i > 0) SizedBox(height: compact ? 10 : 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(top: 1),
+                child: Icon(Icons.check_rounded, color: _accent, size: 24),
               ),
-            ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  point.text,
+                  style: GoogleFonts.inter(
+                    letterSpacing: -0.3,
+                    fontSize: compact ? 16 : 17,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
+      ],
+    );
+  }
+}
+
+/// The rounded light-grey panel the paywall's content sits in.
+class _GreyPanel extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  const _GreyPanel({required this.child, required this.padding});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Rounded artwork above the headline.
+class _PaywallHeaderImage extends StatelessWidget {
+  final double size;
+
+  const _PaywallHeaderImage({required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(size * 0.24);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Image.asset(_kHeaderImage, fit: BoxFit.cover),
+      ),
+    );
+  }
+}
+
+/// White circular close button with a soft shadow, top-right.
+class _CloseButton extends StatelessWidget {
+  final VoidCallback? onPressed;
+
+  const _CloseButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        tooltip: 'Close',
+        onPressed: onPressed,
+        icon: const Icon(
+          Icons.close_rounded,
+          color: AppColors.textPrimary,
+          size: 24,
+        ),
       ),
     );
   }
@@ -1043,7 +1145,11 @@ class PaywallFeatureRow extends StatelessWidget {
 /// Public so it can be widget-tested on its own, without standing up
 /// [SubscriptionService] and Firebase — same reason [PaywallFeatureRow] is.
 class TrialTimeline extends StatelessWidget {
-  const TrialTimeline({super.key});
+  /// Smaller tiles and shorter rails for when the plan cards take room from
+  /// the scroll area.
+  final bool compact;
+
+  const TrialTimeline({super.key, this.compact = false});
 
   static const _ink = AppColors.textPrimary;
 
@@ -1051,7 +1157,8 @@ class TrialTimeline extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const _TimelineNode(
+        _TimelineNode(
+          compact: compact,
           icon: Icons.lock_open_rounded,
           color: _ink,
           title: 'Today',
@@ -1060,15 +1167,17 @@ class TrialTimeline extends StatelessWidget {
         // Explicit connector segments rather than a Stack/IntrinsicHeight rail:
         // heights stay predictable inside the paywall's SingleChildScrollView,
         // and each segment carries its own slice of the fade.
-        const _TimelineConnector(fromAlpha: 1.0, toAlpha: 0.6),
+        _TimelineConnector(fromAlpha: 1.0, toAlpha: 0.6, compact: compact),
         _TimelineNode(
+          compact: compact,
           icon: Icons.notifications_active_rounded,
           color: _ink,
           title: 'In ${kTrialDays - 1} days',
           body: 'We\'ll remind you 1 day before your free trial ends',
         ),
-        const _TimelineConnector(fromAlpha: 0.6, toAlpha: 0.25),
+        _TimelineConnector(fromAlpha: 0.6, toAlpha: 0.25, compact: compact),
         _TimelineNode(
+          compact: compact,
           // Muted: the charge hasn't happened, and saying so plainly is the
           // whole reassurance this timeline exists to deliver.
           icon: Icons.workspace_premium_rounded,
@@ -1088,13 +1197,18 @@ class _TimelineNode extends StatelessWidget {
   final Color? color;
   final String title;
   final String body;
+  final bool compact;
 
   const _TimelineNode({
+    this.compact = false,
     required this.icon,
     required this.color,
     required this.title,
     required this.body,
   });
+
+  /// The icon tile's side; the connector centres its rail under it.
+  static double tileSize(bool compact) => compact ? 50 : 58;
 
   @override
   Widget build(BuildContext context) {
@@ -1106,19 +1220,21 @@ class _TimelineNode extends StatelessWidget {
         // is the only content on the trial variant, so it carries the screen
         // rather than sitting in a list.
         Container(
-          width: 58,
-          height: 58,
+          width: _TimelineNode.tileSize(compact),
+          height: _TimelineNode.tileSize(compact),
           decoration: BoxDecoration(
-            color: accent ?? AppColors.background,
-            borderRadius: BorderRadius.circular(15),
+            // White for the muted beat, so it still reads as a tile on the
+            // grey panel.
+            color: accent ?? AppColors.surface,
+            borderRadius: BorderRadius.circular(compact ? 13 : 15),
           ),
           child: Icon(
             icon,
             color: accent == null ? AppColors.outline : Colors.white,
-            size: 30,
+            size: compact ? 26 : 30,
           ),
         ),
-        const SizedBox(width: 18),
+        SizedBox(width: compact ? 16 : 18),
         // Expanded so the long middle line wraps instead of overflowing.
         Expanded(
           child: Column(
@@ -1128,16 +1244,16 @@ class _TimelineNode extends StatelessWidget {
                 title,
                 style: GoogleFonts.inter(
                   letterSpacing: -0.5,
-                  fontSize: 20,
+                  fontSize: compact ? 18 : 20,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                 ),
               ),
-              const SizedBox(height: 4),
+              SizedBox(height: compact ? 2 : 4),
               Text(
                 body,
                 style: GoogleFonts.inter(
-                  fontSize: 16,
+                  fontSize: compact ? 15 : 16,
                   fontWeight: FontWeight.w500,
                   color: AppColors.textPrimary.withValues(alpha: 0.65),
                   height: 1.35,
@@ -1155,18 +1271,25 @@ class _TimelineNode extends StatelessWidget {
 class _TimelineConnector extends StatelessWidget {
   final double fromAlpha;
   final double toAlpha;
+  final bool compact;
 
-  const _TimelineConnector({required this.fromAlpha, required this.toAlpha});
+  const _TimelineConnector({
+    required this.fromAlpha,
+    required this.toAlpha,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         Container(
-          // Centred under the 58pt tile above it.
-          margin: const EdgeInsets.only(left: 27),
+          // Centred under the icon tile above it.
+          margin: EdgeInsets.only(
+            left: _TimelineNode.tileSize(compact) / 2 - 2,
+          ),
           width: 4,
-          height: 34,
+          height: compact ? 22 : 34,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(2),
             gradient: LinearGradient(
@@ -1184,44 +1307,349 @@ class _TimelineConnector extends StatelessWidget {
   }
 }
 
-/// Five-star trust anchor above the paywall headline, shown on both the
-/// trial-timeline and the lapsed/subscribed variants.
-///
-/// Public so it can be widget-tested on its own, without standing up
-/// [SubscriptionService] and Firebase — same reason [PaywallFeatureRow] and
-/// [TrialTimeline] are.
-class PaywallSocialProof extends StatelessWidget {
-  const PaywallSocialProof({super.key});
+/// Annual and monthly plan cards, side by side, in the pinned bottom bar.
+class _PlanPicker extends StatelessWidget {
+  final ProductDetails annual;
+  final ProductDetails monthly;
+  final SubscriptionPlan selected;
+  final bool enabled;
+  final ValueChanged<SubscriptionPlan> onSelected;
 
-  /// Gold — the one warm color left on the black-and-white paywall, so the
-  /// rating reads at a glance.
-  static const _star = Color(0xFFFFC107);
+  const _PlanPicker({
+    required this.annual,
+    required this.monthly,
+    required this.selected,
+    required this.enabled,
+    required this.onSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(
-            5,
-            (_) => const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 1),
-              child: Icon(Icons.star_rounded, color: _star, size: 18),
+    final annualAmount = recurringPriceAmount(annual);
+    final monthlyAmount = recurringPriceAmount(monthly);
+    final annualLabel = recurringPriceLabel(annual) ?? annual.price;
+    final monthlyLabel = recurringPriceLabel(monthly) ?? monthly.price;
+    final savings = annualSavingsPercent(
+      annual: annualAmount,
+      monthly: monthlyAmount,
+    );
+
+    final annualCaption = annualAmount != null
+        ? '$annualLabel billed annually'
+        : null;
+
+    // Re-measures when a font finishes loading: Inter arrives at runtime, and
+    // a size measured against the fallback font could overflow once it lands.
+    return ListenableBuilder(
+      listenable: PaintingBinding.instance.systemFonts,
+      builder: (context, _) => LayoutBuilder(
+        builder: (context, constraints) {
+          // The billed line must stay on one line so the cards stay the same
+          // height. Measure the yearly one (the longer of the two) at the card's
+          // real width and, only if it doesn't fit, shrink both captions by the
+          // same amount so they keep matching.
+          final cardWidth = (constraints.maxWidth - _gap) / 2;
+          final captionSize = _PlanCard.fittedCaptionSize(
+            annualCaption ?? 'billed monthly',
+            maxWidth: cardWidth - _PlanCard.horizontalInset,
+            textScaler: MediaQuery.textScalerOf(context),
+          );
+          return _buildRow(
+            annualAmount: annualAmount,
+            annualLabel: annualLabel,
+            annualCaption: annualCaption,
+            monthlyLabel: monthlyLabel,
+            savings: savings,
+            captionSize: captionSize,
+          );
+        },
+      ),
+    );
+  }
+
+  static const _gap = 12.0;
+
+  Widget _buildRow({
+    required double? annualAmount,
+    required String annualLabel,
+    required String? annualCaption,
+    required String monthlyLabel,
+    required int? savings,
+    required double captionSize,
+  }) {
+    // IntrinsicHeight so both cards match the taller one; it's two short
+    // cards, so the extra layout pass is cheap.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _PlanCard(
+              title: 'Yearly',
+              // Per-month rate, so the two cards compare like for like, with
+              // the billed amount on the line below. Falls back to the billed
+              // price when the store gave no number to divide.
+              price: annualAmount != null
+                  ? '${perMonthPriceLabel(annualAmount, annual.currencySymbol)}/mo'
+                  : '$annualLabel/yr',
+              caption: annualCaption,
+              captionSize: captionSize,
+              badge: savings != null ? 'SAVE $savings%' : null,
+              selected: selected == SubscriptionPlan.annual,
+              onTap: enabled ? () => onSelected(SubscriptionPlan.annual) : null,
             ),
           ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          '\u201CIt paid for itself after just one flip\u201D',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.inter(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary.withValues(alpha: 0.92),
+          const SizedBox(width: _gap),
+          Expanded(
+            child: _PlanCard(
+              title: 'Monthly',
+              price: '$monthlyLabel/mo',
+              caption: 'billed monthly',
+              captionSize: captionSize,
+              selected: selected == SubscriptionPlan.monthly,
+              onTap: enabled
+                  ? () => onSelected(SubscriptionPlan.monthly)
+                  : null,
+            ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanCard extends StatelessWidget {
+  final String title;
+  final String price;
+
+  /// Small secondary line under [price], e.g. what's actually billed.
+  final String? caption;
+
+  /// Shared by both cards — see [fittedCaptionSize].
+  final double captionSize;
+  final String? badge;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const _PlanCard({
+    required this.title,
+    required this.price,
+    this.caption,
+    this.captionSize = _captionBaseSize,
+    this.badge,
+    required this.selected,
+    required this.onTap,
+  });
+
+  static const _captionBaseSize = 13.0;
+  static const _minCaptionSize = 10.0;
+  static const _border = 2.0;
+  static const _padLeft = 12.0;
+  static const _padRight = 8.0;
+
+  /// Horizontal space a card takes away from its caption: borders + padding.
+  static const horizontalInset = _border * 2 + _padLeft + _padRight;
+
+  static TextStyle _captionStyle(double size) => GoogleFonts.inter(
+    fontSize: size,
+    fontWeight: FontWeight.w500,
+    color: AppColors.textSecondary,
+    height: 1.25,
+  );
+
+  /// The largest caption size, up to 13, at which [text] fits on one line in
+  /// [maxWidth]. Never below 10 — past that it ellipsizes rather than
+  /// becoming unreadable.
+  static double fittedCaptionSize(
+    String text, {
+    required double maxWidth,
+    required TextScaler textScaler,
+  }) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: _captionStyle(_captionBaseSize)),
+      textDirection: TextDirection.ltr,
+      textScaler: textScaler,
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    if (width <= maxWidth || width == 0) return _captionBaseSize;
+    // A hair under the exact ratio, so rounding can't push it back over.
+    final fitted = (_captionBaseSize * maxWidth / width) - 0.1;
+    return fitted.clamp(_minCaptionSize, _captionBaseSize);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(12);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: [title, price, ?caption, ?badge].join(', '),
+      excludeSemantics: true,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: borderRadius,
+              border: Border.all(
+                color: selected ? _accent : AppColors.outline,
+                width: _border,
+              ),
+              // A soft accent glow lifts the selected card off the bar.
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: _accent.withValues(alpha: 0.18),
+                        blurRadius: 12,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: borderRadius,
+                onTap: onTap,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    _padLeft,
+                    14,
+                    _padRight,
+                    12,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Fixed sizes, no scale-to-fit: both cards' text
+                          // must render at the same size.
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    letterSpacing: -0.3,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  price,
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.inter(
+                                    letterSpacing: -0.3,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          _PlanRadio(selected: selected),
+                        ],
+                      ),
+                      if (caption != null) ...[
+                        const SizedBox(height: 10),
+                        // One line, always: the picker sizes this so the
+                        // yearly line fits, keeping both cards the same height.
+                        Text(
+                          caption!,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: _captionStyle(captionSize),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (badge != null)
+            Positioned(
+              top: -12,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _accent,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    badge!,
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.2,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanRadio extends StatelessWidget {
+  final bool selected;
+
+  const _PlanRadio({required this.selected});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      width: 26,
+      height: 26,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: selected ? _accent : Colors.transparent,
+        // Selected: accent disc with a white ring and a soft shadow.
+        // Unselected: a plain grey ring.
+        border: Border.all(
+          color: selected ? Colors.white : AppColors.outline,
+          width: selected ? 2.5 : 2,
         ),
-      ],
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ]
+            : null,
+      ),
+      child: selected
+          ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
+          : null,
     );
   }
 }
@@ -1256,53 +1684,37 @@ class _ReassuranceLine extends StatelessWidget {
   }
 }
 
+/// Footer link: accent text, dimmed while pressed.
 class _LinkText extends StatelessWidget {
   final String label;
   final bool pressed;
-  final VoidCallback onTap;
-  final VoidCallback onTapDown;
-  final VoidCallback onTapUp;
+
+  /// Null disables the link (e.g. Restore while a purchase is pending).
+  final VoidCallback? onTap;
+  final ValueChanged<bool> onPressedChanged;
 
   const _LinkText({
     required this.label,
     required this.pressed,
     required this.onTap,
-    required this.onTapDown,
-    required this.onTapUp,
+    required this.onPressedChanged,
   });
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return GestureDetector(
       onTap: onTap,
-      onTapDown: (_) => onTapDown(),
-      onTapUp: (_) => onTapUp(),
-      onTapCancel: onTapUp,
+      onTapDown: enabled ? (_) => onPressedChanged(true) : null,
+      onTapUp: enabled ? (_) => onPressedChanged(false) : null,
+      onTapCancel: enabled ? () => onPressedChanged(false) : null,
       child: Text(
         label,
         style: GoogleFonts.inter(
-          fontSize: 13,
-          color: pressed ? AppColors.textPrimary : AppColors.textSecondary,
-          decoration: TextDecoration.underline,
-          decorationColor: pressed
-              ? AppColors.textPrimary
-              : AppColors.textSecondary,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: _accent.withValues(alpha: pressed ? 0.55 : 1),
         ),
-      ),
-    );
-  }
-}
-
-class _Dot extends StatelessWidget {
-  const _Dot();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      child: Text(
-        '·',
-        style: GoogleFonts.inter(fontSize: 13, color: AppColors.textSecondary),
       ),
     );
   }

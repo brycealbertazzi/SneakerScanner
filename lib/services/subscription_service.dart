@@ -26,18 +26,27 @@ const String kAnnualProductId = 'sneakscan_annual';
 /// Connect / Play Console, not in four separate strings.
 const int kTrialDays = 7;
 
-/// Shape of a price-experiment SKU: `sneakscan_annual_ab_<price in cents>`.
-final RegExp _annualVariantPattern = RegExp(r'^sneakscan_annual_ab_\d{3,5}$');
+/// Product-id prefixes for the plans. RevenueCat is the source of truth for
+/// which SKUs exist and who gets which one — the experiment's ids are never
+/// enumerated in the app. These prefixes are only a sanity check on what comes
+/// back, so a mistyped or foreign product id can't reach the purchase flow.
+/// Enumerating the variants instead is what once silently served $59.99 to
+/// every arm outside the original three.
+const String _annualPrefix = 'sneakscan_annual';
+const String _monthlyPrefix = 'sneakscan_monthly';
 
-/// Whether a product id RevenueCat handed us is one of ours to sell.
-///
-/// The experiment's SKUs are never enumerated in the app — RevenueCat is the
-/// source of truth for which prices exist and who gets which one. This is only
-/// a sanity check on what comes back, so a mistyped or foreign product id can't
-/// reach the purchase flow. Enumerating the variants instead is what silently
-/// served $59.99 to every arm outside the original three.
-bool isAnnualVariantProductId(String id) =>
-    id == kAnnualProductId || _annualVariantPattern.hasMatch(id);
+/// Whether a product id RevenueCat handed us is one of our annual SKUs
+/// (`sneakscan_annual`, `sneakscan_annual_ab_7999`, `sneakscan_annual_8999`…).
+bool isAnnualVariantProductId(String id) => id.startsWith(_annualPrefix);
+
+/// Whether a product id is one of our monthly SKUs (`sneakscan_monthly_1499`…).
+/// There is no fallback monthly SKU: an offering without a monthly package
+/// simply shows the annual plan alone.
+bool isMonthlyVariantProductId(String id) => id.startsWith(_monthlyPrefix);
+
+/// The plans a paywall can offer. Annual is always available (it has a
+/// fallback SKU); monthly only when the assigned offering carries one.
+enum SubscriptionPlan { annual, monthly }
 
 enum SubscriptionStatus { loading, freeTrial, active, expired, cancelled }
 
@@ -62,6 +71,11 @@ class SubscriptionService extends ChangeNotifier {
 
   // Price A/B test: RevenueCat picks which product this user is offered.
   String? _assignedProductId;
+
+  /// The monthly product from the same assigned offering, when it has one.
+  /// Assigned and frozen together with [_assignedProductId], so the two plan
+  /// cards always come from the same experiment arm.
+  String? _assignedMonthlyProductId;
   String? _assignedOfferingId;
 
   /// The offering object itself, not just its id. RevenueCat reads placement
@@ -80,6 +94,7 @@ class SubscriptionService extends ChangeNotifier {
   // session to the fallback. Held rather than dropped, and applied as soon as
   // there's no paywall on screen for it to change the price of.
   String? _pendingAssignedProductId;
+  String? _pendingAssignedMonthlyProductId;
   String? _pendingAssignedOfferingId;
   rc.Offering? _pendingAssignedOffering;
 
@@ -138,6 +153,26 @@ class SubscriptionService extends ChangeNotifier {
   /// The renewal price, formatted. Reads past any trial or intro phase, so the
   /// paywall's price line can't render "Free".
   String? get annualPriceLabel => recurringPriceLabel(annualProduct);
+
+  /// The monthly offer to purchase, or null when the assigned offering has no
+  /// monthly package or the store didn't return it (e.g. still in review).
+  ProductDetails? get monthlyProduct {
+    final id = _assignedMonthlyProductId;
+    if (id == null) return null;
+    return pickOffer(
+      _products[id] ?? const [],
+      wantTrial: _isEligibleForTrial == true,
+    );
+  }
+
+  String? get monthlyPriceLabel => recurringPriceLabel(monthlyProduct);
+
+  /// True when the paywall should show annual and monthly plan cards. False
+  /// means the single-plan annual paywall, exactly as before monthly existed.
+  bool get hasMonthlyPlan => annualProduct != null && monthlyProduct != null;
+
+  ProductDetails? productFor(SubscriptionPlan plan) =>
+      plan == SubscriptionPlan.monthly ? monthlyProduct : annualProduct;
 
   /// False until RevenueCat has had its say. The paywall skeletons the price
   /// and blocks the subscribe button while this is false, so nobody can buy at
@@ -306,6 +341,16 @@ class SubscriptionService extends ChangeNotifier {
       ).timeout(const Duration(seconds: 15));
       _revenueCatConfigured = true;
       debugPrint('[RC] Configured (observer mode)');
+      // The id to search for under Customers in the RevenueCat dashboard,
+      // e.g. to override this device's offering while testing.
+      if (kDebugMode) {
+        unawaited(
+          rc.Purchases.appUserID.then(
+            (id) => debugPrint('[RC] App user ID: $id'),
+            onError: (_) {},
+          ),
+        );
+      }
       _backfillRevenueCatPurchases();
       await _loadOfferings();
     } catch (e) {
@@ -344,10 +389,15 @@ class SubscriptionService extends ChangeNotifier {
         return;
       }
       // `annual` covers the standard $rc_annual package; fall back to the first
-      // package so a custom package identifier still works.
+      // package that isn't monthly, so a custom package identifier still works
+      // without the monthly package being mistaken for the annual one.
       final packages = current.availablePackages;
+      String bareId(rc.Package p) => p.storeProduct.identifier.split(':').first;
       final package =
-          current.annual ?? (packages.isNotEmpty ? packages.first : null);
+          current.annual ??
+          packages
+              .where((p) => !isMonthlyVariantProductId(bareId(p)))
+              .firstOrNull;
       final rawId = package?.storeProduct.identifier;
       if (rawId == null) {
         // The offering exists but carries no buyable package — almost always
@@ -372,11 +422,34 @@ class SubscriptionService extends ChangeNotifier {
         );
         return;
       }
+      // Optional second plan. `monthly` covers the standard $rc_monthly
+      // package; otherwise any package whose product looks monthly.
+      final monthlyPackage =
+          current.monthly ??
+          packages
+              .where((p) => isMonthlyVariantProductId(bareId(p)))
+              .firstOrNull;
+      final monthlyRawId = monthlyPackage == null
+          ? null
+          : bareId(monthlyPackage);
+      final monthlyId =
+          monthlyRawId != null && isMonthlyVariantProductId(monthlyRawId)
+          ? monthlyRawId
+          : null;
+      if (monthlyRawId != null && monthlyId == null) {
+        debugPrint(
+          '[RC] Offering "${current.identifier}" names foreign monthly product '
+          '"$monthlyRawId" — ignored',
+        );
+      }
       // The app never guesses which SKUs the experiment uses, so this is the
-      // first moment the assigned one is known — price it now, or the paywall
-      // would fall back to the legacy price with no way to recover.
+      // first moment the assigned ones are known — price them now, or the
+      // paywall would fall back to the legacy price with no way to recover.
       try {
-        await _loadProducts({productId}).timeout(const Duration(seconds: 8));
+        await _loadProducts({
+          productId,
+          ?monthlyId,
+        }).timeout(const Duration(seconds: 8));
       } catch (e) {
         debugPrint('[IAP] Query for assigned variant $productId failed: $e');
       }
@@ -390,6 +463,7 @@ class SubscriptionService extends ChangeNotifier {
         // the price under a live subscribe button, but applying it the moment
         // no paywall is on screen cannot.
         _pendingAssignedProductId = productId;
+        _pendingAssignedMonthlyProductId = monthlyId;
         _pendingAssignedOfferingId = current.identifier;
         _pendingAssignedOffering = current;
         debugPrint(
@@ -400,9 +474,14 @@ class SubscriptionService extends ChangeNotifier {
         return;
       }
       _assignedProductId = productId;
+      _assignedMonthlyProductId = monthlyId;
       _assignedOfferingId = current.identifier;
       _assignedOffering = current;
-      debugPrint('[RC] Assigned $productId from offering $_assignedOfferingId');
+      debugPrint(
+        '[RC] Assigned $productId'
+        '${monthlyId != null ? ' + $monthlyId' : ''} '
+        'from offering $_assignedOfferingId',
+      );
     } catch (e) {
       debugPrint('[RC] Offerings fetch failed — using fallback product: $e');
     } finally {
@@ -416,9 +495,11 @@ class SubscriptionService extends ChangeNotifier {
     if (productId == null) return;
     if (_paywallsOnScreen > 0 || _purchaseInitiated || _purchasePending) return;
     _assignedProductId = productId;
+    _assignedMonthlyProductId = _pendingAssignedMonthlyProductId;
     _assignedOfferingId = _pendingAssignedOfferingId;
     _assignedOffering = _pendingAssignedOffering;
     _pendingAssignedProductId = null;
+    _pendingAssignedMonthlyProductId = null;
     _pendingAssignedOfferingId = null;
     _pendingAssignedOffering = null;
     debugPrint('[RC] Applied late assignment $productId');
@@ -488,8 +569,13 @@ class SubscriptionService extends ChangeNotifier {
     _trackedVariantProductId = productId;
     // Nulls are omitted rather than sent: a null *super* property would ride
     // along on every event from here on, which is worse than an absent one.
+    final monthlyId = _assignedMonthlyProductId;
     final properties = <String, dynamic>{
       'ab_product_id': productId,
+      'ab_monthly_product_id': ?monthlyId,
+      // Whether the user could actually pick monthly — a monthly SKU still in
+      // review is assigned but not shown.
+      'ab_monthly_shown': hasMonthlyPlan,
       'ab_assigned': assignedId != null,
       'ab_offering_id': ?offeringId,
       // The variant is only truly delivered when its price came from the store.
@@ -599,10 +685,11 @@ class SubscriptionService extends ChangeNotifier {
   Future<bool> _checkTrialEligibility() async {
     try {
       // Deliberately the legacy SKU rather than the assigned A/B variant: intro
-      // -offer eligibility is per subscription *group*, and all four products
-      // share one, so the answer is identical for any of them — and this one is
-      // guaranteed to exist. If the variants ever move to their own groups,
-      // this is the line that breaks (a lapsed user would get a fresh trial).
+      // -offer eligibility is per subscription *group*, and every annual and
+      // monthly product shares one, so the answer is identical for any of them
+      // — and this one is guaranteed to exist. If any product ever moves to its
+      // own group, this is the line that breaks (a lapsed user would get a
+      // fresh trial on that plan).
       final result = await _storeKitChannel.invokeMethod<bool>(
         'checkTrialEligibility',
         kAnnualProductId,
@@ -719,11 +806,13 @@ class SubscriptionService extends ChangeNotifier {
     }
   }
 
-  Future<void> buyAnnual() async {
-    if (annualProduct == null) {
+  /// Buys [plan]. A monthly purchase is only reachable when [hasMonthlyPlan]
+  /// was true, so there's no fallback SKU to retry with for it.
+  Future<void> buy(SubscriptionPlan plan) async {
+    if (plan == SubscriptionPlan.annual && annualProduct == null) {
       await _loadProducts({?_assignedProductId, kAnnualProductId});
     }
-    final product = annualProduct;
+    final product = productFor(plan);
     if (product == null) {
       _purchaseError =
           'Product not available. Check your App Store connection and try again.';
@@ -1008,9 +1097,11 @@ class SubscriptionService extends ChangeNotifier {
     _status = SubscriptionStatus.loading;
     _products.clear();
     _assignedProductId = null;
+    _assignedMonthlyProductId = null;
     _assignedOfferingId = null;
     _assignedOffering = null;
     _pendingAssignedProductId = null;
+    _pendingAssignedMonthlyProductId = null;
     _pendingAssignedOfferingId = null;
     _pendingAssignedOffering = null;
     _trackedVariantProductId = null;
