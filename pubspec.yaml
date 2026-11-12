@@ -87,6 +87,11 @@ flutter_launcher_icons:
 
 # The following section is specific to Flutter packages.
 flutter:
+  config:
+    # CocoaPods only. ML Kit (google_mlkit_*) has no Swift Package version, so
+    # with SPM on, Firebase's SPM copy of nanopb and ML Kit's CocoaPods copy
+    # were both linked — "duplicate symbols pb_encode" since Xcode 27.
+    enable-swift-package-manager: false
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

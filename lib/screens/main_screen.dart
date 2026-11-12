@@ -6,6 +6,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_keys.dart';
+import '../services/annual_nudge_service.dart';
+import '../services/mixpanel_service.dart';
+import '../services/plan_pricing.dart';
+import '../services/play_offers.dart';
 import '../services/stockx_auth_service.dart';
 import '../services/subscription_service.dart';
 import '../theme/app_theme.dart';
@@ -39,6 +43,14 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final ValueNotifier<bool> _scannerActive = ValueNotifier(true);
   bool _wasSubscribed = false;
 
+  /// Annual-switch prompt: one check at a time. Which prompt (if any) is due
+  /// is decided by [AnnualNudgeService]; each shows at most once ever.
+  bool _nudgeCheckRunning = false;
+
+  /// Debug bypass only: once per launch, so testing isn't a popup on every
+  /// return to the app.
+  static bool _debugNudgedThisLaunch = false;
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +61,7 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _loadApiKeys();
     SubscriptionService.instance.initialize();
     _maybeShowTutorial();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeNudgeAnnual());
     _appLinks = AppLinks();
     _appLinks.uriLinkStream.listen((Uri uri) {
       debugPrint('[StockX OAuth] Deep link received: $uri');
@@ -120,7 +133,185 @@ class MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       SubscriptionService.instance.recheckSubscription();
+      // A milestone can pass while the app sits in the background.
+      _maybeNudgeAnnual();
     }
+  }
+
+  /// Monthly subscribers: at a week into their first paid month and two
+  /// weeks into their second, offer the switch to annual. Checked when the
+  /// home screen loads and whenever the app comes back to the foreground; the
+  /// milestone rules live in [AnnualNudgeService].
+  Future<void> _maybeNudgeAnnual() async {
+    final bypass = AnnualNudgeService.debugBypass;
+    if (_nudgeCheckRunning || (bypass && _debugNudgedThisLaunch)) return;
+    _nudgeCheckRunning = true;
+    try {
+      final sub = SubscriptionService.instance;
+      await sub.awaitLaunchCheck();
+      await sub.awaitOfferings();
+      await sub.awaitUpgradeReady();
+      if (!mounted || !sub.canUpgradeToAnnual) return;
+      // Never in the session they bought in — they just chose monthly.
+      if (sub.lastPurchasedProductId != null && !bypass) return;
+
+      AnnualNudgeMilestone? milestone;
+      DateTime? firstPayment;
+      if (bypass) {
+        debugPrint('[AnnualNudge] Debug bypass on — skipping milestone rules');
+      } else {
+        firstPayment = await sub.monthlyFirstPaymentDate();
+        if (AnnualNudgeService.timing.isSandbox) {
+          debugPrint(
+            '[AnnualNudge] Sandbox timing — first payment: $firstPayment',
+          );
+        }
+        if (firstPayment == null) return;
+        milestone = await AnnualNudgeService.dueNow(firstPayment);
+        if (AnnualNudgeService.timing.isSandbox) {
+          debugPrint('[AnnualNudge] Sandbox timing — due: ${milestone?.name}');
+        }
+        if (milestone == null) return;
+      }
+
+      // Only over the home screen itself — never on top of a scan result,
+      // Settings, the paywall or another dialog.
+      if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? false)) return;
+
+      final monthly = sub.activeMonthlyProduct;
+      final annual = sub.upgradeAnnualProduct;
+      if (monthly == null || annual == null) return;
+      final savings = annualSavingsAmount(
+        annual: recurringPriceAmount(annual),
+        monthly: recurringPriceAmount(monthly),
+      );
+      if (savings == null) return;
+
+      if (milestone != null && firstPayment != null) {
+        await AnnualNudgeService.recordShown(milestone, firstPayment);
+      }
+      if (bypass) _debugNudgedThisLaunch = true;
+      MixpanelService.instance.track(
+        'Annual Nudge Shown',
+        properties: {
+          'milestone': milestone?.name ?? 'debug',
+          'from_product_id': monthly.id,
+        },
+      );
+      if (!mounted) return;
+      _showAnnualNudge(
+        monthlyPrice: recurringPriceLabel(monthly) ?? monthly.price,
+        savings: priceLabelFor(annual, savings) ?? '',
+      );
+    } catch (e) {
+      debugPrint('[AnnualNudge] Check failed: $e');
+    } finally {
+      _nudgeCheckRunning = false;
+    }
+  }
+
+  void _showAnnualNudge({
+    required String monthlyPrice,
+    required String savings,
+  }) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 16),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Save $savings a year',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  letterSpacing: -0.6,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'You\'re paying $monthlyPrice a month. Switch to Annual and '
+                'get the same unlimited access for less.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton(
+                  onPressed: () {
+                    MixpanelService.instance.track(
+                      'Annual Nudge Switch Tapped',
+                    );
+                    Navigator.of(dialogContext).pop();
+                    // The soft paywall opens straight on the upgrade view for
+                    // a monthly subscriber.
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        fullscreenDialog: true,
+                        builder: (_) => const PaywallPage(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.brand,
+                    foregroundColor: Colors.white,
+                    side: BorderSide.none,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    overlayColor: Colors.white.withValues(alpha: 0.12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: Text(
+                    'Switch to Annual',
+                    style: GoogleFonts.inter(
+                      letterSpacing: -0.4,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: () {
+                  MixpanelService.instance.track('Annual Nudge Dismissed');
+                  Navigator.of(dialogContext).pop();
+                },
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.textSecondary,
+                ),
+                child: Text(
+                  'Dismiss',
+                  style: GoogleFonts.inter(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _onSubChanged() {

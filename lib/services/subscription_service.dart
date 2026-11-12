@@ -14,6 +14,7 @@ import 'package:purchases_flutter/purchases_flutter.dart' as rc;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_keys.dart';
+import 'annual_nudge_service.dart';
 import 'gomarketme_service.dart';
 import 'play_offers.dart';
 import 'mixpanel_service.dart';
@@ -190,6 +191,7 @@ class SubscriptionService extends ChangeNotifier {
       plan == SubscriptionPlan.monthly ? monthlyProduct : annualProduct;
 
   String? get activeProductId => _activeProductId;
+
   String? get lastPurchasedProductId => _lastPurchasedProductId;
 
   /// Which plan the active subscription is on, or null when unknown (not
@@ -213,6 +215,72 @@ class SubscriptionService extends ChangeNotifier {
   /// offer: they've already subscribed.
   ProductDetails? get upgradeAnnualProduct =>
       pickOffer(_annualOffers, wantTrial: false);
+
+  /// Waits (briefly) for everything [canUpgradeToAnnual] needs — chiefly the
+  /// price of the user's monthly plan, which loads after the launch check
+  /// identifies it. Returns immediately when there's nothing to wait for.
+  Future<void> awaitUpgradeReady({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (canUpgradeToAnnual || activePlan != SubscriptionPlan.monthly) return;
+    final ready = Completer<void>();
+    void check() {
+      if (canUpgradeToAnnual && !ready.isCompleted) ready.complete();
+    }
+
+    addListener(check);
+    try {
+      await ready.future.timeout(timeout, onTimeout: () {});
+    } finally {
+      removeListener(check);
+    }
+  }
+
+  /// When the active monthly plan was first *charged* — after any free
+  /// trial. Null when not on monthly, still in the trial, or RevenueCat can't
+  /// say (unconfigured, offline, or it hasn't seen the purchase yet); the
+  /// caller then simply doesn't prompt, and tries again next time.
+  ///
+  /// Only RevenueCat has this: the store hands the app the latest renewal on
+  /// iOS and the original purchase on Android, neither of which says when
+  /// paying started.
+  Future<DateTime?> monthlyFirstPaymentDate() async {
+    final productId = _activeProductId;
+    if (productId == null ||
+        activePlan != SubscriptionPlan.monthly ||
+        !_revenueCatConfigured) {
+      return null;
+    }
+    final timing = AnnualNudgeService.timing;
+    try {
+      // RevenueCat caches customer info for up to 5 minutes — a whole sandbox
+      // "month" — so sandbox timing always asks for fresh data.
+      if (timing.isSandbox) await rc.Purchases.invalidateCustomerInfoCache();
+      final info = await rc.Purchases.getCustomerInfo().timeout(
+        const Duration(seconds: 5),
+      );
+      // Play keys are `productId:basePlanId`; App Store keys are bare.
+      for (final entry in info.subscriptionsByProductIdentifier.entries) {
+        if (entry.key.split(':').first != productId) continue;
+        final sub = entry.value;
+        final original = DateTime.tryParse(
+          sub.originalPurchaseDate ?? sub.purchaseDate,
+        )?.toLocal();
+        final periodEnd = DateTime.tryParse(sub.expiresDate ?? '')?.toLocal();
+        if (original == null || periodEnd == null) return null;
+        return AnnualNudgeService.firstPaymentDate(
+          originalPurchase: original,
+          currentPeriodEnd: periodEnd,
+          inTrial: sub.periodType == rc.PeriodType.trial,
+          trialLength: timing.trialLength ?? const Duration(days: kTrialDays),
+          timing: timing,
+        );
+      }
+    } catch (e) {
+      debugPrint('[RC] First payment lookup failed: $e');
+    }
+    return null;
+  }
 
   /// True when the soft paywall should pitch switching to annual.
   bool get canUpgradeToAnnual =>
