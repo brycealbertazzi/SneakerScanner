@@ -3,7 +3,7 @@
  * and terms.sneakscan.com so they can live at sneakscan.com/privacy and
  * sneakscan.com/terms.
  *
- * NOTE: the published text refers to the app as "Sneaker Scanner", the old
+ * NOTE: the published text refers to the app as "SneakScan", the old
  * product name. Left as-published rather than silently rewritten — rename here
  * if the legal copy should say "SneakScan".
  *
@@ -31,14 +31,14 @@ export type LegalDoc = {
 };
 
 export const privacyPolicy: LegalDoc = {
-  title: "Sneaker Scanner Privacy Policy",
+  title: "SneakScan Privacy Policy",
   updated: "August 2026",
   sections: [
     {
       heading: "1. Introduction",
       blocks: [
         {
-          p: "Sneaker Scanner (“the app”, “we”, “our”) is a mobile application that allows users to scan sneaker labels, barcodes, and product information to identify models and view related market data.",
+          p: "SneakScan (“the app”, “we”, “our”) is a mobile application that allows users to scan sneaker labels, barcodes, and product information to identify models and view related market data.",
         },
         {
           p: "We are committed to protecting your privacy and handling information securely and responsibly.",
@@ -53,14 +53,14 @@ export const privacyPolicy: LegalDoc = {
             "Your rights and choices",
           ],
         },
-        { p: "By using Sneaker Scanner, you agree to this Privacy Policy." },
+        { p: "By using SneakScan, you agree to this Privacy Policy." },
       ],
     },
     {
       heading: "2. Your Account",
       blocks: [
         {
-          p: "Sneaker Scanner requires an account. You sign in with Google or with Apple — we do not offer a password-based sign-up, and we never see or store a password.",
+          p: "SneakScan requires an account. You sign in with Google or with Apple — we do not offer a password-based sign-up, and we never see or store a password.",
         },
         {
           p: "When you sign in, Google or Apple provides us with the following, which we store to identify your account and display it back to you in the app:",
@@ -121,7 +121,7 @@ export const privacyPolicy: LegalDoc = {
       heading: "4. Camera Access",
       blocks: [
         {
-          p: "Sneaker Scanner requests access to your device camera solely to scan barcodes and text on shoe labels.",
+          p: "SneakScan requests access to your device camera solely to scan barcodes and text on shoe labels.",
         },
         {
           p: "Images are processed locally on your device for recognition purposes, using on-device text and barcode recognition. Raw camera images are never uploaded to or stored on our servers — only the text and codes recognized from them.",
@@ -197,7 +197,7 @@ export const privacyPolicy: LegalDoc = {
       heading: "8. Third-Party Data Sources",
       blocks: [
         {
-          p: "Sneaker Scanner may retrieve product information from third-party APIs or marketplaces in order to display product details and pricing.",
+          p: "SneakScan may retrieve product information from third-party APIs or marketplaces in order to display product details and pricing.",
         },
         { p: "These services operate under their own privacy policies." },
         {
@@ -264,9 +264,9 @@ export const privacyPolicy: LegalDoc = {
             "Access your account information and scan history from within the app",
             "Delete individual scans from your history",
             "Delete your entire account and all associated data",
-            "Revoke Sneaker Scanner’s access from a linked marketplace’s own account settings",
+            "Revoke SneakScan’s access from a linked marketplace’s own account settings",
             "Revoke camera access in your device settings, though scanning will no longer work",
-            "Withdraw Sneaker Scanner’s access from your Google or Apple account settings",
+            "Withdraw SneakScan’s access from your Google or Apple account settings",
           ],
         },
         {
@@ -278,7 +278,7 @@ export const privacyPolicy: LegalDoc = {
       heading: "12. Children’s Privacy",
       blocks: [
         {
-          p: "Sneaker Scanner is not directed to children under 13, and we do not knowingly collect personal information from them. If you believe a child has provided us with personal information, email support@sneakscan.com and we will delete it.",
+          p: "SneakScan is not directed to children under 13, and we do not knowingly collect personal information from them. If you believe a child has provided us with personal information, email support@sneakscan.com and we will delete it.",
         },
       ],
     },
@@ -287,7 +287,7 @@ export const privacyPolicy: LegalDoc = {
       blocks: [
         { p: "We may update this Privacy Policy from time to time." },
         {
-          p: "Continued use of Sneaker Scanner after changes are posted constitutes acceptance of the updated Policy.",
+          p: "Continued use of SneakScan after changes are posted constitutes acceptance of the updated Policy.",
         },
       ],
     },
@@ -303,14 +303,14 @@ export const privacyPolicy: LegalDoc = {
 };
 
 export const termsOfService: LegalDoc = {
-  title: "Sneaker Scanner Terms of Service",
+  title: "SneakScan Terms of Service",
   updated: "February 2026",
   sections: [
     {
       heading: "1. Acceptance of Terms",
       blocks: [
         {
-          p: "By accessing or using Sneaker Scanner (“the app”, “we”, “our”), you agree to be bound by these Terms of Service. If you do not agree, please discontinue use of the app.",
+          p: "By accessing or using SneakScan (“the app”, “we”, “our”), you agree to be bound by these Terms of Service. If you do not agree, please discontinue use of the app.",
         },
         {
           p: "These Terms govern your use of the app, including all features, functionality, and related services.",
@@ -321,7 +321,7 @@ export const termsOfService: LegalDoc = {
       heading: "2. Use of the App",
       blocks: [
         {
-          p: "Sneaker Scanner provides tools to scan sneaker labels, barcodes, and product identifiers to retrieve model and market-related information.",
+          p: "SneakScan provides tools to scan sneaker labels, barcodes, and product identifiers to retrieve model and market-related information.",
         },
         {
           p: "You agree not to misuse the app or attempt to interfere with its normal operation.",
@@ -345,7 +345,7 @@ export const termsOfService: LegalDoc = {
       heading: "3. Subscriptions and Payments",
       blocks: [
         {
-          p: "Sneaker Scanner may offer subscription plans that provide access to premium features or enhanced functionality.",
+          p: "SneakScan may offer subscription plans that provide access to premium features or enhanced functionality.",
         },
         {
           p: "Subscriptions are managed and billed through the Apple App Store or Google Play. We do not process payment information directly.",
@@ -400,7 +400,7 @@ export const termsOfService: LegalDoc = {
       heading: "6. Third-Party Services",
       blocks: [
         {
-          p: "Sneaker Scanner integrates with third-party APIs and services to retrieve product and pricing information.",
+          p: "SneakScan integrates with third-party APIs and services to retrieve product and pricing information.",
         },
         { p: "We are not responsible for:" },
         {
